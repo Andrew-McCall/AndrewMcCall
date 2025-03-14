@@ -1,4 +1,5 @@
 import './styles.css'
+import watermark from './version.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
@@ -6,3 +7,4 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 `
 
+watermark();
