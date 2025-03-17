@@ -3,7 +3,7 @@ import watermark from './version.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
-	<h1> GOD </h1>
+	<h1> WIP </h1>
   </div>
 `
 
