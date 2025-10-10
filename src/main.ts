@@ -1,13 +1,12 @@
 import index from "./index.ts";
+import secret_index from "./secret_index.ts";
 
 window.addEventListener("popstate", () => {
-  console.log("popstate");
   renderPage();
 });
 
 var app = document.querySelector<HTMLDivElement>("#app");
-function renderPage() {
-  console.log("renderPage");
+function renderPage(): void {
   if (!app) {
     return window.location.reload();
   }
@@ -16,10 +15,32 @@ function renderPage() {
   const page = window.location.pathname.toLowerCase();
 
   if (page === "/") {
-    index(app);
-  } else {
-    window.history.pushState({}, "", "/");
+    return index(app);
+  } 
+
+  if (page === "/secret") {
+    return secret_index(app);
+  }
+  
+  // 404
+  window.history.pushState({}, "", "/");
+}
+
+
+function navigateImpl(new_url: string): void {
+  const url = String(new_url);
+  window.history.pushState({}, '', url);
+  renderPage();
+}
+
+declare global {
+  interface Window {
+    navigate: (new_url: string) => void;
   }
 }
+
+window.navigate = navigateImpl;
+(globalThis as any).navigate = navigateImpl; 
+
 
 renderPage();
