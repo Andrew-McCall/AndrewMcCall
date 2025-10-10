@@ -1,66 +1,52 @@
 import { Plugin } from "vite";
-import fs from "fs";
 import path from "path";
+import fs from "fs";
 import { execSync } from "child_process";
 
 export default function watermarkAMPlugin(): Plugin {
   return {
     name: "vite-plugin-watermark-am",
 
-    async buildStart() {
+    async transformIndexHtml(html) {
       const configPath = path.resolve(process.cwd(), "watermark.config.js");
 
       let config = {
-        filePath: "index.html",
         before: "",
         after: "",
         text: "",
         command: "",
         targetTag: "footer",
-        seperator: " - ",
+        separator: " - ",
       };
-      if (!fs.existsSync(configPath)) {
-        this.warn("watermark.config.js not found");
-      } else {
+
+      if (fs.existsSync(configPath)) {
         const imported = await import(configPath);
         config = { ...config, ...(imported.default ?? imported) };
       }
 
-      const filePath = path.resolve(process.cwd(), config.filePath);
-
-      try {
-        let html = fs.readFileSync(filePath, "utf-8");
-
-        let text: string[] = [];
-
-        if (config.before) {
-          text.push(config.before);
+      const text: string[] = [];
+      if (config.before) text.push(config.before);
+      if (config.text) text.push(config.text.trim());
+      if (config.command) {
+        try {
+          const out = execSync(config.command).toString().trim();
+          if (out) text.push(out);
+        } catch (err) {
+          console.warn("Command execution failed:", err);
         }
+      }
+      if (config.after) text.push(config.after);
 
-        if (config.text) {
-          text.push(config.text.trim());
-        }
+      if (text.length === 0) return html;
 
-        if (config.command) {
-          text.push(execSync(config.command).toString().trim());
-        }
+      const tag = config.targetTag || "footer";
+      const content = text.join(config.separator);
 
-        if (config.after) {
-          text.push(config.after);
-        }
-
-        if (text.length === 0) {
-          return;
-        }
-
-        const tag = config.targetTag || "footer";
-        const regex = new RegExp(`(<${tag}[^>]*>)[\\s\\S]*?(</${tag}>)`, "gi");
-
-        html = html.replace(regex, `$1${text.join(config.seperator)}$2`);
-
-        fs.writeFileSync(filePath, html, "utf-8");
-      } catch (err) {
-        console.error("Error updating footer:", err);
+      const regex = new RegExp(`(<${tag}[^>]*>)([\\s\\S]*?)(</${tag}>)`, "i");
+      if (regex.test(html)) {
+        return html.replace(regex, `$1${content}$3`);
+      } else {
+        return html.replace(/<\/body>/i, `<${tag}>${content}</${tag}></body>`);
       }
     },
   };

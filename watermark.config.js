@@ -1,5 +1,4 @@
 export default {
-  filePath: "index.html",
   before: "",
   after: "",
   seperator: " - ",
