@@ -1,6 +1,4 @@
-import watermark from "./version.ts";
-
-import index from "./components/index.ts";
+import index from "./index.ts";
 
 window.addEventListener("popstate", () => {
   console.log("popstate");
@@ -18,12 +16,10 @@ function renderPage() {
   const page = window.location.pathname.toLowerCase();
 
   if (page === "/") {
-    app.innerHTML = index();
+    index(app);
   } else {
     window.history.pushState({}, "", "/");
   }
-
-  watermark();
 }
 
 renderPage();
