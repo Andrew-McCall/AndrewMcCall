@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && rm -rf /var/www/andrewmccall/dist  && mv -f dist /var/www/andrewmccall",
+    "deploy": "git pull && npm run build && rm -rf /var/www/andrewmccall/dist && mv -f dist /var/www/andrewmccall",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
