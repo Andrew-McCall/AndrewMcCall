@@ -54,7 +54,7 @@ bottomSection.className = "flex flex-col items-center mb-4 w-full bottom-10 abso
 
 const hintBtn = document.createElement("button");
 hintBtn.textContent = "Toggle Hint";
-hintBtn.className = "bg-yellow-500 text-black text-lg py-2 rounded mb-3 px-4 w-full";
+hintBtn.className = "bg-yellow-500 text-black text-lg py-2 rounded mb-3 px-4 w-full cursor-pointer";
 hintBtn.onclick = toggle_hint;
 bottomSection.appendChild(hintBtn);
 
@@ -63,14 +63,14 @@ keypad.className = "grid grid-cols-3 gap-2 w-full";
 for (let i = 1; i <= 9; i++) {
   const btn = document.createElement("button");
   btn.textContent = i.toString();
-  btn.className = "bg-green-700 text-white text-xl py-3 rounded w-full h-full";
+  btn.className = "bg-green-700 text-white text-xl py-3 rounded w-full h-full cursor-pointer";
   btn.onclick = () => handleInput(i.toString());
   keypad.appendChild(btn);
 }
 
 const zeroBtn = document.createElement("button");
 zeroBtn.textContent = "0";
-zeroBtn.className = "bg-green-700 text-white text-xl py-3 rounded col-span-3 w-full h-full";
+zeroBtn.className = "bg-green-700 text-white text-xl py-3 rounded col-span-3 w-full h-full cursor-pointer";
 zeroBtn.onclick = () => handleInput("0");
 keypad.appendChild(zeroBtn);
 
@@ -95,16 +95,21 @@ app.appendChild(container);
       }
     } else {
       alert(`Wrong! Expected ${pi[index]}`);
-      score = 0;
-      index = 2;
-      scoreSpan.textContent = score.toString();
-      currentDigitDisplay.textContent = pi[index];
-      correct.textContent = "3.";
+      reset()
     }
   };
 
+  const reset = () => {
+    index = 2;
+    score = 0;
+    scoreSpan.textContent = score.toString();
+    currentDigitDisplay.textContent = pi[index];
+    correct.textContent = "3.";
+  }
+
   window.addEventListener("keydown", (e) => {
-    if (e.key >= "0" && e.key <= "9") handleInput(e.key);
-    else if (e.key === " ") toggle_hint();
+    if (e.key.toLowerCase() === "r") return reset();
+    if (e.key === " ") return toggle_hint();
+    if (e.key >= "0" && e.key <= "9") return handleInput(e.key);
   });
 };
