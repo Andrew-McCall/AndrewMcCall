@@ -109,7 +109,7 @@ app.appendChild(container);
 
   window.addEventListener("keydown", (e) => {
     if (e.key.toLowerCase() === "r") return reset();
-    if (e.key === " ") return toggle_hint();
+    if (e.key.trim() === "") return toggle_hint();
     if (e.key >= "0" && e.key <= "9") return handleInput(e.key);
   });
 };
