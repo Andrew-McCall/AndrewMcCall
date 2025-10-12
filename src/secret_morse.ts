@@ -1,10 +1,10 @@
 var length = 0
-var click_length = 0.25
+var click_length = 250
 
 export default (app: HTMLElement) => {
   
   const morse = document.createElement("p");
-  morse.className = "text-lg mb-4";
+  morse.className = "text-lg text-green-500";
   morse.textContent = "";
   app.appendChild(morse);
 
