@@ -1,5 +1,6 @@
 import index from "./index.ts";
 import secret_index from "./secret_index.ts";
+import secret_morse from "./secret_morse.ts";
 import secret_pi from "./secret_pi.ts";
 
 window.addEventListener("popstate", () => {
@@ -25,6 +26,10 @@ function renderPage(): void {
 
   if (page === "/secret/pi") {
     return secret_pi(app);
+  }
+
+  if (page === "/secret/morse"){
+    return secret_morse(app)
   }
   
   // 404
