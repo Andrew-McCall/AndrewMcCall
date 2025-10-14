@@ -73,6 +73,7 @@ export default (app: HTMLElement) => {
   const morse = document.createElement("p");
   morse.className = "text-2xl";
   morse.textContent = "";
+  morse.style.minHeight = "1.5rem"; 
   container.appendChild(morse);
 
   window.addEventListener("keydown", (ev) => {
@@ -81,7 +82,7 @@ export default (app: HTMLElement) => {
       if (potential) {
         translation.textContent += potential
       }
-      morse.textContent = "";
+      morse.textContent = ""; 
     }
     press_start = ev.timeStamp
   })
