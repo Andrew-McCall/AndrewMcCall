@@ -347,6 +347,7 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
   keyer.addEventListener("touchend", end, { passive: false });
   keyer.addEventListener("touchcancel", end, { passive: false });
 
+/*
   return () => {
 
     Audio.close();
@@ -355,4 +356,5 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
     if (letterTimer) clearTimeout(letterTimer);
     if (wordTimer) clearTimeout(wordTimer);
   };
+*/
 };
