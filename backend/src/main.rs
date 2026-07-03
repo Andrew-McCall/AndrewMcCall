@@ -6,6 +6,9 @@ use hyper_util::server::conn::auto;
 use response::{Body, ResponseBuilder};
 use smol::net::TcpListener;
 use smol_hyper::rt::{FuturesIo, SmolTimer};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 async fn handle(
     _req: Request<hyper::body::Incoming>,
@@ -32,12 +35,22 @@ fn main() {
     #[cfg(debug_assertions)]
     dotenvy::dotenv().ok();
 
-    let file_appender = tracing_appender::rolling::daily("logs", "backend.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::fmt()
-        .with_writer(non_blocking)
-        .with_ansi(false)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    let file_appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("backend")
+        .filename_suffix("log")
+        .build("logs")
+        .expect("failed to initialize file logger");
+    let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(tracing_subscriber::EnvFilter::from_default_env()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(non_blocking_file)
+                .with_filter(tracing_subscriber::filter::LevelFilter::TRACE),
+        )
         .init();
 
     smol::block_on(async {
