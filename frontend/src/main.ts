@@ -2,6 +2,7 @@ import index from "./index.ts";
 import secret_index from "./secret_index.ts";
 import secret_morse from "./secret_morse.ts";
 import secret_pi from "./secret_pi.ts";
+import secret_canvas, { hideGame } from "./secret_canvas.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
@@ -13,8 +14,12 @@ function renderPage(): void {
     return window.location.reload();
   }
 
-  app.innerHTML = "";
   const page = window.location.pathname.toLowerCase();
+  if (page !== "/secret/canvas") {
+    hideGame(); // dismiss the fullscreen game overlay when navigating away
+  }
+
+  app.innerHTML = "";
 
   if (page === "/") {
     return index(app);
@@ -31,7 +36,11 @@ function renderPage(): void {
   if (page === "/secret/morse"){
     return secret_morse(app)
   }
-  
+
+  if (page === "/secret/canvas"){
+    return secret_canvas(app)
+  }
+
   // 404
   window.history.pushState({}, "", "/");
 }
