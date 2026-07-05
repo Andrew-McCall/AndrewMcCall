@@ -11,9 +11,6 @@ Type=simple
 # Adjust these paths if the repo lives somewhere other than /root/AndrewMcCall.
 WorkingDirectory=/root/AndrewMcCall/backend
 EnvironmentFile=/root/AndrewMcCall/backend/.env
-# Bind to loopback only — nginx proxies to it. Drop ADDR to bind all interfaces.
-Environment=ADDR=127.0.0.1
-Environment=PORT=3000
 Environment=RUST_LOG=info
 ExecStart=/usr/local/bin/andrewmccall-backend
 Restart=always

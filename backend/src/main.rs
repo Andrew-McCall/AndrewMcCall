@@ -119,7 +119,7 @@ fn main() {
         let listener = TcpListener::bind(&listen_address).await.unwrap();
         tracing::info!("listening on http://{listen_address}");
 
-        let config: SharedConfig = Arc::new(ApiConfig::from_env());
+        let config: SharedConfig = Arc::new(ApiConfig::from_env());s
 
         loop {
             let (stream, peer) = match listener.accept().await {
