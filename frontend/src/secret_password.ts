@@ -6,9 +6,9 @@
 type Preset = { label: string; template: string; hint: string };
 
 const PRESETS: Preset[] = [
-  { label: "Memorable", template: "{W}-{W}-{W}{n2}", hint: "Three words + digits" },
-  { label: "Passphrase", template: "{w4-4- }", hint: "Four words, spaced" },
-  { label: "Strong", template: "{p20}", hint: "20 mixed characters" },
+  { label: "Memorable", template: "{W}-{W}-{W}{n4}{?}", hint: "Three words + digits" },
+  { label: "Passphrase", template: "{w} {w} {w} {W}", hint: "Four words, spaced" },
+  { label: "Strong", template: "{p24}", hint: "20 mixed characters" },
   { label: "PIN", template: "{n6}", hint: "Six digits" },
   { label: "Base64 key", template: "{b32}", hint: "32 URL-safe chars" },
   { label: "UUID", template: "{u}", hint: "Random v4 UUID" },
@@ -28,7 +28,7 @@ const TOKENS: Array<[string, string]> = [
   ["{X3-6-·}", "…joined by a separator"],
 ];
 
-const DEFAULT_TEMPLATE = "{W}-{W}-{W}{n2}";
+const DEFAULT_TEMPLATE = PRESETS[0].template;
 
 export default (app: HTMLElement) => {
   app.innerHTML = `
