@@ -55,7 +55,7 @@ export default (app: HTMLElement) => {
     <div id="pw-presets" class="flex flex-wrap gap-2"></div>
 
     <button id="pw-output" title="Click to copy"
-      class="w-full min-h-[4.5rem] bg-stone-900 border border-green-900 rounded px-4 py-4 text-center text-xl md:text-2xl font-mono break-all cursor-pointer hover:border-green-600 transition-colors text-green-300 select-text">
+      class="w-full min-h-[4.5rem] bg-stone-900 border border-green-900 rounded px-4 py-4 text-center text-xl md:text-2xl font-mono whitespace-nowrap overflow-x-auto cursor-pointer hover:border-green-600 transition-colors text-green-300 select-text">
       <span class="text-green-800 italic text-base">Press Generate…</span>
     </button>
 
