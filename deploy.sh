@@ -90,6 +90,12 @@ for d in \
     [ -n "$d" ] && [ -d "$d" ] || continue
     case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac
 done
+# fnm keeps node under a versioned dir and only puts it on PATH once a version
+# is selected; `fnm env` does that (the loop above added fnm's own dir so it
+# resolves here). This is what `eval "$(fnm env)"` does in an interactive shell.
+if ! command -v npm >/dev/null 2>&1 && command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env --shell bash 2>/dev/null)" || true
+fi
 # nvm installs node under a versioned dir it adds to PATH at `nvm use` time;
 # source it so a default-aliased node/npm become available to this shell.
 if ! command -v npm >/dev/null 2>&1 && [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
