@@ -26,8 +26,11 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BRANCH="${BRANCH:-main}"
 
-# Where nginx serves the frontend from. The built `dist` is swapped in here
-# atomically. Must be writable by the user running this script.
+# Where nginx serves the frontend from. The built `dist` becomes this directory
+# itself, swapped in atomically. Its parent must be writable by the user running
+# this script (the swap stages a sibling dir and renames it into place), and it
+# must be a dedicated directory — NOT the repo — since the whole thing is
+# replaced on each deploy.
 WEB_ROOT="${WEB_ROOT:-/static/www/www.andrewmccall.uk}"
 
 # systemd unit for the Rust backend. Leave empty to skip the restart step
