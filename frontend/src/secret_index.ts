@@ -10,6 +10,7 @@ app.innerHTML += `
     <a href="/secret/pi" class="text-lime-400 hover:underline hover:text-lime-700">PI Tester</a>
     <a href="/secret/morse" class="text-lime-400 hover:underline hover:text-lime-700">Morse Code</a>
     <a href="/secret/canvas" class="text-lime-400 hover:underline hover:text-lime-700">Rust Canvas</a>
+    <a href="/secret/password" class="text-lime-400 hover:underline hover:text-lime-700">Password Generator</a>
     <a href="/secret/soon" class="text-lime-400 italic line-through hover:cursor-pointer hover:text-lime-700" > coming soon </a>
   </div>
 </div>

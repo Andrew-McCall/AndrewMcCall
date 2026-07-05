@@ -1,4 +1,5 @@
 mod config;
+mod database;
 mod ip;
 mod password;
 mod response;
@@ -33,6 +34,14 @@ async fn handle(
         });
     }
 
+    if path == "/log/static" {
+        return Ok(static_visit_log(&req, peer, &config));
+    }
+
+    if path == "/log/js" {
+        return Ok(js_visit_log(&req, peer, &config));
+    }
+
     if let Some(template) = path.strip_prefix("/password/") {
         if req.method() != Method::GET {
             return Ok(ResponseBuilder::from(ApiError::NotFound(path.to_string())).into());
@@ -44,6 +53,117 @@ async fn handle(
     }
 
     Ok(ResponseBuilder::from(ApiError::NotFound(path.to_string())).into())
+}
+
+/// The source of a visit. Mirrors the `visit_kind` Postgres enum.
+#[derive(Debug, Clone, Copy, sqlx::Type)]
+#[sqlx(type_name = "visit_kind", rename_all = "lowercase")]
+enum VisitKind {
+    Static,
+    Js,
+}
+
+/// Logs a single visit, recording a freshly generated primary key, a unix
+/// timestamp, the client IP, and the user agent. `kind` distinguishes the
+/// source of the visit.
+///
+/// The visit is emitted to the tracing log and persisted to the `visits`
+/// table. The database write is spawned onto a detached task so the caller
+/// can return its response without waiting on it. The user agent is stored in
+/// the deduplicated `user_agents` table and referenced by id.
+fn log_visit(config: &ApiConfig, kind: VisitKind, client_ip: &str, user_agent: &str) {
+    let pk = uuid::Uuid::new_v4();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    tracing::info!(
+        target: "visit",
+        pk = %pk,
+        timestamp,
+        kind = ?kind,
+        client_ip = %client_ip,
+        user_agent = %user_agent,
+        "visit",
+    );
+
+    let pool = config.db.pool();
+    let client_ip = client_ip.to_string();
+    let user_agent = user_agent.to_string();
+
+    smol::spawn(async move {
+        // Upsert the user agent to get its id, then insert the visit that
+        // references it — atomically, in a single round trip.
+        let result = sqlx::query(
+            "WITH ua AS ( \
+                 INSERT INTO user_agents (user_agent) VALUES ($4) \
+                 ON CONFLICT (user_agent) DO UPDATE SET user_agent = EXCLUDED.user_agent \
+                 RETURNING id \
+             ) \
+             INSERT INTO visits (id, created_at, kind, client_ip, user_agent_id) \
+             SELECT $1, $2, $3, $5, ua.id FROM ua",
+        )
+        .bind(pk)
+        .bind(timestamp as i64)
+        .bind(kind)
+        .bind(user_agent)
+        .bind(client_ip)
+        .execute(&pool)
+        .await;
+
+        if let Err(err) = result {
+            tracing::error!(error = %err, %pk, "failed to persist visit");
+        }
+    })
+    .detach();
+}
+
+/// Handles the nginx `mirror` subrequest for static asset views.
+///
+/// nginx mirrors each static request to an internal location that proxies here.
+/// We log the visit and return `204 No Content`; the mirror module discards the
+/// response anyway.
+fn static_visit_log(
+    req: &Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    let client_ip = resolve_client_ip(config.ip_source, req, peer)
+        .map(|ip| ip.0)
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let user_agent = req
+        .headers()
+        .get(hyper::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    log_visit(config, VisitKind::Static, &client_ip, user_agent);
+
+    ResponseBuilder::new(StatusCode::NO_CONTENT).empty().into()
+}
+
+/// Handles a client-side (JavaScript) visit ping, e.g. from `navigator.sendBeacon`
+/// or `fetch`. Logs the visit and returns `204 No Content`.
+fn js_visit_log(
+    req: &Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    let client_ip = resolve_client_ip(config.ip_source, req, peer)
+        .map(|ip| ip.0)
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let user_agent = req
+        .headers()
+        .get(hyper::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    log_visit(config, VisitKind::Js, &client_ip, user_agent);
+
+    ResponseBuilder::new(StatusCode::NO_CONTENT).empty().into()
 }
 
 /// Handles `GET /password/{template}`, returning the generated password as
