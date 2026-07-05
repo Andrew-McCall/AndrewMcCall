@@ -1,0 +1,3 @@
+# deploy.sh runtime state (per-machine, must never be committed)
+.deploy.state
+.deploy.lock
