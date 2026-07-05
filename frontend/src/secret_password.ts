@@ -61,7 +61,7 @@ export default (app: HTMLElement) => {
 
     <details class="text-green-700 text-sm">
       <summary class="cursor-pointer hover:text-green-500 select-none">Template tokens</summary>
-      <div id="pw-tokens" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1"></div>
+      <div id="pw-tokens" class="mt-3 flex flex-col gap-y-1"></div>
     </details>
   </div>
 </div>`;
@@ -89,9 +89,9 @@ export default (app: HTMLElement) => {
 
   for (const [token, meaning] of TOKENS) {
     const row = document.createElement("div");
-    row.className = "flex flex-col gap-2 cursor-pointer";
+    row.className = "flex items-baseline gap-3 cursor-pointer";
     row.title = "Click to copy";
-    row.innerHTML = `<code class="text-green-400 whitespace-nowrap">${token}</code><span class="text-green-800">${meaning}</span>`;
+    row.innerHTML = `<code class="text-green-400 whitespace-nowrap shrink-0 w-28">${token}</code><span class="text-green-800">${meaning}</span>`;
     row.onclick = () => navigator.clipboard.writeText(token).catch(() => {});
     tokens.appendChild(row);
   }
