@@ -21,7 +21,7 @@ BRANCH="${BRANCH:-main}"
 
 # Where nginx serves the frontend from. The built `dist` is swapped in here
 # atomically. Must be writable by the user running this script.
-WEB_ROOT="${WEB_ROOT:-/var/www/andrewmccall}"
+WEB_ROOT="${WEB_ROOT:-/static/www/www.andrewmccall.uk}"
 
 # systemd unit for the Rust backend. Leave empty to skip the restart step
 # (e.g. if you manage the backend some other way).

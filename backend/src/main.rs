@@ -189,7 +189,6 @@ where
 }
 
 fn main() {
-    #[cfg(debug_assertions)]
     dotenvy::dotenv().ok();
 
     let file_appender = tracing_appender::rolling::Builder::new()
