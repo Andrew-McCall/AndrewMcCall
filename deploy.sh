@@ -76,6 +76,30 @@ NOTIFY_CMD="${NOTIFY_CMD:-}"
 STATE_FILE="${STATE_FILE:-$REPO_DIR/.deploy.state}"
 
 # ---------------------------------------------------------------------------
+# PATH — cron starts with a bare PATH (/usr/bin:/bin) that omits the shims for
+# version managers (nvm, volta, fnm) and rustup, so `npm`/`cargo` come back as
+# "command not found". Prepend the usual install locations, and source nvm if
+# it's present. Set NODE_BIN_DIR to point at a custom npm/node location.
+# ---------------------------------------------------------------------------
+for d in \
+    "${NODE_BIN_DIR:-}" \
+    "$HOME/.cargo/bin" \
+    "$HOME/.volta/bin" \
+    "$HOME/.local/share/fnm" \
+    /usr/local/bin; do
+    [ -n "$d" ] && [ -d "$d" ] || continue
+    case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac
+done
+# nvm installs node under a versioned dir it adds to PATH at `nvm use` time;
+# source it so a default-aliased node/npm become available to this shell.
+if ! command -v npm >/dev/null 2>&1 && [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+fi
+export PATH
+
+# ---------------------------------------------------------------------------
 # Arguments
 # ---------------------------------------------------------------------------
 FORCE=false
@@ -191,12 +215,16 @@ git merge --ff-only "origin/$BRANCH" || die "fast-forward failed (local commits 
 NEW_BACKEND_BIN="$REPO_DIR/backend/target/release/backend"
 
 build_backend() {
+    command -v cargo >/dev/null 2>&1 \
+        || die "cargo not found in PATH ($PATH); set NODE_BIN_DIR/PATH or install rustup"
     log "compiling backend release binary..."
     ( cd "$REPO_DIR/backend" && cargo build --release ) || die "cargo build failed"
     [ -x "$NEW_BACKEND_BIN" ] || die "expected binary not found: $NEW_BACKEND_BIN"
 }
 
 build_frontend() {
+    command -v npm >/dev/null 2>&1 \
+        || die "npm not found in PATH ($PATH); set NODE_BIN_DIR or install node"
     log "installing frontend deps and building..."
     ( cd "$REPO_DIR/frontend" && npm ci && rm -rf dist && npm run build ) \
         || die "frontend build failed"
