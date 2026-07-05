@@ -1,3 +1,5 @@
+import { float_alert } from "./float_alert";
+
 // Password generator page. Talks to the backend template API at
 // `/api/password/{template}` (nginx reroutes `/api` to the backend, which
 // serves `/password/{template}`). The response is the generated password as
@@ -147,7 +149,7 @@ export default (app: HTMLElement) => {
     }
   };
 
-  const copy = async () => {
+  const copy = async (ev: MouseEvent) => {
     const text = output.textContent?.trim();
     if (!text || output.querySelector("span.italic")) return; // nothing real to copy
     try {
@@ -156,6 +158,7 @@ export default (app: HTMLElement) => {
         [{ borderColor: "#16a34a" }, { borderColor: "" }],
         { duration: 600, easing: "ease-out" },
       );
+      float_alert(ev.clientX, ev.clientY, "Copied to clipboard");
     } catch {
       /* clipboard blocked — user can still select the text manually */
     }
