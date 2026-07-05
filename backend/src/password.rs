@@ -98,6 +98,8 @@ fn expand_token(token: &str, rng: &mut SecureRng) -> Result<String, PasswordTemp
         "l" => Ok(random_letter(b'a', rng).to_string()),
         "L" | "C" => Ok(random_letter(b'A', rng).to_string()),
         "n" => Ok(random_digit(rng).to_string()),
+        "b" => Ok(pick(&BASE64_ALPHABET, rng).to_string()),
+        "p" => Ok(pick(&PASSWORD_ALPHABET, rng).to_string()),
         "?" => Ok(pick(&PUNCTUATION, rng).to_string()),
         "e" => Ok(random_emoji(rng).to_string()),
         "u" => Ok(uuid::Uuid::new_v4().to_string()),
@@ -406,6 +408,20 @@ mod tests {
     #[test]
     fn zero_length_base64_is_empty() {
         assert_eq!(generate("{b0}").unwrap(), "");
+    }
+
+    #[test]
+    fn bare_single_item_tokens() {
+        // The bare `{p}`/`{b}` forms emit exactly one char from their alphabet;
+        // they must not fall through to the counted path (which would try to
+        // parse an empty count and fail with InvalidNumber).
+        let p = generate("{p}").unwrap();
+        assert_eq!(p.chars().count(), 1);
+        assert!(PASSWORD_ALPHABET.contains(&p.chars().next().unwrap()));
+
+        let b = generate("{b}").unwrap();
+        assert_eq!(b.chars().count(), 1);
+        assert!(BASE64_ALPHABET.contains(&b.chars().next().unwrap()));
     }
 
     #[test]
