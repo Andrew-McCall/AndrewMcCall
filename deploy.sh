@@ -201,16 +201,16 @@ build_frontend() {
 }
 
 swap_frontend() {
-    mkdir -p "$WEB_ROOT"
-    STAGING="$WEB_ROOT/dist.new.$$"                 # tracked by cleanup trap
-    local olddir="$WEB_ROOT/dist.old.$$"
+    mkdir -p "$(dirname "$WEB_ROOT")"
+    STAGING="$WEB_ROOT.new.$$"                      # tracked by cleanup trap
+    local olddir="$WEB_ROOT.old.$$"
     rm -rf "$STAGING"
-    cp -a "$REPO_DIR/frontend/dist" "$STAGING"      # stage on same filesystem as WEB_ROOT
-    [ -e "$WEB_ROOT/dist" ] && mv -T "$WEB_ROOT/dist" "$olddir"
-    mv -T "$STAGING" "$WEB_ROOT/dist"               # near-instant rename
+    cp -a "$REPO_DIR/frontend/dist" "$STAGING"      # stage beside WEB_ROOT (same filesystem)
+    [ -e "$WEB_ROOT" ] && mv -T "$WEB_ROOT" "$olddir"
+    mv -T "$STAGING" "$WEB_ROOT"                    # near-instant rename
     STAGING=""                                      # swapped in; nothing to clean
     rm -rf "$olddir"
-    log "frontend deployed to $WEB_ROOT/dist"
+    log "frontend deployed to $WEB_ROOT"
 }
 
 # Install or refresh the systemd unit from the repo, so a fresh box is fully
