@@ -38,10 +38,21 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-andrewmccall-backend}"
 # The freshly compiled binary is installed here just before the restart.
 BACKEND_BIN="${BACKEND_BIN:-/usr/local/bin/andrewmccall-backend}"
 
-# Database connection string for running migrations with the sqlx CLI, e.g.
-#   postgres://user:pass@host:5432/dbname
-# Falls back to DATABASE_DSN (what the backend itself reads). Leave empty to
-# skip the migration step. Requires `sqlx` (cargo install sqlx-cli) on PATH.
+# Version-controlled systemd unit file. If present, the script installs/refreshes
+# it into /etc/systemd/system before the first restart, so the box is fully
+# bootstrapped from the repo. Leave the file absent to manage the unit yourself.
+BACKEND_UNIT_SRC="${BACKEND_UNIT_SRC:-$REPO_DIR/deploy/$BACKEND_SERVICE.service}"
+
+# Backend runtime env file (KEY=VALUE). Sourced here so the deploy step can see
+# DATABASE_DSN for optional pre-restart migrations; the systemd unit references
+# the same file so the running binary gets these vars too.
+BACKEND_ENV_FILE="${BACKEND_ENV_FILE:-$REPO_DIR/backend/.env}"
+[ -f "$BACKEND_ENV_FILE" ] && { set -a; . "$BACKEND_ENV_FILE"; set +a; }
+
+# Database connection string for OPTIONAL pre-restart migrations via the sqlx
+# CLI. Falls back to DATABASE_DSN from the env file above. If sqlx isn't
+# installed this step is skipped harmlessly — the backend also runs its
+# migrations on startup (config.db.migrate()), so they get applied either way.
 DATABASE_URL="${DATABASE_URL:-${DATABASE_DSN:-}}"
 
 # Optional: URL to GET after the backend restarts, to confirm it came back up.
@@ -202,16 +213,29 @@ swap_frontend() {
     log "frontend deployed to $WEB_ROOT/dist"
 }
 
+# Install or refresh the systemd unit from the repo, so a fresh box is fully
+# bootstrapped and unit edits ship through git like everything else.
+ensure_backend_unit() {
+    [ -n "$BACKEND_SERVICE" ] && [ -f "$BACKEND_UNIT_SRC" ] || return 0
+    local dest="/etc/systemd/system/$BACKEND_SERVICE.service"
+    if ! sudo cmp -s "$BACKEND_UNIT_SRC" "$dest" 2>/dev/null; then
+        log "installing/updating systemd unit $BACKEND_SERVICE..."
+        sudo install -m 0644 "$BACKEND_UNIT_SRC" "$dest" || die "failed to install unit"
+        sudo systemctl daemon-reload || die "systemctl daemon-reload failed"
+        sudo systemctl enable "$BACKEND_SERVICE" >/dev/null 2>&1 || true
+    fi
+}
+
 swap_backend() {
-    # Migrations run before the new binary starts serving.
-    if [ -n "$DATABASE_URL" ]; then
-        command -v sqlx >/dev/null 2>&1 || die "sqlx CLI not found on PATH (cargo install sqlx-cli)"
+    # Optional pre-restart migrations. Skipped harmlessly if there's no DSN or
+    # no sqlx CLI — the backend also migrates on startup, so they still apply.
+    if [ -n "$DATABASE_URL" ] && command -v sqlx >/dev/null 2>&1; then
         log "running database migrations..."
         sqlx migrate run --source "$REPO_DIR/backend/migrations" \
             --database-url "$DATABASE_URL" || die "sqlx migrate failed"
         log "migrations applied"
     else
-        log "DATABASE_URL empty; skipping migrations"
+        log "skipping sqlx migrate (backend applies migrations on startup)"
     fi
 
     if [ -z "$BACKEND_SERVICE" ]; then
@@ -225,6 +249,7 @@ swap_backend() {
     install -m 0755 "$NEW_BACKEND_BIN" "$BIN_TMP"
     mv -f "$BIN_TMP" "$BACKEND_BIN"
     BIN_TMP=""
+    ensure_backend_unit                            # create the unit if missing
     log "restarting $BACKEND_SERVICE..."
     sudo systemctl restart "$BACKEND_SERVICE" || die "failed to restart $BACKEND_SERVICE"
 
