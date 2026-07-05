@@ -89,8 +89,10 @@ export default (app: HTMLElement) => {
 
   for (const [token, meaning] of TOKENS) {
     const row = document.createElement("div");
-    row.className = "flex gap-2";
+    row.className = "flex gap-2 cursor-pointer";
+    row.title = "Click to copy";
     row.innerHTML = `<code class="text-green-400 whitespace-nowrap">${token}</code><span class="text-green-800">${meaning}</span>`;
+    row.onclick = () => navigator.clipboard.writeText(token).catch(() => {});
     tokens.appendChild(row);
   }
 
