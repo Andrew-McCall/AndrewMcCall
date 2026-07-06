@@ -10,13 +10,14 @@ import { float_alert } from "./float_alert";
 type Preset = { label: string; template: string; hint: string };
 
 const TOKENS: Array<[string, string]> = [
-  ["{w} {W} {S}", "word · Word · SCREAMING"],
+  ["{w} {W} {Y}", "word · Word · SCREAMING"],
   ["{l} {L}", "lower- / upper-case letter"],
   ["{n}", "digit 0–9"],
   ["{p}", "letter, digit or !?£&*"],
   ["{b}", "URL-safe base64 char"],
   ["{?}", "ASCII punctuation"],
   ["{e}", "emoji"],
+  ["{s} {S}", "separator (random · repeated)"],
   ["{u}", "random v4 UUID"],
   ["{X5}", "five in a row, e.g. {n5}"],
   ["{X3-6}", "random count 3–6"],
@@ -67,8 +68,6 @@ export default (app: HTMLElement) => {
   const entropyEl = app.querySelector<HTMLDivElement>("#pw-entropy")!;
   const presets = app.querySelector<HTMLDivElement>("#pw-presets")!;
   const tokens = app.querySelector<HTMLDivElement>("#pw-tokens")!;
-
-  input.value = DEFAULT_TEMPLATE;
 
   for (const [token, meaning] of TOKENS) {
     const row = document.createElement("div");
@@ -202,15 +201,20 @@ export default (app: HTMLElement) => {
     }
   };
 
-  const loadPresets = async () => {
+  // Renders the preset chips and returns the first preset, which seeds the page.
+  const loadPresets = async (): Promise<Preset | null> => {
     try {
       const res = await fetch("/api/password/types");
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const list = await res.json();
-      if (Array.isArray(list)) renderPresets(list as Preset[]);
+      if (Array.isArray(list) && list.length > 0) {
+        renderPresets(list as Preset[]);
+        return list[0] as Preset;
+      }
     } catch {
       /* presets are a nicety — the template input still works without them */
     }
+    return null;
   };
 
   generateBtn.onclick = () => generate();
@@ -219,6 +223,21 @@ export default (app: HTMLElement) => {
     if (e.key === "Enter") generate();
   });
 
-  loadPresets();
-  generate();
+  // Seed the page from the first preset the backend serves. If the user starts
+  // typing before the list arrives, respect their template; if the list can't be
+  // loaded at all, fall back to DEFAULT_TEMPLATE.
+  const init = async () => {
+    const first = await loadPresets();
+    if (input.value.trim() !== "") {
+      generate();
+    } else if (first) {
+      input.value = first.template;
+      generate({ type: first.label });
+    } else {
+      input.value = DEFAULT_TEMPLATE;
+      generate();
+    }
+  };
+
+  init();
 };

@@ -39,6 +39,10 @@ static PUNCTUATION: LazyLock<Vec<char>> = LazyLock::new(|| {
         .collect()
 });
 
+/// Separators for the `{s}` (random each time) and `{S}` (chosen once per
+/// generated password and reused for every `{S}`) tokens.
+static SEPARATORS: &[char] = &['-', '+', '/', '\\', '=', '_', ':'];
+
 /// Codepoint range for `{e}` tokens: the Unicode "Emoticons" block (😀..🙏).
 /// Every value in it is a valid scalar value, so `char::from_u32` never fails.
 const EMOJI_RANGE: std::ops::RangeInclusive<u32> = 0x1F600..=0x1F64F;
@@ -196,21 +200,28 @@ fn resolve_template(template: Option<String>, kind: Option<String>) -> Result<St
 ///
 /// A token is `{X}` for one item, `{XN}` for N, or `{XA-B}` for a random count in
 /// `A..=B`. The range form may append a separator woven between items, as in
-/// `{w2-4- }`. Tokens (`{S}`, `{C}`, `{u}` take no count):
-/// - `{w}` word          `{W}` Capitalised word   `{S}` SCREAMING word
+/// `{w2-4- }`. Tokens (`{Y}`, `{C}`, `{s}`, `{S}`, `{u}` take no count):
+/// - `{w}` word          `{W}` Capitalised word   `{Y}` SCREAMING word
 /// - `{l}` lowercase letter                        `{L}` (or `{C}`) uppercase letter
 /// - `{n}` digit   `{b}` base64 char   `{p}` char of `[a-zA-Z0-9!?£&*]`
 /// - `{?}` ASCII punctuation   `{e}` emoji   `{u}` UUID v4
+/// - separators from `-+/\=_:`: `{s}` random each time, `{S}` drawn once and shared
 ///
 /// All randomness is drawn fresh from the OS CSPRNG (`SysRng`) per token, so
 /// output is never reproducible/seeded.
 pub fn generate(template: &str) -> Result<String, PasswordTemplateError> {
     let mut rng = UnwrapErr(SysRng);
     let mut out = String::with_capacity(template.len());
+    // The shared separator for `{S}` tokens is chosen at most once per call and
+    // reused, so every `{S}` in this password expands to the same character.
+    // (`{s}` draws an independent separator each time.)
+    let mut separator: Option<char> = None;
     walk(template, |segment| {
         match segment {
             Segment::Literal(ch) => out.push(ch),
-            Segment::Token(token) => out.push_str(&expand_token(token, &mut rng)?),
+            Segment::Token(token) => {
+                out.push_str(&expand_token(token, &mut rng, &mut separator)?)
+            }
         }
         Ok(())
     })?;
@@ -263,9 +274,20 @@ where
 /// produces a password always has a defined entropy.
 pub fn entropy(template: &str) -> Result<f64, PasswordTemplateError> {
     let mut total = 0.0;
+    // Every `{S}` expands to the same character, so the shared separator's choice
+    // is made once no matter how many `{S}` appear: count its bits on the first
+    // only. (`{s}` is independent per occurrence and counted by `token_entropy`.)
+    let mut shared_separator_counted = false;
     walk(template, |segment| {
         if let Segment::Token(token) = segment {
-            total += token_entropy(token)?;
+            if token == "S" {
+                if !shared_separator_counted {
+                    total += separator_bits();
+                    shared_separator_counted = true;
+                }
+            } else {
+                total += token_entropy(token)?;
+            }
         }
         Ok(())
     })?;
@@ -276,13 +298,16 @@ pub fn entropy(template: &str) -> Result<f64, PasswordTemplateError> {
 /// dispatch so the two agree on which tokens are valid and how counts apply.
 fn token_entropy(token: &str) -> Result<f64, PasswordTemplateError> {
     match token {
-        "w" | "W" | "S" => Ok(word_bits()),
+        "w" | "W" | "Y" => Ok(word_bits()),
         "l" | "L" | "C" => Ok(letter_bits()),
         "n" => Ok(digit_bits()),
         "b" => Ok(base64_bits()),
         "p" => Ok(password_bits()),
         "?" => Ok(punctuation_bits()),
         "e" => Ok(emoji_bits()),
+        // `{s}` is an independent draw per occurrence; `{S}` (shared) is handled
+        // separately by `entropy` so its correlated bits are counted only once.
+        "s" => Ok(separator_bits()),
         "u" => Ok(UUID_V4_BITS),
         _ if token.starts_with('w') => counted_bits(token, word_bits()),
         _ if token.starts_with('W') => counted_bits(token, word_bits()),
@@ -352,15 +377,26 @@ fn punctuation_bits() -> f64 {
 fn emoji_bits() -> f64 {
     ((EMOJI_RANGE.end() - EMOJI_RANGE.start() + 1) as f64).log2()
 }
+fn separator_bits() -> f64 {
+    (SEPARATORS.len() as f64).log2()
+}
 /// A v4 UUID fixes 4 version + 2 variant bits, leaving 122 bits of randomness.
 const UUID_V4_BITS: f64 = 122.0;
 
-fn expand_token(token: &str, rng: &mut SecureRng) -> Result<String, PasswordTemplateError> {
+fn expand_token(
+    token: &str,
+    rng: &mut SecureRng,
+    separator: &mut Option<char>,
+) -> Result<String, PasswordTemplateError> {
     match token {
+        // Separators: `{s}` is drawn fresh each time; `{S}` is drawn once and
+        // reused for every `{S}` in the password.
+        "s" => Ok(pick(SEPARATORS, rng).to_string()),
+        "S" => Ok(separator.get_or_insert_with(|| pick(SEPARATORS, rng)).to_string()),
         // Countless tokens, and the bare (single-item) form of counted ones.
         "w" => Ok(random_word(rng).to_string()),
         "W" => Ok(capitalise(random_word(rng))),
-        "S" => Ok(random_word(rng).to_uppercase()),
+        "Y" => Ok(random_word(rng).to_uppercase()),
         "l" => Ok(random_letter(b'a', rng).to_string()),
         "L" | "C" => Ok(random_letter(b'A', rng).to_string()),
         "n" => Ok(random_digit(rng).to_string()),
@@ -575,6 +611,79 @@ mod tests {
             assert_eq!(out.chars().count(), 4);
             assert!(out.chars().all(|c| EMOJI_RANGE.contains(&(c as u32))));
         }
+    }
+
+    #[test]
+    fn separator_tokens_from_set() {
+        for token in ["{s}", "{S}"] {
+            for _ in 0..50 {
+                let out = generate(token).unwrap();
+                assert_eq!(out.chars().count(), 1);
+                assert!(SEPARATORS.contains(&out.chars().next().unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn shared_separator_is_consistent_within_password() {
+        for _ in 0..50 {
+            // Digits can't collide with separators, so positions 1 and 3 are the
+            // two `{S}` expansions and must be the identical character.
+            let out = generate("{n1}{S}{n1}{S}{n1}").unwrap();
+            let chars: Vec<char> = out.chars().collect();
+            assert_eq!(chars.len(), 5);
+            assert!(SEPARATORS.contains(&chars[1]));
+            assert_eq!(chars[1], chars[3], "shared separators differ in {out}");
+        }
+    }
+
+    #[test]
+    fn random_separator_varies_across_positions() {
+        // `{s}` is drawn independently, so over enough runs of a two-`{s}`
+        // template the two positions must sometimes differ. (With a 7-char set
+        // the odds of 200 identical pairs by chance are ~7^-200.)
+        let differed = (0..200).any(|_| {
+            let out = generate("{n1}{s}{n1}{s}{n1}").unwrap();
+            let chars: Vec<char> = out.chars().collect();
+            chars[1] != chars[3]
+        });
+        assert!(differed, "{{s}} never varied across 200 runs");
+    }
+
+    #[test]
+    fn separators_reject_count() {
+        // Both separator tokens are countless; the counted forms are unknown.
+        assert_eq!(
+            generate("{s2}"),
+            Err(PasswordTemplateError::UnknownToken("s2".to_string()))
+        );
+        assert_eq!(
+            generate("{S2}"),
+            Err(PasswordTemplateError::UnknownToken("S2".to_string()))
+        );
+    }
+
+    #[test]
+    fn screaming_word_token() {
+        for _ in 0..50 {
+            let out = generate("{Y}").unwrap();
+            assert!(out.chars().all(|c| c.is_ascii_uppercase()));
+            assert!(is_word(&out.to_lowercase()));
+        }
+    }
+
+    #[test]
+    fn entropy_of_separators() {
+        let sep_bits = (SEPARATORS.len() as f64).log2();
+        // A single independent `{s}` and a single shared `{S}` are each one draw.
+        assert!((entropy("{s}").unwrap() - sep_bits).abs() < 1e-9);
+        assert!((entropy("{S}").unwrap() - sep_bits).abs() < 1e-9);
+        // Independent `{s}` accumulate; correlated `{S}` are counted once.
+        assert!((entropy("{s}{s}").unwrap() - 2.0 * sep_bits).abs() < 1e-9);
+        assert!((entropy("{S}{S}{S}").unwrap() - sep_bits).abs() < 1e-9);
+        // A realistic mix: three words joined by a single shared separator.
+        let expected = 3.0 * (am_wordlist::LEN as f64).log2() + sep_bits;
+        assert!((entropy("{W}{S}{W}{S}{W}").unwrap() - expected).abs() < 1e-9);
     }
 
     #[test]
