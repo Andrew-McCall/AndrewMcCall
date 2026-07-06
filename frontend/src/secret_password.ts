@@ -95,24 +95,34 @@ export default (app: HTMLElement) => {
   };
 
   // Rough strength banding by bits of entropy, for a bit of colour/context.
-  const setEntropy = (bits: number | null) => {
+  // `bits` is this password's actual entropy; `minBits` is the floor the template
+  // guarantees (equal to `bits` unless the template has a variable-length range).
+  // We headline the actual bits but rate strength by the floor, so a lucky long
+  // draw from a range template can't flatter its colour, and the floor is shown
+  // explicitly whenever it's lower.
+  const setEntropy = (bits: number | null, minBits?: number) => {
     if (bits === null) {
       entropyEl.textContent = "";
       return;
     }
     const rounded = Math.round(bits);
-    const [label, tone] =
-      bits < 40
-        ? ["weak", "text-red-400"]
-        : bits < 60
-          ? ["fair", "text-yellow-500"]
-          : bits < 80
-            ? ["strong", "text-green-500"]
-            : bits < 100
-              ? ["very strong", "text-green-400"]
-              : ["very strong", "text-green-200"];
+    const floor = typeof minBits === "number" ? Math.round(minBits) : rounded;
+    // Strength bands on clean 20-bit boundaries; first band whose `max` the
+    // floor falls under wins, so the final entry acts as the catch-all.
+    const bands: { max: number; label: string; tone: string }[] = [
+      { max: 20, label: "weak", tone: "text-red-400" },
+      { max: 40, label: "fair", tone: "text-orange-400" },
+      { max: 60, label: "good", tone: "text-yellow-500" },
+      { max: 80, label: "strong", tone: "text-green-500" },
+      { max: 100, label: "very strong", tone: "text-green-400" },
+      { max: Infinity, label: "excellent", tone: "text-green-200" },
+    ];
+    const { label, tone } = bands.find((b) => floor < b.max)!;
     entropyEl.className = `text-right text-sm font-mono h-5 ${tone}`;
-    entropyEl.textContent = `≈ ${rounded} bits · ${label}`;
+    entropyEl.textContent =
+      floor < rounded
+        ? `≈ ${rounded} bits · ${label} · template ≥ ${floor}`
+        : `≈ ${rounded} bits · ${label}`;
   };
 
   // Generate from the template in the input, or — when a preset chip is clicked —
@@ -145,7 +155,10 @@ export default (app: HTMLElement) => {
           // Reflect the template the backend actually used (e.g. for a preset).
           if (typeof body.template === "string") input.value = body.template;
           setOutput(body.password, "password");
-          setEntropy(typeof body.entropy === "number" ? body.entropy : null);
+          setEntropy(
+            typeof body.entropy === "number" ? body.entropy : null,
+            typeof body.min_entropy === "number" ? body.min_entropy : undefined,
+          );
         } else {
           // A 2xx JSON that isn't the expected shape — never guess a password.
           setOutput("Unexpected response from the API.", "error");
