@@ -26,42 +26,35 @@ async fn handle(
     peer: SocketAddr,
     config: SharedConfig,
 ) -> Result<hyper::Response<Body>, hyper::Error> {
+    Ok(route(req, peer, config).await)
+}
+
+/// Routes a request to its handler and returns the built response. Every path,
+/// including unknown ones and wrong methods, yields a response, so routing
+/// itself never fails.
+async fn route(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: SharedConfig,
+) -> hyper::Response<Body> {
     let path = req.uri().path();
 
     match path {
-        "/log/static" => return Ok(logs::record_visit(&req, peer, &config, VisitKind::Static)),
-        "/log/js" => return Ok(logs::record_visit(&req, peer, &config, VisitKind::Js)),
-        "/log/secret" => return Ok(logs::record_visit(&req, peer, &config, VisitKind::Secret)),
-        "/ip" => {
-            return Ok(match resolve_client_ip(config.ip_source, &req, peer) {
-                Ok(client_ip) => ResponseBuilder::new(StatusCode::OK)
-                    .text(client_ip.0)
-                    .into(),
-                Err(err) => ResponseBuilder::from(err).into(),
-            });
+        "/log/static" => logs::record_visit(&req, peer, &config, VisitKind::Static),
+        "/log/js" => logs::record_visit(&req, peer, &config, VisitKind::Js),
+        "/log/secret" => logs::record_visit(&req, peer, &config, VisitKind::Secret),
+        "/ip" => match resolve_client_ip(config.ip_source, &req, peer) {
+            Ok(client_ip) => ResponseBuilder::new(StatusCode::OK)
+                .text(client_ip.0)
+                .into(),
+            Err(err) => ResponseBuilder::from(err).into(),
+        },
+        "/password/types" if req.method() == Method::GET => password::types_response(),
+        "/password" if req.method() == Method::POST || req.method().as_str() == "QUERY" => {
+            password::respond(req).await
         }
-        _ => {}
-    }
-
-    if let Some(template) = path.strip_prefix("/password/") {
-        if req.method() != Method::GET {
-            return Ok(ResponseBuilder::from(ApiError::NotFound(path.to_string())).into());
-        }
-        let template = percent_encoding::percent_decode_str(template)
-            .decode_utf8_lossy()
-            .into_owned();
-        return Ok(password_response(&template));
-    }
-
-    Ok(ResponseBuilder::from(ApiError::NotFound(path.to_string())).into())
-}
-
-/// Handles `GET /password/{template}`, returning the generated password as
-/// plaintext, or a bad-request error if the template is invalid.
-fn password_response(template: &str) -> hyper::Response<Body> {
-    match password::generate(template) {
-        Ok(pw) => ResponseBuilder::new(StatusCode::OK).text(pw).into(),
-        Err(err) => ResponseBuilder::from(ApiError::BadRequest(err.to_string())).into(),
+        "/password/types" | "/password" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        _ => ResponseBuilder::from(ApiError::NotFound(path.to_string())).into(),
     }
 }
 

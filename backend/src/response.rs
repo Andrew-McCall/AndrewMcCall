@@ -1,8 +1,9 @@
 use bytes::Bytes;
 use http_body::{Body as HttpBody, Frame};
+use http_body_util::BodyExt;
 use hyper::header::{CONTENT_TYPE, HeaderName, HeaderValue};
-use hyper::{HeaderMap, StatusCode};
-use serde::Serialize;
+use hyper::{HeaderMap, Request, StatusCode};
+use sonic_rs::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -14,6 +15,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("unauthorized")]
     Unauthorized,
+    #[error("method not allowed")]
+    MethodNotAllowed,
     #[error("not found: {0}")]
     NotFound(String),
     #[error("internal server error")]
@@ -27,6 +30,7 @@ impl ApiError {
         match self {
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -37,6 +41,32 @@ impl ApiError {
 #[derive(Serialize)]
 struct ErrorBody {
     error: String,
+}
+
+/// Buffers a request body fully into memory, mapping a transport error to a
+/// `400 Bad Request`. For small bodies only — the whole body is collected.
+pub async fn read_body(req: Request<hyper::body::Incoming>) -> Result<Bytes, ApiError> {
+    match req.into_body().collect().await {
+        Ok(collected) => Ok(collected.to_bytes()),
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to read request body");
+            Err(ApiError::BadRequest("could not read body".into()))
+        }
+    }
+}
+
+/// Reads a request body and deserializes it from JSON. A read failure or invalid
+/// JSON becomes a `400 Bad Request` carrying `invalid_body`, which should
+/// describe the expected shape.
+pub async fn read_json<T>(
+    req: Request<hyper::body::Incoming>,
+    invalid_body: &'static str,
+) -> Result<T, ApiError>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let body = read_body(req).await?;
+    sonic_rs::from_slice(&body).map_err(|_| ApiError::BadRequest(invalid_body.into()))
 }
 
 /// A single-frame, in-memory response body.

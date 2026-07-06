@@ -1,8 +1,13 @@
+use hyper::header::{CACHE_CONTROL, HeaderValue};
+use hyper::{Request, StatusCode};
 use rand::RngExt;
 use rand::rngs::SysRng;
 use rand_core::UnwrapErr;
+use sonic_rs::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use thiserror::Error;
+
+use crate::response::{self, ApiError, Body, ResponseBuilder};
 
 /// Every draw hits the OS CSPRNG directly (no userspace PRNG buffering/reseeding),
 /// so a template with many tokens can take a moment — that's expected.
@@ -50,6 +55,143 @@ pub enum PasswordTemplateError {
     InvalidRange(String),
 }
 
+/// A named password template, offered to callers via `GET /password/types` and
+/// selectable by `label` through the `type` field of `POST /password`.
+#[derive(Serialize)]
+pub struct Preset {
+    pub label: &'static str,
+    pub template: &'static str,
+    pub hint: &'static str,
+}
+
+/// The built-in presets. The frontend renders these as one-click chips and
+/// resolves `type` selections against them, so this list is the single source
+/// of truth for both ends.
+pub static PRESETS: &[Preset] = &[
+    Preset {
+        label: "Memorable",
+        template: "{W}-{W}-{W}{n4}{?}",
+        hint: "Three words + digits",
+    },
+    Preset {
+        label: "Passphrase",
+        template: "{w} {w} {w} {W}",
+        hint: "Four words, spaced",
+    },
+    Preset {
+        label: "Strong",
+        template: "{p24}",
+        hint: "24 mixed characters",
+    },
+    Preset {
+        label: "PIN",
+        template: "{n6}",
+        hint: "Six digits",
+    },
+    Preset {
+        label: "Base64 key",
+        template: "{b32}",
+        hint: "32 URL-safe chars",
+    },
+    Preset {
+        label: "UUID",
+        template: "{u}",
+        hint: "Random v4 UUID",
+    },
+];
+
+/// Resolves a preset `label` (case-insensitive) to its template.
+pub fn preset_template(label: &str) -> Option<&'static str> {
+    PRESETS
+        .iter()
+        .find(|preset| preset.label.eq_ignore_ascii_case(label))
+        .map(|preset| preset.template)
+}
+
+/// A `POST /password` body: an explicit `template`, or a `type` naming one of the
+/// built-in presets. `template` wins if both are present.
+#[derive(Deserialize)]
+struct PasswordRequest {
+    template: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+}
+
+/// The `POST /password` reply: the template echoed back, the generated password,
+/// and its entropy in bits.
+#[derive(Serialize)]
+struct PasswordReply {
+    template: String,
+    password: String,
+    entropy: f64,
+}
+
+/// Handles `GET /password/types`, listing the built-in presets as JSON.
+pub fn types_response() -> hyper::Response<Body> {
+    ResponseBuilder::new(StatusCode::OK).json(&PRESETS).into()
+}
+
+/// Handles `POST /password` with a JSON body `{"template": "..."}` or
+/// `{"type": "..."}`, replying with `{template, password, entropy}` as JSON.
+/// Returns a bad-request error if the body isn't valid JSON or the template is
+/// invalid.
+pub async fn respond(req: Request<hyper::body::Incoming>) -> hyper::Response<Body> {
+    let request: PasswordRequest = match response::read_json(
+        req,
+        r#"expected a JSON body like {"template": "{w}-{w}-{n4}"} or {"type": "Memorable"}"#,
+    )
+    .await
+    {
+        Ok(request) => request,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let template = match resolve_template(request.template, request.kind) {
+        Ok(template) => template,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let bad_request = |err: PasswordTemplateError| {
+        ResponseBuilder::from(ApiError::BadRequest(err.to_string())).into()
+    };
+    let password = match generate(&template) {
+        Ok(password) => password,
+        Err(err) => return bad_request(err),
+    };
+    let entropy = match entropy(&template) {
+        Ok(entropy) => entropy,
+        Err(err) => return bad_request(err),
+    };
+    // A generated password is a secret drawn fresh per request; never let a
+    // cache (browser, proxy, or a QUERY cache keyed on the request body) retain
+    // or replay it.
+    ResponseBuilder::new(StatusCode::OK)
+        .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
+        .json(&PasswordReply {
+            template,
+            password,
+            entropy,
+        })
+        .into()
+}
+
+/// Resolves a request's template: an explicit `template`, else the preset named
+/// by `type` (`template` wins when both are given). Errors if neither is present
+/// or the named type is unknown.
+fn resolve_template(template: Option<String>, kind: Option<String>) -> Result<String, ApiError> {
+    match template {
+        Some(template) => Ok(template),
+        None => match kind {
+            Some(label) => preset_template(&label)
+                .map(str::to_string)
+                .ok_or_else(|| ApiError::BadRequest(format!("unknown type {label:?}"))),
+            None => Err(ApiError::BadRequest(
+                r#"provide a "template" or a "type""#.into(),
+            )),
+        },
+    }
+}
+
 /// Expands a password template, e.g. `{w}-{w}-{w}{n}` or `{b12}@hotmail.com`.
 ///
 /// A token is `{X}` for one item, `{XN}` for N, or `{XA-B}` for a random count in
@@ -63,13 +205,38 @@ pub enum PasswordTemplateError {
 /// All randomness is drawn fresh from the OS CSPRNG (`SysRng`) per token, so
 /// output is never reproducible/seeded.
 pub fn generate(template: &str) -> Result<String, PasswordTemplateError> {
-    let mut out = String::with_capacity(template.len());
     let mut rng = UnwrapErr(SysRng);
-    let mut chars = template.char_indices().peekable();
+    let mut out = String::with_capacity(template.len());
+    walk(template, |segment| {
+        match segment {
+            Segment::Literal(ch) => out.push(ch),
+            Segment::Token(token) => out.push_str(&expand_token(token, &mut rng)?),
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
 
+/// A single element of a parsed template, yielded by [`walk`].
+enum Segment<'a> {
+    /// A literal character, copied through verbatim.
+    Literal(char),
+    /// The inner text of a `{...}` token, without the braces.
+    Token(&'a str),
+}
+
+/// Walks `template` left to right, handing each literal character and each
+/// `{...}` token's inner text to `visit` in order. Errors on an unterminated
+/// `{`. Shared by [`generate`] and [`entropy`] so the two agree on
+/// tokenisation.
+fn walk<F>(template: &str, mut visit: F) -> Result<(), PasswordTemplateError>
+where
+    F: FnMut(Segment) -> Result<(), PasswordTemplateError>,
+{
+    let mut chars = template.char_indices();
     while let Some((start, ch)) = chars.next() {
         if ch != '{' {
-            out.push(ch);
+            visit(Segment::Literal(ch))?;
             continue;
         }
 
@@ -81,13 +248,112 @@ pub fn generate(template: &str) -> Result<String, PasswordTemplateError> {
             }
         }
         let end = end.ok_or(PasswordTemplateError::UnterminatedToken)?;
-        let token = &template[start + 1..end];
-
-        out.push_str(&expand_token(token, &mut rng)?);
+        visit(Segment::Token(&template[start + 1..end]))?;
     }
-
-    Ok(out)
+    Ok(())
 }
+
+/// Shannon entropy, in bits, of the set of passwords `generate` can produce for
+/// `template`. Literal characters contribute nothing; each token contributes the
+/// log2 of its equally-likely choices. A fixed count `{XN}` contributes `N` items
+/// worth; a range `{XA-B}` additionally contributes the entropy of the (uniform)
+/// count itself, `log2(B-A+1)`, plus the *mean* item count's worth of item bits.
+///
+/// Errors on exactly the templates `generate` rejects, so a template that
+/// produces a password always has a defined entropy.
+pub fn entropy(template: &str) -> Result<f64, PasswordTemplateError> {
+    let mut total = 0.0;
+    walk(template, |segment| {
+        if let Segment::Token(token) = segment {
+            total += token_entropy(token)?;
+        }
+        Ok(())
+    })?;
+    Ok(total)
+}
+
+/// Per-item entropy, in bits, of a token's alphabet. Mirrors [`expand_token`]'s
+/// dispatch so the two agree on which tokens are valid and how counts apply.
+fn token_entropy(token: &str) -> Result<f64, PasswordTemplateError> {
+    match token {
+        "w" | "W" | "S" => Ok(word_bits()),
+        "l" | "L" | "C" => Ok(letter_bits()),
+        "n" => Ok(digit_bits()),
+        "b" => Ok(base64_bits()),
+        "p" => Ok(password_bits()),
+        "?" => Ok(punctuation_bits()),
+        "e" => Ok(emoji_bits()),
+        "u" => Ok(UUID_V4_BITS),
+        _ if token.starts_with('w') => counted_bits(token, word_bits()),
+        _ if token.starts_with('W') => counted_bits(token, word_bits()),
+        _ if token.starts_with('l') => counted_bits(token, letter_bits()),
+        _ if token.starts_with('L') => counted_bits(token, letter_bits()),
+        _ if token.starts_with('n') => counted_bits(token, digit_bits()),
+        _ if token.starts_with('b') => counted_bits(token, base64_bits()),
+        _ if token.starts_with('p') => counted_bits(token, password_bits()),
+        _ if token.starts_with('?') => counted_bits(token, punctuation_bits()),
+        _ if token.starts_with('e') => counted_bits(token, emoji_bits()),
+        _ => Err(PasswordTemplateError::UnknownToken(token.to_string())),
+    }
+}
+
+/// Entropy of a counted token given the per-item bits. For a range `A-B` the
+/// count is drawn uniformly, so it adds `log2(B-A+1)` and, on average, `(A+B)/2`
+/// items' worth of bits; a fixed `N` is the degenerate range `N-N`.
+fn counted_bits(token: &str, item_bits: f64) -> Result<f64, PasswordTemplateError> {
+    let (lo, hi) = count_bounds(token, &token[1..])?;
+    let count_choices = (hi - lo + 1) as f64;
+    let mean_count = (lo + hi) as f64 / 2.0;
+    Ok(count_choices.log2() + mean_count * item_bits)
+}
+
+/// The inclusive count bounds of a count spec: `(N, N)` for a fixed `N`, or
+/// `(A, B)` for a range `A-B[-sep]`. Pure parsing counterpart of
+/// [`CountSpec::parse`]; the separator (if any) is irrelevant to entropy.
+fn count_bounds(token: &str, spec: &str) -> Result<(usize, usize), PasswordTemplateError> {
+    let invalid_number = || PasswordTemplateError::InvalidNumber(token.to_string());
+    let mut parts = spec.splitn(3, '-');
+    let lo = parts.next().unwrap_or(spec);
+
+    match parts.next() {
+        None => {
+            let n = lo.parse().map_err(|_| invalid_number())?;
+            Ok((n, n))
+        }
+        Some(hi) => {
+            let lo: usize = lo.parse().map_err(|_| invalid_number())?;
+            let hi: usize = hi.parse().map_err(|_| invalid_number())?;
+            if lo > hi {
+                return Err(PasswordTemplateError::InvalidRange(token.to_string()));
+            }
+            Ok((lo, hi))
+        }
+    }
+}
+
+fn word_bits() -> f64 {
+    (am_wordlist::LEN as f64).log2()
+}
+fn letter_bits() -> f64 {
+    26f64.log2()
+}
+fn digit_bits() -> f64 {
+    10f64.log2()
+}
+fn base64_bits() -> f64 {
+    (BASE64_ALPHABET.len() as f64).log2()
+}
+fn password_bits() -> f64 {
+    (PASSWORD_ALPHABET.len() as f64).log2()
+}
+fn punctuation_bits() -> f64 {
+    (PUNCTUATION.len() as f64).log2()
+}
+fn emoji_bits() -> f64 {
+    ((EMOJI_RANGE.end() - EMOJI_RANGE.start() + 1) as f64).log2()
+}
+/// A v4 UUID fixes 4 version + 2 variant bits, leaving 122 bits of randomness.
+const UUID_V4_BITS: f64 = 122.0;
 
 fn expand_token(token: &str, rng: &mut SecureRng) -> Result<String, PasswordTemplateError> {
     match token {
@@ -379,6 +645,90 @@ mod tests {
     fn uuid_token() {
         let out = generate("{u}").unwrap();
         assert!(uuid::Uuid::parse_str(&out).is_ok());
+    }
+
+    #[test]
+    fn resolve_prefers_explicit_template() {
+        // template wins even when a type is also supplied
+        let out = resolve_template(Some("{n4}".into()), Some("PIN".into())).unwrap();
+        assert_eq!(out, "{n4}");
+    }
+
+    #[test]
+    fn resolve_uses_preset_by_type_case_insensitively() {
+        assert_eq!(resolve_template(None, Some("pin".into())).unwrap(), "{n6}");
+        assert_eq!(
+            resolve_template(None, Some("Memorable".into())).unwrap(),
+            "{W}-{W}-{W}{n4}{?}"
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_unknown_type() {
+        assert!(matches!(
+            resolve_template(None, Some("nope".into())),
+            Err(ApiError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn resolve_requires_template_or_type() {
+        assert!(matches!(
+            resolve_template(None, None),
+            Err(ApiError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn presets_are_valid_templates() {
+        for preset in PRESETS {
+            assert!(
+                generate(preset.template).is_ok(),
+                "bad preset {}",
+                preset.label
+            );
+            assert!(
+                entropy(preset.template).is_ok(),
+                "bad preset {}",
+                preset.label
+            );
+            assert_eq!(preset_template(preset.label), Some(preset.template));
+        }
+        // Lookup is case-insensitive and rejects unknown labels.
+        assert_eq!(preset_template("memorable"), Some("{W}-{W}-{W}{n4}{?}"));
+        assert_eq!(preset_template("nope"), None);
+    }
+
+    #[test]
+    fn entropy_sums_token_bits() {
+        // Literals add nothing; {n6} is six digits, {?} one punctuation char.
+        let expected = 6.0 * 10f64.log2() + (PUNCTUATION.len() as f64).log2();
+        assert!((entropy("pw-{n6}{?}").unwrap() - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn entropy_of_uuid_is_122_bits() {
+        assert_eq!(entropy("{u}").unwrap(), 122.0);
+    }
+
+    #[test]
+    fn entropy_range_adds_count_uncertainty() {
+        // {n2-4}: log2(3) for the count, plus the mean length (3) of digits.
+        let expected = 3f64.log2() + 3.0 * 10f64.log2();
+        assert!((entropy("{n2-4}").unwrap() - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn entropy_rejects_what_generate_rejects() {
+        assert_eq!(
+            entropy("{x}"),
+            Err(PasswordTemplateError::UnknownToken("x".into()))
+        );
+        assert_eq!(entropy("{w"), Err(PasswordTemplateError::UnterminatedToken));
+        assert_eq!(
+            entropy("{b10-2}"),
+            Err(PasswordTemplateError::InvalidRange("b10-2".into()))
+        );
     }
 
     #[test]
