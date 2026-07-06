@@ -75,7 +75,7 @@ pub static PRESETS: &[Preset] = &[
     },
     Preset {
         label: "Passphrase",
-        template: "{w} {w} {w} {W}",
+        template: "{w} {w} {w} {w}",
         hint: "Four words, spaced",
     },
     Preset {
