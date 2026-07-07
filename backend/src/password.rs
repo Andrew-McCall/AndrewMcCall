@@ -122,14 +122,13 @@ struct PasswordRequest {
 }
 
 /// The `POST /password` reply: the template echoed back, the generated password,
-/// and two entropy figures in bits — `entropy` for this exact password and
-/// `min_entropy` for the weakest the template could produce (see [`Generated`]).
+/// and its entropy in bits — the worst case the template can produce (see
+/// [`generate_scored`]).
 #[derive(Serialize)]
 struct PasswordReply {
     template: String,
     password: String,
     entropy: f64,
-    min_entropy: f64,
 }
 
 /// Handles `GET /password/types`, listing the built-in presets as JSON.
@@ -160,8 +159,8 @@ pub async fn respond(req: Request<hyper::body::Incoming>) -> hyper::Response<Bod
     let bad_request = |err: PasswordTemplateError| {
         ResponseBuilder::from(ApiError::BadRequest(err.to_string())).into()
     };
-    // Generate and score in one pass: `entropy` is the actual generated
-    // password's entropy, `min_entropy` the floor the template guarantees.
+    // Generate and score in one pass: `entropy` is the worst-case entropy the
+    // template can produce (every range at its shortest length).
     let generated = match generate_scored(&template) {
         Ok(generated) => generated,
         Err(err) => return bad_request(err),
@@ -175,7 +174,6 @@ pub async fn respond(req: Request<hyper::body::Incoming>) -> hyper::Response<Bod
             template,
             password: generated.password,
             entropy: generated.entropy,
-            min_entropy: generated.min_entropy,
         })
         .into()
 }
@@ -199,17 +197,13 @@ fn resolve_template(template: Option<String>, kind: Option<String>) -> Result<St
 
 /// A generated password with its entropy in bits.
 ///
-/// `entropy` is the *realised* entropy: the self-information of this exact
-/// password, `sum of log2(choices)` over every random decision generation
-/// actually made — for a range token `{XA-B}`, the count that was drawn, not an
-/// average over the lengths the template could have produced. `min_entropy` is
-/// the weakest the template could ever produce (each range at its shortest
-/// length), a guaranteed floor. The two are equal unless the template has a
-/// range token; always `min_entropy <= entropy`.
+/// `entropy` is the *worst-case* entropy the template can produce: the fewest
+/// bits any password matching it could have, with every range token `{XA-B}` at
+/// its shortest length. It's a guaranteed floor and a deterministic function of
+/// the template, not of the particular password drawn.
 pub struct Generated {
     pub password: String,
     pub entropy: f64,
-    pub min_entropy: f64,
 }
 
 /// Expands a password template, e.g. `{w}-{w}-{w}{n}` or `{b12}@hotmail.com`,
@@ -230,7 +224,6 @@ pub fn generate_scored(template: &str) -> Result<Generated, PasswordTemplateErro
     let mut rng = UnwrapErr(SysRng);
     let mut out = String::with_capacity(template.len());
     let mut entropy = 0.0;
-    let mut min_entropy = 0.0;
     // The shared separator for `{S}` tokens is chosen at most once per call and
     // reused, so every `{S}` in this password expands to the same character (and
     // is counted once). `{s}` draws an independent separator each time.
@@ -241,8 +234,7 @@ pub fn generate_scored(template: &str) -> Result<Generated, PasswordTemplateErro
             Segment::Token(token) => {
                 let (text, bits) = expand_token(token, &mut rng, &mut separator)?;
                 out.push_str(&text);
-                entropy += bits.realised;
-                min_entropy += bits.min;
+                entropy += bits;
             }
         }
         Ok(())
@@ -250,7 +242,6 @@ pub fn generate_scored(template: &str) -> Result<Generated, PasswordTemplateErro
     Ok(Generated {
         password: out,
         entropy,
-        min_entropy,
     })
 }
 
@@ -316,54 +307,36 @@ fn separator_bits() -> f64 {
 /// A v4 UUID fixes 4 version + 2 variant bits, leaving 122 bits of randomness.
 const UUID_V4_BITS: f64 = 122.0;
 
-/// Entropy, in bits, contributed by one token: `realised` for the choices this
-/// generation actually made, `min` for the fewest it could have made (a range's
-/// shortest length). The two are equal except for range tokens.
-#[derive(Clone, Copy)]
-struct Bits {
-    realised: f64,
-    min: f64,
-}
-
-impl Bits {
-    /// A token whose entropy doesn't depend on a drawn count: `realised == min`.
-    fn flat(bits: f64) -> Self {
-        Bits {
-            realised: bits,
-            min: bits,
-        }
-    }
-}
-
-/// Expands one token into its text and the entropy, in bits, of the random
-/// choices that produced it. Mirrors nothing else: this is the single place that
-/// knows each token's alphabet, so generation and scoring can never drift.
+/// Expands one token into its text and its worst-case entropy in bits — the
+/// fewest bits it could contribute (a range token at its shortest length). This
+/// is the single place that knows each token's alphabet, so generation and
+/// scoring can never drift.
 fn expand_token(
     token: &str,
     rng: &mut SecureRng,
     separator: &mut Option<char>,
-) -> Result<(String, Bits), PasswordTemplateError> {
+) -> Result<(String, f64), PasswordTemplateError> {
     match token {
         // Separators: `{s}` is drawn fresh each time; `{S}` is drawn once and
         // reused for every `{S}` in the password, so only its first draw is real.
-        "s" => Ok((pick(SEPARATORS, rng).to_string(), Bits::flat(separator_bits()))),
+        "s" => Ok((pick(SEPARATORS, rng).to_string(), separator_bits())),
         "S" => {
             let fresh = separator.is_none();
             let ch = *separator.get_or_insert_with(|| pick(SEPARATORS, rng));
-            Ok((ch.to_string(), Bits::flat(if fresh { separator_bits() } else { 0.0 })))
+            Ok((ch.to_string(), if fresh { separator_bits() } else { 0.0 }))
         }
         // Countless tokens, and the bare (single-item) form of counted ones.
-        "w" => Ok((random_word(rng).to_string(), Bits::flat(word_bits()))),
-        "W" => Ok((capitalise(random_word(rng)), Bits::flat(word_bits()))),
-        "Y" => Ok((random_word(rng).to_uppercase(), Bits::flat(word_bits()))),
-        "l" => Ok((random_letter(b'a', rng).to_string(), Bits::flat(letter_bits()))),
-        "L" | "C" => Ok((random_letter(b'A', rng).to_string(), Bits::flat(letter_bits()))),
-        "n" => Ok((random_digit(rng).to_string(), Bits::flat(digit_bits()))),
-        "b" => Ok((pick(&BASE64_ALPHABET, rng).to_string(), Bits::flat(base64_bits()))),
-        "p" => Ok((pick(&PASSWORD_ALPHABET, rng).to_string(), Bits::flat(password_bits()))),
-        "?" => Ok((pick(&PUNCTUATION, rng).to_string(), Bits::flat(punctuation_bits()))),
-        "e" => Ok((random_emoji(rng).to_string(), Bits::flat(emoji_bits()))),
-        "u" => Ok((uuid::Uuid::new_v4().to_string(), Bits::flat(UUID_V4_BITS))),
+        "w" => Ok((random_word(rng).to_string(), word_bits())),
+        "W" => Ok((capitalise(random_word(rng)), word_bits())),
+        "Y" => Ok((random_word(rng).to_uppercase(), word_bits())),
+        "l" => Ok((random_letter(b'a', rng).to_string(), letter_bits())),
+        "L" | "C" => Ok((random_letter(b'A', rng).to_string(), letter_bits())),
+        "n" => Ok((random_digit(rng).to_string(), digit_bits())),
+        "b" => Ok((pick(&BASE64_ALPHABET, rng).to_string(), base64_bits())),
+        "p" => Ok((pick(&PASSWORD_ALPHABET, rng).to_string(), password_bits())),
+        "?" => Ok((pick(&PUNCTUATION, rng).to_string(), punctuation_bits())),
+        "e" => Ok((random_emoji(rng).to_string(), emoji_bits())),
+        "u" => Ok((uuid::Uuid::new_v4().to_string(), UUID_V4_BITS)),
         // Counted tokens: `{XN}` / `{XA-B}` / `{XA-B-sep}`.
         _ if token.starts_with('w') => count(token, rng, word_bits(), |r| random_word(r).to_string()),
         _ if token.starts_with('W') => count(token, rng, word_bits(), |r| capitalise(random_word(r))),
@@ -389,16 +362,16 @@ fn expand_token(
 }
 
 /// Parses the count spec following `token`'s leading letter, emits that many
-/// `item`s joined by the spec's separator, and returns the text with the entropy
-/// of the drawn count and items (`item_bits` per item).
+/// `item`s joined by the spec's separator, and returns the text with the token's
+/// worst-case entropy (`item_bits` per item at the shortest permitted count).
 fn count(
     token: &str,
     rng: &mut SecureRng,
     item_bits: f64,
     item: impl FnMut(&mut SecureRng) -> String,
-) -> Result<(String, Bits), PasswordTemplateError> {
+) -> Result<(String, f64), PasswordTemplateError> {
     let spec = CountSpec::parse(token, &token[1..], rng)?;
-    let bits = spec.bits(item_bits);
+    let bits = spec.min_bits(item_bits);
     Ok((spec.build(item, rng), bits))
 }
 
@@ -446,15 +419,11 @@ impl CountSpec {
         }
     }
 
-    /// Entropy contributed by this spec's count and items. The count is drawn
-    /// uniformly from `choices` options (`log2(choices)`, zero for a fixed count);
-    /// `realised` adds the drawn count's item bits, `min` the shortest count's.
-    fn bits(&self, item_bits: f64) -> Bits {
-        let count_bits = (self.choices as f64).log2();
-        Bits {
-            realised: count_bits + self.count as f64 * item_bits,
-            min: count_bits + self.lo as f64 * item_bits,
-        }
+    /// Worst-case entropy contributed by this spec's count and items: the count's
+    /// own uncertainty (`log2(choices)`, zero for a fixed count) plus the shortest
+    /// permitted count's worth of item bits.
+    fn min_bits(&self, item_bits: f64) -> f64 {
+        (self.choices as f64).log2() + self.lo as f64 * item_bits
     }
 
     fn build(&self, mut item: impl FnMut(&mut SecureRng) -> String, rng: &mut SecureRng) -> String {
@@ -514,9 +483,9 @@ mod tests {
         generate_scored(template).map(|generated| generated.password)
     }
 
-    /// The realised entropy of a generated password. For templates without a
-    /// range token this is deterministic, so tests can assert an exact value.
-    fn realised(template: &str) -> f64 {
+    /// The worst-case entropy a template scores to. Deterministic, so tests can
+    /// assert an exact value.
+    fn entropy(template: &str) -> f64 {
         generate_scored(template).unwrap().entropy
     }
 
@@ -679,14 +648,14 @@ mod tests {
     fn entropy_of_separators() {
         let sep_bits = (SEPARATORS.len() as f64).log2();
         // A single independent `{s}` and a single shared `{S}` are each one draw.
-        assert!((realised("{s}") - sep_bits).abs() < 1e-9);
-        assert!((realised("{S}") - sep_bits).abs() < 1e-9);
+        assert!((entropy("{s}") - sep_bits).abs() < 1e-9);
+        assert!((entropy("{S}") - sep_bits).abs() < 1e-9);
         // Independent `{s}` accumulate; correlated `{S}` are counted once.
-        assert!((realised("{s}{s}") - 2.0 * sep_bits).abs() < 1e-9);
-        assert!((realised("{S}{S}{S}") - sep_bits).abs() < 1e-9);
+        assert!((entropy("{s}{s}") - 2.0 * sep_bits).abs() < 1e-9);
+        assert!((entropy("{S}{S}{S}") - sep_bits).abs() < 1e-9);
         // A realistic mix: three words joined by a single shared separator.
         let expected = 3.0 * (am_wordlist::LEN as f64).log2() + sep_bits;
-        assert!((realised("{W}{S}{W}{S}{W}") - expected).abs() < 1e-9);
+        assert!((entropy("{W}{S}{W}{S}{W}") - expected).abs() < 1e-9);
     }
 
     #[test]
@@ -815,45 +784,30 @@ mod tests {
     fn entropy_sums_token_bits() {
         // Literals add nothing; {n6} is six digits, {?} one punctuation char.
         let expected = 6.0 * 10f64.log2() + (PUNCTUATION.len() as f64).log2();
-        assert!((realised("pw-{n6}{?}") - expected).abs() < 1e-9);
+        assert!((entropy("pw-{n6}{?}") - expected).abs() < 1e-9);
     }
 
     #[test]
     fn entropy_of_uuid_is_122_bits() {
-        assert_eq!(realised("{u}"), 122.0);
+        assert_eq!(entropy("{u}"), 122.0);
     }
 
     #[test]
-    fn realised_entropy_uses_the_drawn_count() {
-        // {n2-6}: log2(5) for the count, plus the *actual* number of digits drawn
-        // (not the mean). The floor uses the shortest length, two digits.
-        let count_bits = 5f64.log2();
-        let digit_bits = 10f64.log2();
-        for _ in 0..100 {
-            let g = generate_scored("{n2-6}").unwrap();
-            let k = g.password.chars().count();
-            assert!((2..=6).contains(&k), "unexpected length {k}");
-            assert!((g.entropy - (count_bits + k as f64 * digit_bits)).abs() < 1e-9);
-            assert!((g.min_entropy - (count_bits + 2.0 * digit_bits)).abs() < 1e-9);
-            assert!(g.min_entropy <= g.entropy + 1e-9);
-        }
+    fn entropy_of_range_uses_shortest_length() {
+        // {n2-6}: log2(5) for the count's own uncertainty, plus the *shortest*
+        // permitted length (two digits) — the worst case, independent of the draw.
+        let expected = 5f64.log2() + 2.0 * 10f64.log2();
+        assert!((entropy("{n2-6}") - expected).abs() < 1e-9);
     }
 
     #[test]
-    fn realised_entropy_varies_with_drawn_length() {
-        // A range template's realised entropy tracks the drawn count, so over many
-        // draws it must take more than one value — proving it isn't a fixed mean.
+    fn entropy_of_range_is_deterministic() {
+        // Worst-case entropy is a function of the template, not the drawn count,
+        // so it's identical across draws even though the password length varies.
         let seen: std::collections::HashSet<u64> = (0..300)
             .map(|_| generate_scored("{w3-6}").unwrap().entropy.to_bits())
             .collect();
-        assert!(seen.len() > 1, "range entropy never varied across 300 draws");
-    }
-
-    #[test]
-    fn min_entropy_equals_entropy_without_ranges() {
-        // With no range token there's nothing to vary, so the floor is exact.
-        let g = generate_scored("{W}-{W}-{W}{n4}{?}").unwrap();
-        assert_eq!(g.min_entropy, g.entropy);
+        assert_eq!(seen.len(), 1, "worst-case entropy should not vary");
     }
 
     #[test]

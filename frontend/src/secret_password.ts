@@ -95,19 +95,17 @@ export default (app: HTMLElement) => {
   };
 
   // Rough strength banding by bits of entropy, for a bit of colour/context.
-  // Both data points are shown: `bits` is this password's actual entropy (the
-  // headline), `minBits` the floor the template guarantees. Strength is rated by
-  // the floor, so a lucky long draw from a range template can't flatter its
-  // colour. For a fixed template the two are equal.
-  const setEntropy = (bits: number | null, minBits?: number) => {
+  // `bits` is the worst-case entropy the backend scores the template to (its
+  // guaranteed floor), so a lucky long draw from a range template can't flatter
+  // the rating.
+  const setEntropy = (bits: number | null) => {
     if (bits === null) {
       entropyEl.textContent = "";
       return;
     }
     const rounded = Math.round(bits);
-    const floor = typeof minBits === "number" ? Math.round(minBits) : rounded;
     // Strength bands on clean 20-bit boundaries; first band whose `max` the
-    // floor falls under wins, so the final entry acts as the catch-all.
+    // entropy falls under wins, so the final entry acts as the catch-all.
     const bands: { max: number; label: string; tone: string }[] = [
       { max: 20, label: "weak", tone: "text-red-400" },
       { max: 40, label: "fair", tone: "text-orange-400" },
@@ -116,9 +114,9 @@ export default (app: HTMLElement) => {
       { max: 100, label: "very strong", tone: "text-green-400" },
       { max: Infinity, label: "excellent", tone: "text-green-200" },
     ];
-    const { label, tone } = bands.find((b) => floor < b.max)!;
+    const { label, tone } = bands.find((b) => rounded < b.max)!;
     entropyEl.className = `text-right text-sm font-mono h-5 ${tone}`;
-    entropyEl.textContent = `≈ ${rounded} bits · template ≥ ${floor} · ${label}`;
+    entropyEl.textContent = `≈ ${rounded} bits · ${label}`;
   };
 
   // Generate from the template in the input, or — when a preset chip is clicked —
@@ -151,10 +149,7 @@ export default (app: HTMLElement) => {
           // Reflect the template the backend actually used (e.g. for a preset).
           if (typeof body.template === "string") input.value = body.template;
           setOutput(body.password, "password");
-          setEntropy(
-            typeof body.entropy === "number" ? body.entropy : null,
-            typeof body.min_entropy === "number" ? body.min_entropy : undefined,
-          );
+          setEntropy(typeof body.entropy === "number" ? body.entropy : null);
         } else {
           // A 2xx JSON that isn't the expected shape — never guess a password.
           setOutput("Unexpected response from the API.", "error");
