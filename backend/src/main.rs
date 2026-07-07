@@ -1,4 +1,5 @@
 mod config;
+mod countries;
 mod database;
 mod ip;
 mod logs;
@@ -54,7 +55,12 @@ async fn route(
             password::respond(req).await
         }
         "/password/types" | "/password" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        _ => ResponseBuilder::from(ApiError::NotFound(path.to_string())).into(),
+        "/countries" if req.method() == Method::GET => countries::list_response(&config).await,
+        "/countries" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        _ => match path.strip_prefix("/countries/") {
+            Some(file) => countries::svg_response(req.method(), file).await,
+            None => ResponseBuilder::from(ApiError::NotFound(path.to_string())).into(),
+        },
     }
 }
 

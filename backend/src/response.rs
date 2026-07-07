@@ -152,6 +152,10 @@ impl ResponseBuilder {
         }
     }
 
+    pub fn svg(self, bytes: impl Into<Bytes>) -> Self {
+        self.with_content("image/svg+xml", bytes.into())
+    }
+
     pub fn html(self, html: impl Into<String>) -> Self {
         self.with_content("text/html; charset=utf-8", Bytes::from(html.into()))
     }

@@ -32,9 +32,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "am-wordlist"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9fdc45cbbb1274bb51472bc0d3e56f1665cb607363d3524177feeff3f53554c"
+checksum = "121f88a0d09ccd88b8ed229f9a3665630475d25efddb775506d8c34f444ebcd4"
 
 [[package]]
 name = "android_system_properties"

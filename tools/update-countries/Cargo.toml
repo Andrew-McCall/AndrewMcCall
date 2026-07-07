@@ -1,0 +1,10 @@
+[package]
+name = "update-countries"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+am-shapefile = { git = "https://github.com/Andrew-McCall/shapefile-to-geojson.git" }
+dotenvy = "0.15.7"
+smol = "2.0.2"
+sqlx = { version = "0.8.6", default-features = false, features = ["postgres", "runtime-async-std", "tls-rustls", "migrate"] }

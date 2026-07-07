@@ -18,6 +18,28 @@ pub enum VisitKind {
     Secret,
 }
 
+/// A territory from Natural Earth admin-0 (`countries` table). `slug` also
+/// names the SVG outline under `assets/countries/`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Country {
+    pub slug: String,
+    pub name: String,
+    pub capital: Option<String>,
+    pub population: Option<i64>,
+}
+
+/// One of a country's headline cities (`cities` table). `x`/`y` are in the
+/// country SVG's viewBox coordinate space.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct City {
+    pub country_slug: String,
+    pub name: String,
+    pub x: f64,
+    pub y: f64,
+    pub population: Option<i64>,
+    pub capital: bool,
+}
+
 /// A deduplicated user-agent string (`user_agents` table).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct UserAgent {
@@ -54,7 +76,10 @@ impl std::fmt::Debug for User {
             .field("id", &self.id)
             .field("name", &self.name)
             .field("pin", &"<redacted>")
-            .field("totp_secret", &self.totp_secret.as_ref().map(|_| "<redacted>"))
+            .field(
+                "totp_secret",
+                &self.totp_secret.as_ref().map(|_| "<redacted>"),
+            )
             .field("created_at", &self.created_at)
             .finish()
     }
