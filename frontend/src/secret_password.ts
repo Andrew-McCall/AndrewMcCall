@@ -95,11 +95,10 @@ export default (app: HTMLElement) => {
   };
 
   // Rough strength banding by bits of entropy, for a bit of colour/context.
-  // `bits` is this password's actual entropy; `minBits` is the floor the template
-  // guarantees (equal to `bits` unless the template has a variable-length range).
-  // We headline the actual bits but rate strength by the floor, so a lucky long
-  // draw from a range template can't flatter its colour, and the floor is shown
-  // explicitly whenever it's lower.
+  // Both data points are shown: `bits` is this password's actual entropy (the
+  // headline), `minBits` the floor the template guarantees. Strength is rated by
+  // the floor, so a lucky long draw from a range template can't flatter its
+  // colour. For a fixed template the two are equal.
   const setEntropy = (bits: number | null, minBits?: number) => {
     if (bits === null) {
       entropyEl.textContent = "";
@@ -119,10 +118,7 @@ export default (app: HTMLElement) => {
     ];
     const { label, tone } = bands.find((b) => floor < b.max)!;
     entropyEl.className = `text-right text-sm font-mono h-5 ${tone}`;
-    entropyEl.textContent =
-      floor < rounded
-        ? `≈ ${rounded} bits · ${label} · template ≥ ${floor}`
-        : `≈ ${rounded} bits · ${label}`;
+    entropyEl.textContent = `≈ ${rounded} bits · template ≥ ${floor} · ${label}`;
   };
 
   // Generate from the template in the input, or — when a preset chip is clicked —
