@@ -338,25 +338,33 @@ fn expand_token(
         "e" => Ok((random_emoji(rng).to_string(), emoji_bits())),
         "u" => Ok((uuid::Uuid::new_v4().to_string(), UUID_V4_BITS)),
         // Counted tokens: `{XN}` / `{XA-B}` / `{XA-B-sep}`.
-        _ if token.starts_with('w') => count(token, rng, word_bits(), |r| random_word(r).to_string()),
-        _ if token.starts_with('W') => count(token, rng, word_bits(), |r| capitalise(random_word(r))),
-        _ if token.starts_with('l') => {
-            count(token, rng, letter_bits(), |r| random_letter(b'a', r).to_string())
+        _ if token.starts_with('w') => {
+            count(token, rng, word_bits(), |r| random_word(r).to_string())
         }
-        _ if token.starts_with('L') => {
-            count(token, rng, letter_bits(), |r| random_letter(b'A', r).to_string())
+        _ if token.starts_with('W') => {
+            count(token, rng, word_bits(), |r| capitalise(random_word(r)))
         }
-        _ if token.starts_with('n') => count(token, rng, digit_bits(), |r| random_digit(r).to_string()),
-        _ if token.starts_with('b') => {
-            count(token, rng, base64_bits(), |r| pick(&BASE64_ALPHABET, r).to_string())
+        _ if token.starts_with('l') => count(token, rng, letter_bits(), |r| {
+            random_letter(b'a', r).to_string()
+        }),
+        _ if token.starts_with('L') => count(token, rng, letter_bits(), |r| {
+            random_letter(b'A', r).to_string()
+        }),
+        _ if token.starts_with('n') => {
+            count(token, rng, digit_bits(), |r| random_digit(r).to_string())
         }
-        _ if token.starts_with('p') => {
-            count(token, rng, password_bits(), |r| pick(&PASSWORD_ALPHABET, r).to_string())
+        _ if token.starts_with('b') => count(token, rng, base64_bits(), |r| {
+            pick(&BASE64_ALPHABET, r).to_string()
+        }),
+        _ if token.starts_with('p') => count(token, rng, password_bits(), |r| {
+            pick(&PASSWORD_ALPHABET, r).to_string()
+        }),
+        _ if token.starts_with('?') => count(token, rng, punctuation_bits(), |r| {
+            pick(&PUNCTUATION, r).to_string()
+        }),
+        _ if token.starts_with('e') => {
+            count(token, rng, emoji_bits(), |r| random_emoji(r).to_string())
         }
-        _ if token.starts_with('?') => {
-            count(token, rng, punctuation_bits(), |r| pick(&PUNCTUATION, r).to_string())
-        }
-        _ if token.starts_with('e') => count(token, rng, emoji_bits(), |r| random_emoji(r).to_string()),
         _ => Err(PasswordTemplateError::UnknownToken(token.to_string())),
     }
 }
