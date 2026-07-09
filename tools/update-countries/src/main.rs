@@ -3,10 +3,12 @@
 //!   * `backend/assets/countries/<slug>.svg` — one Web Mercator outline per
 //!     territory, rendered with `am-shapefile` from the 10m admin-0 countries
 //!     shapefile (Ukraine-POV variant).
-//!   * the `countries` and `cities` Postgres tables — display name, capital,
-//!     population (admin-0 `POP_EST`), and each territory's top cities with
-//!     their coordinates projected into that SVG's viewBox. Every run applies
-//!     the backend migrations and then replaces both tables' contents in one
+//!   * the `countries` and `cities` Postgres tables — display name,
+//!     population (admin-0 `POP_EST`), GDP (admin-0 `GDP_MD`, millions of
+//!     current USD), ISO 3166-1 alpha-2 code (for flag CDN links), and each
+//!     territory's top cities with their coordinates projected into that
+//!     SVG's viewBox and the capital marked `capital`. Every run applies the
+//!     backend migrations and then replaces both tables' contents in one
 //!     transaction.
 //!
 //! Cities come from Natural Earth populated places (top 3 by population plus
@@ -794,8 +796,9 @@ struct City {
 struct CountryRow {
     slug: String,
     name: String,
-    capital: Option<&'static str>,
     population: Option<i64>,
+    iso2: Option<String>,
+    gdp: Option<i64>,
     cities: Vec<CityRow>,
 }
 
@@ -867,6 +870,8 @@ fn main() {
 
     let c_a3 = field_idx(&admin0, "ADM0_A3");
     let c_pop = field_idx(&admin0, "POP_EST");
+    let c_iso2 = field_idx(&admin0, "ISO_A2_EH");
+    let c_gdp = field_idx(&admin0, "GDP_MD");
     let meta: HashMap<&str, (&str, Option<&str>)> = COUNTRIES
         .iter()
         .map(|(stem, name, capital)| (*stem, (*name, *capital)))
@@ -898,6 +903,14 @@ fn main() {
         seen_stems.push(meta.keys().find(|k| **k == stem).unwrap());
         let slug = slugify(display);
         let population = as_i64(&part.records[0][c_pop]);
+        // "-99" is Natural Earth's placeholder for "no code assigned" (a
+        // handful of disputed or uninhabited territories).
+        let iso2 = {
+            let raw = part.records[0][c_iso2].to_string();
+            let trimmed = raw.trim();
+            (!trimmed.is_empty() && trimmed != "-99").then(|| trimmed.to_lowercase())
+        };
+        let gdp = as_i64(&part.records[0][c_gdp]);
 
         // Render the SVG exactly as `am-shapefile svg --projection mercator`.
         let opts = SvgOptions {
@@ -998,8 +1011,9 @@ fn main() {
         entries.push(CountryRow {
             slug,
             name: display.to_string(),
-            capital,
             population,
+            iso2,
+            gdp,
             cities,
         });
     }
@@ -1055,12 +1069,13 @@ async fn update_database(
         .await?;
     for country in entries {
         sqlx::query(
-            "INSERT INTO countries (slug, name, capital, population) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO countries (slug, name, population, iso2, gdp) VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(&country.slug)
         .bind(&country.name)
-        .bind(country.capital)
         .bind(country.population)
+        .bind(&country.iso2)
+        .bind(country.gdp)
         .execute(&mut *tx)
         .await?;
         for city in &country.cities {

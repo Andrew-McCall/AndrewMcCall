@@ -19,13 +19,19 @@ pub enum VisitKind {
 }
 
 /// A territory from Natural Earth admin-0 (`countries` table). `slug` also
-/// names the SVG outline under `assets/countries/`.
+/// names the SVG outline under `assets/countries/`. The capital isn't stored
+/// here — it's the [`City`] with `capital` set.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Country {
     pub slug: String,
     pub name: String,
-    pub capital: Option<String>,
     pub population: Option<i64>,
+    /// Lowercase ISO 3166-1 alpha-2 code, for flag CDN links; `None` where
+    /// Natural Earth has none (e.g. disputed or uninhabited territories).
+    pub iso2: Option<String>,
+    /// GDP in millions of current USD (Natural Earth `GDP_MD`); `None` where
+    /// unavailable.
+    pub gdp: Option<i64>,
 }
 
 /// One of a country's headline cities (`cities` table). `x`/`y` are in the

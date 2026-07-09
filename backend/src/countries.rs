@@ -1,7 +1,7 @@
 //! Country endpoints. `GET /countries` lists every territory with its
-//! capital, population, top cities (positioned in SVG viewBox coordinates),
-//! and the URL of its map outline; `GET /countries/{slug}.svg` serves that
-//! outline from `assets/countries/`.
+//! population, GDP, top cities (positioned in SVG viewBox coordinates, the
+//! capital marked `capital: true`), the URL of its map outline, and its flag;
+//! `GET /countries/{slug}.svg` serves that outline from `assets/countries/`.
 //!
 //! The data lives in the `countries`/`cities` tables and the SVGs on disk,
 //! both maintained by `tools/update-countries`.
@@ -24,6 +24,9 @@ const SVG_DIR: &str = "assets/countries";
 /// arrives here as `/countries/x.svg`.
 const IMAGE_PREFIX: &str = "/api/countries";
 
+/// Flag CDN serving vector flags at `/{iso2}.svg`.
+const FLAG_CDN: &str = "https://flagcdn.com";
+
 #[derive(Serialize)]
 struct CityJson {
     name: String,
@@ -36,9 +39,10 @@ struct CityJson {
 #[derive(Serialize)]
 struct CountryJson {
     country: String,
-    capital: Option<String>,
     population: Option<i64>,
+    gdp: Option<i64>,
     image: String,
+    flag: Option<String>,
     cities: Vec<CityJson>,
 }
 
@@ -50,22 +54,23 @@ fn cacheable(status: StatusCode, max_age: &'static str) -> ResponseBuilder {
 }
 
 /// Handles `GET /countries`: every territory as
-/// `{country, capital, population, image, cities}`, with `capital` and
-/// `population` null where unknown and `cities` positioned in the SVG's
-/// viewBox space.
+/// `{country, population, gdp, image, flag, cities}`, with `population`,
+/// `gdp` and `flag` null where unknown and `cities` positioned in the SVG's
+/// viewBox space (the capital marked `capital: true`).
 pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
     let pool = config.db.pool();
-    let countries: Vec<Country> =
-        match sqlx::query_as("SELECT slug, name, capital, population FROM countries ORDER BY name")
-            .fetch_all(&pool)
-            .await
-        {
-            Ok(rows) => rows,
-            Err(err) => {
-                tracing::error!(error = %err, "failed to load countries");
-                return ResponseBuilder::from(ApiError::Internal).into();
-            }
-        };
+    let countries: Vec<Country> = match sqlx::query_as(
+        "SELECT slug, name, population, iso2, gdp FROM countries ORDER BY name",
+    )
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to load countries");
+            return ResponseBuilder::from(ApiError::Internal).into();
+        }
+    };
     let cities: Vec<City> = match sqlx::query_as(
         "SELECT country_slug, name, x, y, population, capital FROM cities \
          ORDER BY population DESC NULLS LAST, name",
@@ -97,10 +102,11 @@ pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
         .into_iter()
         .map(|c| CountryJson {
             image: image_url(&c.slug),
+            flag: c.iso2.as_deref().map(flag_url),
             cities: by_slug.remove(&c.slug).unwrap_or_default(),
             country: c.name,
-            capital: c.capital,
             population: c.population,
+            gdp: c.gdp,
         })
         .collect();
 
@@ -111,6 +117,10 @@ pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
 
 fn image_url(slug: &str) -> String {
     format!("{IMAGE_PREFIX}/{slug}.svg")
+}
+
+fn flag_url(iso2: &str) -> String {
+    format!("{FLAG_CDN}/{iso2}.svg")
 }
 
 /// The `{slug}` of a `{slug}.svg` request path segment, or `None` if the name
@@ -184,9 +194,10 @@ mod tests {
     fn listing_serializes_expected_shape() {
         let entry = CountryJson {
             country: "United Kingdom".into(),
-            capital: Some("London".into()),
             population: Some(66_834_405),
+            gdp: Some(2_827_113),
             image: image_url("united-kingdom"),
+            flag: Some(flag_url("gb")),
             cities: vec![CityJson {
                 name: "London".into(),
                 x: 508.62,
@@ -198,19 +209,20 @@ mod tests {
         let json = sonic_rs::to_string(&entry).unwrap();
         assert_eq!(
             json,
-            r#"{"country":"United Kingdom","capital":"London","population":66834405,"image":"/api/countries/united-kingdom.svg","cities":[{"name":"London","x":508.62,"y":967.28,"population":10979000,"capital":true}]}"#
+            r#"{"country":"United Kingdom","population":66834405,"gdp":2827113,"image":"/api/countries/united-kingdom.svg","flag":"https://flagcdn.com/gb.svg","cities":[{"name":"London","x":508.62,"y":967.28,"population":10979000,"capital":true}]}"#
         );
         // Unknowns serialize as explicit nulls.
         let bare = CountryJson {
             country: "Antarctica".into(),
-            capital: None,
             population: None,
+            gdp: None,
             image: image_url("antarctica"),
+            flag: None,
             cities: Vec::new(),
         };
         assert_eq!(
             sonic_rs::to_string(&bare).unwrap(),
-            r#"{"country":"Antarctica","capital":null,"population":null,"image":"/api/countries/antarctica.svg","cities":[]}"#
+            r#"{"country":"Antarctica","population":null,"gdp":null,"image":"/api/countries/antarctica.svg","flag":null,"cities":[]}"#
         );
     }
 }

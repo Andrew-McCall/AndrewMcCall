@@ -4,6 +4,7 @@ import secret_morse from "./secret_morse.ts";
 import secret_pi from "./secret_pi.ts";
 import secret_canvas, { hideGame } from "./secret_canvas.ts";
 import secret_password from "./secret_password.ts";
+import secret_countries from "./secret_countries.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
@@ -44,6 +45,10 @@ function renderPage(): void {
 
   if (page === "/secret/password"){
     return secret_password(app)
+  }
+
+  if (page === "/secret/countries"){
+    return secret_countries(app)
   }
 
   // 404
