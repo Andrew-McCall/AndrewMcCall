@@ -15,6 +15,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("unauthorized")]
     Unauthorized,
+    #[error("forbidden")]
+    Forbidden,
     #[error("method not allowed")]
     MethodNotAllowed,
     #[error("not found: {0}")]
@@ -30,6 +32,7 @@ impl ApiError {
         match self {
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
+            ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -131,6 +134,20 @@ impl ResponseBuilder {
 
     pub fn header(mut self, name: HeaderName, value: HeaderValue) -> Self {
         self.headers_mut().insert(name, value);
+        self
+    }
+
+    /// Appends a `Set-Cookie` header. Uses `append` (not `insert`) so several
+    /// cookies can be set on one response. The value must be a valid header
+    /// string (ASCII); a malformed cookie is dropped with a warning rather than
+    /// failing the response.
+    pub fn set_cookie(mut self, cookie: impl AsRef<str>) -> Self {
+        match HeaderValue::from_str(cookie.as_ref()) {
+            Ok(value) => {
+                self.headers_mut().append(hyper::header::SET_COOKIE, value);
+            }
+            Err(err) => tracing::warn!(error = %err, "invalid Set-Cookie value"),
+        }
         self
     }
 

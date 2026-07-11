@@ -26,3 +26,6 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
+argon2 = "0.5.3"
+totp-rs = { version = "5.7.2", default-features = false, features = ["otpauth"] }
+sha2 = "0.10"

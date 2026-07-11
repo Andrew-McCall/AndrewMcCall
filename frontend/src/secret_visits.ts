@@ -13,13 +13,18 @@ import type ApexCharts from "apexcharts";
 type DayCount = { day: string; count: number };
 type KindCount = { kind: string; count: number };
 type HourCount = { hour: number; count: number };
+type RouteCount = { route: string; count: number };
 
 type Stats = {
   total: number;
   unique_visitors: number;
+  // The page the aggregates are filtered to, or null when they span all pages.
+  route: string | null;
   per_day: DayCount[];
   by_kind: KindCount[];
   by_hour: HourCount[];
+  // Busiest pages overall — always all-pages, so it stays a stable picker menu.
+  by_route: RouteCount[];
 };
 
 // Shared palette, sampled from the site's green identity so all three charts
@@ -82,7 +87,7 @@ const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => ({
     tickAmount: 12,
     axisBorder: { color: "#1c2a1e" },
     axisTicks: { color: "#1c2a1e" },
-    title: { text: "Hour of day (UTC)", style: { color: "#4d7c56" } },
+    title: { text: "Hour of day (local)", style: { color: "#4d7c56" } },
   },
   yaxis: { min: 0, forceNiceScale: true },
 });
@@ -107,6 +112,41 @@ const byKindOptions = (rows: KindCount[]): ApexCharts.ApexOptions => ({
   },
 });
 
+// Horizontal bars of the busiest pages. Clicking one filters every other chart
+// to that page (see `onSelect`); the height grows with the row count so labels
+// never crowd.
+const byRouteOptions = (
+  rows: RouteCount[],
+  onSelect: (route: string) => void,
+): ApexCharts.ApexOptions => ({
+  ...baseOptions(),
+  series: [{ name: "Visits", data: rows.map((r) => r.count) }],
+  chart: {
+    ...baseOptions().chart,
+    type: "bar",
+    height: Math.max(160, rows.length * 30),
+    events: {
+      dataPointSelection: (
+        _e: unknown,
+        _ctx: unknown,
+        cfg: { dataPointIndex: number },
+      ) => {
+        const row = rows[cfg.dataPointIndex];
+        if (row) onSelect(row.route);
+      },
+    },
+  } as any,
+  colors: [GREEN],
+  plotOptions: { bar: { horizontal: true, borderRadius: 2, distributed: false } },
+  xaxis: {
+    categories: rows.map((r) => r.route),
+    axisBorder: { color: "#1c2a1e" },
+    axisTicks: { color: "#1c2a1e" },
+  },
+  yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
+  states: { active: { filter: { type: "none" } } },
+});
+
 // Charts live at module scope so the router can dispose them when navigating
 // away — ApexCharts registers a window resize listener per chart that would
 // otherwise fire against detached DOM. Mirrors `hideGame` for the canvas page.
@@ -117,8 +157,20 @@ export function disposeVisits(): void {
   charts = [];
 }
 
+// Escapes a page path for safe interpolation into `<option>` markup.
+const esc = (s: string): string =>
+  s.replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
+  );
+
 export default (app: HTMLElement) => {
   disposeVisits(); // drop any charts from a previous visit to this page
+
+  // The page the aggregates are filtered to, or null for all pages. Reset on
+  // every mount so re-entering the page always starts unfiltered.
+  let currentRoute: string | null = null;
+
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
   <a href="/secret" title="Back to the secret menu">
@@ -131,6 +183,13 @@ export default (app: HTMLElement) => {
     <div id="vs-status" class="text-center text-green-800 italic">Loading visits…</div>
 
     <div id="vs-content" class="hidden flex-col gap-6">
+      <div class="flex items-center justify-end gap-2 text-sm">
+        <label for="vs-route" class="text-green-700">Page</label>
+        <select id="vs-route" class="bg-stone-900 border border-green-900 rounded px-2 py-1 text-green-300 font-mono max-w-[70%]">
+          <option value="">All pages</option>
+        </select>
+      </div>
+
       <div class="grid grid-cols-2 gap-4">
         <div class="bg-stone-900 border border-green-900 rounded-lg px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-total">0</span></div>
@@ -157,21 +216,35 @@ export default (app: HTMLElement) => {
           <div id="vs-by-hour"></div>
         </div>
       </div>
+
+      <div class="bg-stone-900 border border-green-900 rounded-lg p-4">
+        <h2 class="text-green-400 font-mono text-sm mb-2">Top pages &middot; click to filter</h2>
+        <div id="vs-by-route"></div>
+      </div>
     </div>
   </div>
 </div>`;
 
   const statusEl = app.querySelector<HTMLDivElement>("#vs-status")!;
   const contentEl = app.querySelector<HTMLDivElement>("#vs-content")!;
+  const routeSel = app.querySelector<HTMLSelectElement>("#vs-route")!;
 
-  const render = (
-    ApexChartsCtor: typeof ApexCharts,
-    stats: Stats,
-  ) => {
+  const render = (ApexChartsCtor: typeof ApexCharts, stats: Stats) => {
+    disposeVisits(); // rebuild every chart cleanly on each (re)load
+
     (app.querySelector("#vs-total") as HTMLElement).textContent =
       stats.total.toLocaleString();
     (app.querySelector("#vs-unique") as HTMLElement).textContent =
       stats.unique_visitors.toLocaleString();
+
+    // Rebuild the picker from the (always all-pages) `by_route` menu, then
+    // restore the active selection — assigning `value` never fires `change`.
+    routeSel.innerHTML =
+      `<option value="">All pages</option>` +
+      stats.by_route
+        .map((r) => `<option value="${esc(r.route)}">${esc(r.route)}</option>`)
+        .join("");
+    routeSel.value = currentRoute ?? "";
 
     statusEl.classList.add("hidden");
     contentEl.classList.remove("hidden");
@@ -188,13 +261,26 @@ export default (app: HTMLElement) => {
     mount("#vs-per-day", perDayOptions(stats.per_day));
     mount("#vs-by-kind", byKindOptions(stats.by_kind));
     mount("#vs-by-hour", byHourOptions(stats.by_hour));
+    mount(
+      "#vs-by-route",
+      byRouteOptions(stats.by_route, (route) => {
+        currentRoute = route;
+        load();
+      }),
+    );
   };
 
-  const init = async () => {
+  const load = async () => {
     try {
+      // Bucket days/hours in the viewer's own timezone. The backend hands the
+      // IANA name to Postgres' `AT TIME ZONE`, so DST is handled correctly.
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      const url =
+        `/api/stats?tz=${encodeURIComponent(tz)}` +
+        (currentRoute ? `&route=${encodeURIComponent(currentRoute)}` : "");
       const [{ default: ApexChartsCtor }, res] = await Promise.all([
         import("apexcharts"),
-        fetch("/api/stats"),
+        fetch(url),
       ]);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const stats = (await res.json()) as Stats;
@@ -203,10 +289,17 @@ export default (app: HTMLElement) => {
       if (!document.body.contains(statusEl)) return;
       render(ApexChartsCtor, stats);
     } catch {
-      if (document.body.contains(statusEl))
+      if (document.body.contains(statusEl)) {
         statusEl.textContent = "Network error — is the API up?";
+        statusEl.classList.remove("hidden");
+      }
     }
   };
 
-  init();
+  routeSel.onchange = () => {
+    currentRoute = routeSel.value || null;
+    load();
+  };
+
+  load();
 };

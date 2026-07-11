@@ -13,6 +13,7 @@ export default (app: HTMLElement) => {
     <a href="/secret/password" class="text-lime-400 hover:underline hover:text-lime-700">Password Generator</a>
     <a href="/secret/countries" class="text-lime-400 hover:underline hover:text-lime-700">Countries Quiz</a>
     <a href="/secret/visits" class="text-lime-400 hover:underline hover:text-lime-700">Visits</a>
+    <a href="/secret/login" class="text-lime-400 hover:underline hover:text-lime-700">Sign in</a>
     <a href="/secret/soon" class="text-lime-400 italic line-through hover:cursor-pointer hover:text-lime-700" > coming soon </a>
   </div>
 </div>

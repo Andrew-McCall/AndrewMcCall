@@ -18,6 +18,35 @@ pub enum VisitKind {
     Secret,
 }
 
+/// A user's authorization level. Mirrors the `user_role` Postgres enum. Only
+/// `Admin`s may create users.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "user_role", rename_all = "lowercase")]
+pub enum UserRole {
+    Standard,
+    Admin,
+}
+
+impl UserRole {
+    /// The lowercase wire form, matching the Postgres enum labels; used when
+    /// serializing a user to JSON and when parsing an incoming `role` field.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UserRole::Standard => "standard",
+            UserRole::Admin => "admin",
+        }
+    }
+
+    /// Parses the wire form (`"standard"` / `"admin"`), case-insensitively.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "standard" => Some(UserRole::Standard),
+            "admin" => Some(UserRole::Admin),
+            _ => None,
+        }
+    }
+}
+
 /// A territory from Natural Earth admin-0 (`countries` table). `slug` also
 /// names the SVG outline under `assets/countries/`. The capital isn't stored
 /// here — it's the [`City`] with `capital` set.
@@ -61,6 +90,10 @@ pub struct Visit {
     pub kind: VisitKind,
     pub client_ip: String,
     pub user_agent_id: i64,
+    /// The page path requested (query string stripped), from the nginx static
+    /// mirror. `None` for the js/secret pings and for visits recorded before
+    /// routes were tracked.
+    pub route: Option<String>,
 }
 
 /// An application user (`users` table).
@@ -73,6 +106,7 @@ pub struct User {
     pub name: String,
     pub pin: String,
     pub totp_secret: Option<String>,
+    pub role: UserRole,
     pub created_at: DateTime<Utc>,
 }
 
@@ -86,6 +120,7 @@ impl std::fmt::Debug for User {
                 "totp_secret",
                 &self.totp_secret.as_ref().map(|_| "<redacted>"),
             )
+            .field("role", &self.role)
             .field("created_at", &self.created_at)
             .finish()
     }
@@ -127,4 +162,30 @@ pub struct AuthLog {
     pub user_id: Uuid,
     pub client_ip: String,
     pub user_agent_id: i64,
+}
+
+/// A one-time TOTP recovery code (`user_recovery_codes` table). The code itself
+/// is only ever stored hashed; `used_at` is set the moment it is redeemed, after
+/// which it can never be used again.
+///
+/// `Debug` is implemented by hand so the code hash never leaks into logs.
+#[derive(Clone, sqlx::FromRow)]
+pub struct RecoveryCode {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub code_hash: String,
+    pub created_at: DateTime<Utc>,
+    pub used_at: Option<DateTime<Utc>>,
+}
+
+impl std::fmt::Debug for RecoveryCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecoveryCode")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("code_hash", &"<redacted>")
+            .field("created_at", &self.created_at)
+            .field("used_at", &self.used_at)
+            .finish()
+    }
 }

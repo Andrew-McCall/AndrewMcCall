@@ -33,6 +33,10 @@ type QuestionType =
 type Question = {
   prompt: string;
   image: string | null;
+  // Map outlines are served as a near-white light-grey (#ccc) fill by the
+  // generator, which is invisible on the light image panel. Flag it so the UI
+  // renders it as a solid dark silhouette; flags must keep their real colours.
+  imageIsMap?: boolean;
   subject: string | null; // the country/city name shown as text, if any
   choices: string[];
   correctIndex: number;
@@ -48,6 +52,18 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 const ALL_TYPES = Object.keys(TYPE_LABELS) as QuestionType[];
+
+// Choice-button styles: unanswered, then the revealed correct/wrong states
+// (disabled after answering, so no hover/cursor affordance). Kept here so the
+// answered states stay in sync across every button.
+const CHOICE_BASE =
+  "border border-green-900 hover:bg-green-900/40 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
+const CHOICE_CORRECT =
+  "border border-green-500 bg-green-900/60 text-green-300 rounded px-4 py-3 text-left transition-colors";
+const CHOICE_WRONG =
+  "border border-red-500 bg-red-900/60 text-red-300 rounded px-4 py-3 text-left transition-colors";
+// Reserved-height feedback line under the choices; colour is added per result.
+const FEEDBACK_BASE = "h-6 text-center font-mono text-sm";
 
 type Settings = { choices: number; types: QuestionType[] };
 
@@ -129,7 +145,7 @@ function buildQuestion(
         subject.country,
         sampleDistinct(names, subject.country, numChoices - 1),
       );
-      return { prompt: "Which country is this?", image: subject.image, subject: null, choices, correctIndex };
+      return { prompt: "Which country is this?", image: subject.image, imageIsMap: true, subject: null, choices, correctIndex };
     }
     case "flag": {
       const withFlag = countries.filter((c) => c.flag);
@@ -229,6 +245,9 @@ export default (app: HTMLElement) => {
       </div>
 
       <div id="cq-choices" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+
+      <!-- Fixed height so the layout doesn't jump when feedback appears. -->
+      <div id="cq-feedback" class="h-6 text-center font-mono text-sm"></div>
     </div>
 
     <details class="text-green-700 text-sm">
@@ -254,6 +273,7 @@ export default (app: HTMLElement) => {
   const imageWrap = app.querySelector<HTMLDivElement>("#cq-image-wrap")!;
   const imageEl = app.querySelector<HTMLImageElement>("#cq-image")!;
   const choicesEl = app.querySelector<HTMLDivElement>("#cq-choices")!;
+  const feedbackEl = app.querySelector<HTMLDivElement>("#cq-feedback")!;
   const choiceCountInput = app.querySelector<HTMLInputElement>("#cq-choice-count")!;
   const typesEl = app.querySelector<HTMLDivElement>("#cq-types")!;
 
@@ -306,8 +326,13 @@ export default (app: HTMLElement) => {
 
     answered = false;
     promptEl.textContent = question.prompt;
+    feedbackEl.textContent = "";
+    feedbackEl.className = FEEDBACK_BASE;
     if (question.image) {
       imageEl.src = question.image;
+      // brightness(0) collapses the pale map fill to a solid black silhouette
+      // that reads clearly on the light panel; flags render with true colour.
+      imageEl.style.filter = question.imageIsMap ? "brightness(0)" : "";
       imageWrap.classList.remove("hidden");
       imageWrap.classList.add("flex");
     } else {
@@ -319,20 +344,26 @@ export default (app: HTMLElement) => {
     question.choices.forEach((choice, i) => {
       const btn = document.createElement("button");
       btn.textContent = choice;
-      btn.className =
-        "border border-green-900 hover:bg-green-900/40 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
+      btn.className = CHOICE_BASE;
       btn.onclick = () => {
         if (answered) return;
         answered = true;
         total++;
         totalEl.textContent = total.toString();
+
         const correct = i === question!.correctIndex;
+        const correctBtn = choicesEl.children[question!.correctIndex] as HTMLButtonElement;
+        const answerText = question!.choices[question!.correctIndex];
+
+        // Always reveal the right answer in green; on a wrong pick, also mark
+        // the chosen button red. The correct answer stays visible either way.
+        correctBtn.className = CHOICE_CORRECT;
         if (correct) {
           score++;
           streak++;
           scoreEl.textContent = score.toString();
-          btn.className =
-            "border border-green-500 bg-green-900/60 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
+          feedbackEl.textContent = streak >= 3 ? `🔥 Correct — ${streak} in a row!` : "Correct!";
+          feedbackEl.className = `${FEEDBACK_BASE} text-green-400`;
           if (streak > bestStreak) {
             bestStreak = streak;
             bestEl.textContent = bestStreak.toString();
@@ -344,14 +375,22 @@ export default (app: HTMLElement) => {
           }
         } else {
           streak = 0;
-          btn.className =
-            "border border-red-500 bg-red-900/60 text-red-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
-          const correctBtn = choicesEl.children[question!.correctIndex] as HTMLButtonElement;
-          correctBtn.className =
-            "border border-green-500 bg-green-900/60 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
+          btn.className = CHOICE_WRONG;
+          feedbackEl.textContent = `Answer: ${answerText}`;
+          feedbackEl.className = `${FEEDBACK_BASE} text-red-400`;
         }
-        Array.from(choicesEl.children).forEach((el) => ((el as HTMLButtonElement).disabled = true));
-        setTimeout(nextQuestion, 1100);
+
+        // Lock the round and fade the choices that were neither picked nor
+        // correct, so the eye lands on the pick and the answer.
+        Array.from(choicesEl.children).forEach((el) => {
+          const b = el as HTMLButtonElement;
+          b.disabled = true;
+          if (b !== btn && b !== correctBtn) b.classList.add("opacity-40");
+        });
+
+        // Linger on wrong answers so the revealed answer is readable; move on
+        // quicker when correct to keep the pace up.
+        setTimeout(nextQuestion, correct ? 900 : 1800);
       };
       choicesEl.appendChild(btn);
     });
