@@ -5,6 +5,7 @@ mod ip;
 mod logs;
 mod password;
 mod response;
+mod stats;
 
 use config::{ApiConfig, SharedConfig};
 use database::models::VisitKind;
@@ -57,6 +58,8 @@ async fn route(
         "/password/types" | "/password" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
         "/countries" if req.method() == Method::GET => countries::list_response(&config).await,
         "/countries" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/stats" if req.method() == Method::GET => stats::stats_response(&config).await,
+        "/stats" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
         _ => match path.strip_prefix("/countries/") {
             Some(file) => countries::svg_response(req.method(), file).await,
             None => ResponseBuilder::from(ApiError::NotFound(path.to_string())).into(),

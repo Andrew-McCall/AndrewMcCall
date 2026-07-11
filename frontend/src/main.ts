@@ -5,6 +5,7 @@ import secret_pi from "./secret_pi.ts";
 import secret_canvas, { hideGame } from "./secret_canvas.ts";
 import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
+import secret_visits, { disposeVisits } from "./secret_visits.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
@@ -19,6 +20,9 @@ function renderPage(): void {
   const page = window.location.pathname.toLowerCase();
   if (page !== "/secret/canvas") {
     hideGame(); // dismiss the fullscreen game overlay when navigating away
+  }
+  if (page !== "/secret/visits") {
+    disposeVisits(); // tear down the ApexCharts when navigating away
   }
 
   app.innerHTML = "";
@@ -49,6 +53,10 @@ function renderPage(): void {
 
   if (page === "/secret/countries"){
     return secret_countries(app)
+  }
+
+  if (page === "/secret/visits"){
+    return secret_visits(app)
   }
 
   // 404
