@@ -54,7 +54,21 @@ const ALL_CHARS = Object.keys(MORSE_MAP).map((key) => ({
   char: MORSE_MAP[key],
 }));
 
+// Teardown for the current mount: detaches the window key listeners, stops any
+// running timers, and closes the audio context. Set on mount, called by the
+// router on navigation away (see main.ts) and again on re-entry. Without it the
+// window listeners leak — spacebar would keep sounding a tone against detached
+// DOM after leaving the page, and a running challenge timer would tick on.
+let teardown: (() => void) | null = null;
+
+export function disposeMorse(): void {
+  teardown?.();
+  teardown = null;
+}
+
 export default (app: HTMLElement) => {
+  disposeMorse(); // tear down any previous mount before starting a fresh one
+
   const unit = 120;
 
   let isActive = false;
@@ -125,6 +139,12 @@ export default (app: HTMLElement) => {
 
   app.innerHTML = `
 <div class="flex flex-col items-center justify-center min-h-screen bg-[#050505] text-green-500 font-mono p-4">
+
+<a href="/secret" title="Back to the secret menu" class="mb-6">
+<h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
+Morse Code
+</h1>
+</a>
 
 <div id="stats-bar" class="hidden w-full max-w-lg mb-4 justify-between px-4 py-2 border border-yellow-600/30 rounded text-xs uppercase">
 <div>Time: <span id="timer">60</span>s</div>
@@ -197,13 +217,15 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
     if (gameTimer) clearInterval(gameTimer);
 
     const best = readHigh();
-
-    if (score > best) {
+    const isBest = score > best;
+    if (isBest) {
       localStorage.setItem("morse-high", score.toString());
       highScoreEl.textContent = score.toString();
     }
 
-    alert(`Challenge Over\nScore: ${score}`);
+    // Show the result inline instead of a blocking alert.
+    msgEl.textContent = `⏱ Time! Score ${score}${isBest ? " — new best!" : ""}`;
+    bufEl.textContent = "";
 
     drillBox.classList.add("hidden");
     statsBar.classList.add("hidden");
@@ -331,7 +353,7 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
     if (isTraining) nextDrill();
   });
 
-  window.addEventListener("keydown", (e) => {
+  const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === " " && !e.repeat) {
       e.preventDefault();
       start(e);
@@ -346,11 +368,14 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
       e.preventDefault();
       backspace();
     }
-  });
+  };
 
-  window.addEventListener("keyup", (e) => {
+  const onKeyUp = (e: KeyboardEvent) => {
     if (e.key === " ") end(e);
-  });
+  };
+
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
 
   const keyer = app.querySelector("#keyer")!;
 
@@ -362,14 +387,14 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
   keyer.addEventListener("touchend", end, { passive: false });
   keyer.addEventListener("touchcancel", end, { passive: false });
 
-  /*
-  return () => {
-
-    Audio.close();
-
+  // Detach the global listeners and stop everything when the router navigates
+  // away; the keyer's own listeners die with #app when it's cleared.
+  teardown = () => {
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
     if (gameTimer) clearInterval(gameTimer);
     if (letterTimer) clearTimeout(letterTimer);
     if (wordTimer) clearTimeout(wordTimer);
+    Audio.close();
   };
-*/
 };

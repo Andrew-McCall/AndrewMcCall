@@ -1,7 +1,7 @@
 import index from "./index.ts";
 import secret_index from "./secret_index.ts";
-import secret_morse from "./secret_morse.ts";
-import secret_pi from "./secret_pi.ts";
+import secret_morse, { disposeMorse } from "./secret_morse.ts";
+import secret_pi, { disposePi } from "./secret_pi.ts";
 import secret_canvas, { hideGame } from "./secret_canvas.ts";
 import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
@@ -25,6 +25,12 @@ function renderPage(): void {
   }
   if (page !== "/secret/visits") {
     disposeVisits(); // tear down the ApexCharts when navigating away
+  }
+  if (page !== "/secret/morse") {
+    disposeMorse(); // detach the keyer's window listeners + stop audio/timers
+  }
+  if (page !== "/secret/pi") {
+    disposePi(); // detach the keypad's window keydown listener
   }
 
   app.innerHTML = "";
