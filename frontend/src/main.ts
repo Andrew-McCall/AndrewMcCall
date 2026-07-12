@@ -101,7 +101,13 @@ declare global {
 }
 
 window.navigate = navigateImpl;
-(globalThis as any).navigate = navigateImpl; 
+(globalThis as any).navigate = navigateImpl;
 
 
 renderPage();
+
+// Ping once, when the app boots, to record that a real JavaScript-capable
+// client loaded the page. nginx already logs the per-route hits; this only
+// distinguishes a live browser from a bare asset fetch or a bot. Fire-and-forget
+// — a failed visit log must never surface to the visitor or block anything.
+fetch("/api/log/js", { method: "POST", keepalive: true }).catch(() => {});
