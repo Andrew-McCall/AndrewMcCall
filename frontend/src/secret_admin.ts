@@ -1,11 +1,12 @@
 // Admin page. Every call uses `credentials: "include"` so the HttpOnly session
-// cookie set at login is sent along. On load we check `/api/auth/me`; anyone who
-// isn't a signed-in admin is bounced to the secret menu (which hosts sign-in).
+// cookie set at login is sent along. The router gates this route — only a
+// signed-in admin reaches here, and it passes the resolved user in as `me`.
 // Admins get: the user
 // list (with a create form and per-row delete) and a 2FA panel for their own
 // account (enrol via `/auth/totp/setup` → `/auth/totp/enable`, or disable).
 
-type Me = { id: string; name: string; role: string; totp_enabled: boolean };
+import type { Me } from "./session.ts";
+
 type AdminUser = {
   id: string;
   name: string;
@@ -34,18 +35,7 @@ const errorText = async (res: Response): Promise<string> => {
 const fmtDate = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString() : "—";
 
-export default async (app: HTMLElement) => {
-  // Gate: only signed-in admins may see this page.
-  let me: Me;
-  try {
-    const res = await api("/auth/me");
-    if (!res.ok) return window.navigate("/secret");
-    me = await res.json();
-    if (me.role !== "admin") return window.navigate("/secret");
-  } catch {
-    return window.navigate("/secret");
-  }
-
+export default async (app: HTMLElement, me: Me) => {
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
   <div class="w-full max-w-3xl flex items-center justify-between">

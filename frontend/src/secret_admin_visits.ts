@@ -1,12 +1,10 @@
 // Admin visits page — the detailed, IP-level view the public `/secret/visits`
 // overview deliberately withholds. Every call uses `credentials: "include"` so
-// the HttpOnly session cookie set at login is sent along. On load we check
-// `/api/auth/me`; anyone who isn't a signed-in admin is bounced to the secret
-// menu. Admins get a paginated table of raw visits (time, source, page, client
-// IP, user agent) from `/api/admin/visits`, filterable by kind and by clicking a
-// page path.
+// the HttpOnly session cookie set at login is sent along. The router gates this
+// route, so only a signed-in admin reaches here. Admins get a paginated table of
+// raw visits (time, source, page, client IP, user agent) from
+// `/api/admin/visits`, filterable by kind and by clicking a page path.
 
-type Me = { id: string; name: string; role: string };
 type Visit = {
   id: string;
   created_at: string;
@@ -56,16 +54,6 @@ const KIND_CLASS: Record<string, string> = {
 const PAGE_SIZE = 100;
 
 export default async (app: HTMLElement) => {
-  // Gate: only signed-in admins may see this page.
-  try {
-    const res = await api("/auth/me");
-    if (!res.ok) return window.navigate("/secret");
-    const me: Me = await res.json();
-    if (me.role !== "admin") return window.navigate("/secret");
-  } catch {
-    return window.navigate("/secret");
-  }
-
   // View state, reset on every mount.
   let offset = 0;
   let kind: string | null = null;

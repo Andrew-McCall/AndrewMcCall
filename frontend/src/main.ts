@@ -8,13 +8,43 @@ import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
 import secret_admin from "./secret_admin.ts";
 import secret_admin_visits from "./secret_admin_visits.ts";
+import { getMe, type Me } from "./session.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
 });
 
 var app = document.querySelector<HTMLDivElement>("#app");
-function renderPage(): void {
+
+// What a route asks of the visitor. `admin` implies signed in; `user` is any
+// signed-in account (for the per-user pages); `public` is open to everyone.
+// Gating lives here in the router so no page re-implements the `/auth/me`
+// bounce — the resolved user is handed to the page instead.
+type Auth = "public" | "user" | "admin";
+
+// A page renderer. `me` is the signed-in user for gated routes, `null` on public
+// ones; public pages simply ignore it.
+type Handler = (app: HTMLElement, me: Me | null) => void | Promise<void>;
+
+interface Route {
+  auth: Auth;
+  render: Handler;
+}
+
+const routes: Record<string, Route> = {
+  "/": { auth: "public", render: (app) => index(app) },
+  "/secret": { auth: "public", render: (app) => secret_index(app) },
+  "/secret/pi": { auth: "public", render: (app) => secret_pi(app) },
+  "/secret/morse": { auth: "public", render: (app) => secret_morse(app) },
+  "/secret/canvas": { auth: "public", render: (app) => secret_canvas(app) },
+  "/secret/password": { auth: "public", render: (app) => secret_password(app) },
+  "/secret/countries": { auth: "public", render: (app) => secret_countries(app) },
+  "/secret/visits": { auth: "public", render: (app) => secret_visits(app) },
+  "/secret/admin": { auth: "admin", render: (app, me) => secret_admin(app, me!) },
+  "/secret/admin/visits": { auth: "admin", render: (app) => secret_admin_visits(app) },
+};
+
+async function renderPage(): Promise<void> {
   if (!app) {
     return window.location.reload();
   }
@@ -35,56 +65,35 @@ function renderPage(): void {
 
   app.innerHTML = "";
 
-  if (page === "/") {
-    return index(app);
-  } 
-
-  if (page === "/secret") {
-    return secret_index(app);
-  }
-
-  if (page === "/secret/pi") {
-    return secret_pi(app);
-  }
-
-  if (page === "/secret/morse"){
-    return secret_morse(app)
-  }
-
-  if (page === "/secret/canvas"){
-    return secret_canvas(app)
-  }
-
-  if (page === "/secret/password"){
-    return secret_password(app)
-  }
-
-  if (page === "/secret/countries"){
-    return secret_countries(app)
-  }
-
-  if (page === "/secret/visits"){
-    return secret_visits(app)
-  }
-
-  if (page === "/secret/login"){
+  if (page === "/secret/login") {
     // Sign-in now lives inside the secret menu; keep the old path working.
     window.history.replaceState({}, "", "/secret");
     return secret_index(app);
   }
 
-  if (page === "/secret/admin"){
-    secret_admin(app)
-    return
+  const route = routes[page];
+  if (!route) {
+    // 404 — send them home and render it.
+    window.history.pushState({}, "", "/");
+    return index(app);
   }
 
-  if (page === "/secret/admin/visits"){
-    secret_admin_visits(app)
-    return
+  // Middleware gate: resolve the session for protected routes and bounce anyone
+  // who isn't allowed to the secret menu (which hosts sign-in).
+  let me: Me | null = null;
+  if (route.auth !== "public") {
+    me = await getMe();
+    if (!me || (route.auth === "admin" && me.role !== "admin")) {
+      return window.navigate("/secret");
+    }
+    // A newer navigation may have started while `/auth/me` was in flight; if so,
+    // let that one win rather than rendering this now-stale page over it.
+    if (window.location.pathname.toLowerCase() !== page) {
+      return;
+    }
   }
 
-  // 404
-  window.history.pushState({}, "", "/");
+  return route.render(app, me);
 }
 
 
