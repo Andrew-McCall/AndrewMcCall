@@ -239,8 +239,8 @@ export default (app: HTMLElement) => {
       <div id="cq-prompt" class="text-center text-lg text-green-300"></div>
 
       <div id="cq-image-wrap" class="hidden justify-center">
-        <div class="bg-stone-100 rounded-lg p-4 max-w-xs">
-          <img id="cq-image" class="max-h-48 max-w-full" />
+        <div class="bg-stone-100 rounded-lg p-4 w-full max-w-lg">
+          <img id="cq-image" class="max-h-72 w-full object-contain" />
         </div>
       </div>
 
