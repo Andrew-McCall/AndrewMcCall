@@ -7,6 +7,7 @@ import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
 import secret_admin from "./secret_admin.ts";
+import secret_admin_visits from "./secret_admin_visits.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
@@ -68,6 +69,11 @@ function renderPage(): void {
 
   if (page === "/secret/admin"){
     secret_admin(app)
+    return
+  }
+
+  if (page === "/secret/admin/visits"){
+    secret_admin_visits(app)
     return
   }
 

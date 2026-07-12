@@ -85,6 +85,10 @@ async fn route(
             admin::create_user(req, peer, &config).await
         }
         "/admin/users" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/admin/visits" if req.method() == Method::GET => {
+            admin::list_visits(req, peer, &config).await
+        }
+        "/admin/visits" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
         _ if path.starts_with("/admin/users/") => {
             // Own the id before moving `req` into the handler (the id borrows
             // `path`, which borrows `req`).
