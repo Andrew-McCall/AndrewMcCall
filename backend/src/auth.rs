@@ -1,9 +1,10 @@
 //! Authentication: PIN + token login, TOTP (RFC 6238) enrolment with one-time
 //! recovery codes, and a token extractor other modules use to gate endpoints.
 //!
-//! A user authenticates with `name` + `pin` (hashed with argon2id). Once they
-//! enrol TOTP they must also present a 6-digit code — or one of the recovery
-//! codes handed out at enrolment — on each login. A successful login mints an
+//! A user authenticates with a `pin` alone (hashed with argon2id) — there's no
+//! username to enter. Once they enrol TOTP they must also present a 6-digit
+//! code — or one of the recovery codes handed out at enrolment — on each login.
+//! A successful login mints an
 //! opaque token; only its SHA-256 hash is stored (`user_tokens.token`), so a
 //! database leak never exposes a live token. The token is returned in the JSON
 //! body for `Authorization: Bearer` use, and additionally set as an `HttpOnly`
@@ -328,7 +329,6 @@ pub struct UserView {
 
 #[derive(Deserialize)]
 struct LoginRequest {
-    name: String,
     pin: String,
     totp: Option<String>,
     recovery: Option<String>,
@@ -356,44 +356,42 @@ struct AuthRow {
     role: UserRole,
 }
 
-/// `POST /auth/login` — body `{name, pin, totp?, recovery?}`, optional
-/// `?cookie=true`. Verifies the PIN, enforces TOTP (code or recovery code) when
-/// enrolled, mints a token, and returns `{token, user}` (also setting a cookie
-/// in cookie mode). Returns `401 {totp_required:true}` when a second factor is
-/// needed but not supplied/valid.
+/// `POST /auth/login` — body `{pin, totp?, recovery?}`, optional `?cookie=true`.
+/// Verifies the PIN, enforces TOTP (code or recovery code) when enrolled, mints
+/// a token, and returns `{token, user}` (also setting a cookie in cookie mode).
+/// Returns `401 {totp_required:true}` when a second factor is needed but not
+/// supplied/valid.
 pub async fn login(
     req: Request<hyper::body::Incoming>,
     config: &ApiConfig,
 ) -> hyper::Response<Body> {
     let cookie_mode = wants_cookie(&req);
 
-    let body: LoginRequest = match response::read_json(
-        req,
-        r#"expected a JSON body like {"name": "alice", "pin": "1234"}"#,
-    )
-    .await
-    {
-        Ok(body) => body,
-        Err(err) => return ResponseBuilder::from(err).into(),
-    };
+    let body: LoginRequest =
+        match response::read_json(req, r#"expected a JSON body like {"pin": "1234"}"#).await {
+            Ok(body) => body,
+            Err(err) => return ResponseBuilder::from(err).into(),
+        };
 
     let pool = config.db.pool();
-    let user: Option<AuthRow> =
-        match sqlx::query_as("SELECT id, name, pin, totp_secret, role FROM users WHERE name = $1")
-            .bind(&body.name)
-            .fetch_optional(&pool)
+    // PIN-only login: there's no name to key on, and PINs are per-user-salted
+    // argon2 hashes we can't query by, so load every user and find the one whose
+    // stored hash the PIN verifies against. Fine at this site's tiny user count;
+    // each check is an (intentionally slow) argon2 verify.
+    let users: Vec<AuthRow> =
+        match sqlx::query_as("SELECT id, name, pin, totp_secret, role FROM users")
+            .fetch_all(&pool)
             .await
         {
-            Ok(user) => user,
+            Ok(users) => users,
             Err(err) => {
-                tracing::error!(error = %err, "failed to load user for login");
+                tracing::error!(error = %err, "failed to load users for login");
                 return ResponseBuilder::from(ApiError::Internal).into();
             }
         };
 
-    // Same generic error whether the name is unknown or the pin is wrong, so a
-    // caller can't probe which names exist.
-    let Some(user) = user.filter(|u| verify_pin(&u.pin, &body.pin)) else {
+    // Same generic error whether no user matched or the pin was wrong.
+    let Some(user) = users.into_iter().find(|u| verify_pin(&u.pin, &body.pin)) else {
         return ResponseBuilder::from(ApiError::Unauthorized).into();
     };
 

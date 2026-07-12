@@ -1,3 +1,5 @@
+import { mountLogin } from "./secret_login.ts";
+
 export default (app: HTMLElement) => {
   app.innerHTML += `
 <div class="flex flex-col justify-center items-center py-2">
@@ -13,9 +15,13 @@ export default (app: HTMLElement) => {
     <a href="/secret/password" class="text-lime-400 hover:underline hover:text-lime-700">Password Generator</a>
     <a href="/secret/countries" class="text-lime-400 hover:underline hover:text-lime-700">Countries Quiz</a>
     <a href="/secret/visits" class="text-lime-400 hover:underline hover:text-lime-700">Visits</a>
-    <a href="/secret/login" class="text-lime-400 hover:underline hover:text-lime-700">Sign in</a>
     <a href="/secret/soon" class="text-lime-400 italic line-through hover:cursor-pointer hover:text-lime-700" > coming soon </a>
   </div>
+
+  <div class="w-full border-t border-green-900/60 mt-8 pt-6"></div>
+  <div id="secret-auth" class="w-full"></div>
 </div>
 `;
+
+  mountLogin(app.querySelector<HTMLDivElement>("#secret-auth")!);
 };

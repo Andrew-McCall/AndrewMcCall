@@ -27,4 +27,14 @@ impl DatabaseConnection {
     pub fn pool(&self) -> PgPool {
         self.pool.clone()
     }
+
+    /// Applies every pending migration from the embedded `migrations/` directory,
+    /// bringing the schema up to date. Run once at startup so a freshly deployed
+    /// binary carries its own schema forward without a separate migration step —
+    /// `deploy.sh` relies on this, skipping its optional `sqlx migrate` when the
+    /// CLI is absent. Already-applied migrations are recorded in `_sqlx_migrations`
+    /// and skipped, so this is a no-op once the database is current.
+    pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
+        sqlx::migrate!("./migrations").run(&self.pool).await
+    }
 }

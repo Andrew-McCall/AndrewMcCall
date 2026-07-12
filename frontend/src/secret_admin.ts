@@ -1,6 +1,7 @@
 // Admin page. Every call uses `credentials: "include"` so the HttpOnly session
 // cookie set at login is sent along. On load we check `/api/auth/me`; anyone who
-// isn't a signed-in admin is bounced to the login page. Admins get: the user
+// isn't a signed-in admin is bounced to the secret menu (which hosts sign-in).
+// Admins get: the user
 // list (with a create form and per-row delete) and a 2FA panel for their own
 // account (enrol via `/auth/totp/setup` → `/auth/totp/enable`, or disable).
 
@@ -38,11 +39,11 @@ export default async (app: HTMLElement) => {
   let me: Me;
   try {
     const res = await api("/auth/me");
-    if (!res.ok) return window.navigate("/secret/login");
+    if (!res.ok) return window.navigate("/secret");
     me = await res.json();
-    if (me.role !== "admin") return window.navigate("/secret/login");
+    if (me.role !== "admin") return window.navigate("/secret");
   } catch {
-    return window.navigate("/secret/login");
+    return window.navigate("/secret");
   }
 
   app.innerHTML = `
@@ -266,7 +267,7 @@ export default async (app: HTMLElement) => {
     } catch {
       /* clearing the cookie server-side is best-effort */
     }
-    window.navigate("/secret/login");
+    window.navigate("/secret");
   };
 
   renderTotpPanel();

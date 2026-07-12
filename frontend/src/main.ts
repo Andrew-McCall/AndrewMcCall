@@ -6,7 +6,6 @@ import secret_canvas, { hideGame } from "./secret_canvas.ts";
 import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
-import secret_login from "./secret_login.ts";
 import secret_admin from "./secret_admin.ts";
 
 window.addEventListener("popstate", () => {
@@ -62,7 +61,9 @@ function renderPage(): void {
   }
 
   if (page === "/secret/login"){
-    return secret_login(app)
+    // Sign-in now lives inside the secret menu; keep the old path working.
+    window.history.replaceState({}, "", "/secret");
+    return secret_index(app);
   }
 
   if (page === "/secret/admin"){

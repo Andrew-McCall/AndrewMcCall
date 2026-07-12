@@ -157,6 +157,17 @@ fn main() {
         tracing::info!("listening on http://{listen_address}");
 
         let config: SharedConfig = Arc::new(ApiConfig::from_env());
+
+        // Bring the schema up to date before serving. Without this a deploy that
+        // adds a migration (and boxes without the sqlx CLI, which deploy.sh's
+        // optional migrate step skips) would run against a stale schema — e.g. a
+        // missing `visits.route` column 500s every `/stats` request.
+        config
+            .db
+            .migrate()
+            .await
+            .expect("failed to apply database migrations");
+
         ensure_admin(&config).await;
 
         loop {
