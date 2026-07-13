@@ -11,7 +11,7 @@ import secret_admin_visits from "./secret_admin_visits.ts";
 import secret_notes from "./secret_notes.ts";
 import secret_prettier from "./secret_prettier.ts";
 import secret_vim from "./secret_vim.ts";
-import secret_time from "./secret_time.ts";
+import secret_time, { disposeTime } from "./secret_time.ts";
 import secret_colour from "./secret_colour.ts";
 import secret_barcode from "./secret_barcode.ts";
 import secret_cron from "./secret_cron.ts";
@@ -79,6 +79,9 @@ async function renderPage(): Promise<void> {
   }
   if (page !== "/secret/pi") {
     disposePi(); // detach the keypad's window keydown listener
+  }
+  if (page !== "/secret/time") {
+    disposeTime(); // stop the relative-time panel's 1s interval
   }
 
   app.innerHTML = "";

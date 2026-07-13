@@ -296,7 +296,18 @@ const formatInZone = (d: Date, zone: string): string => {
 // Page.
 // ---------------------------------------------------------------------------
 
+// The relative-time panel runs a 1s interval to stay honest. It's module-scoped
+// so the router can stop it on navigation away (see main.ts) — otherwise it
+// would tick forever, and stack another timer on every revisit.
+let relTimer: number | null = null;
+
+export function disposeTime(): void {
+  if (relTimer !== null) window.clearInterval(relTimer);
+  relTimer = null;
+}
+
 export default (app: HTMLElement) => {
+  disposeTime(); // drop any interval from a previous visit
   const inputCls =
     "bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-200 font-mono";
   const labelCls = "text-green-700 font-mono text-xs uppercase tracking-widest";
@@ -646,10 +657,9 @@ export default (app: HTMLElement) => {
   relDate.value = toLocalInput(new Date(Date.now() + 3600_000)) + ":00";
   renderRelative();
   // Keep the relative view honest while it's on screen.
-  const relTimer = window.setInterval(() => {
+  relTimer = window.setInterval(() => {
     if (active === "relative") renderRelative();
   }, 1000);
-  app.addEventListener("DOMNodeRemovedFromDocument", () => clearInterval(relTimer));
 
   // --- Cron ----------------------------------------------------------------
   const cronExpr = app.querySelector<HTMLInputElement>("#cron-expr")!;

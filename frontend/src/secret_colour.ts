@@ -87,12 +87,12 @@ export default (app: HTMLElement) => {
       <input id="col-native" type="color" value="#3cb371"
         class="w-16 h-16 shrink-0 bg-transparent border border-green-900 rounded cursor-pointer" />
       <input id="col-input" type="text" spellcheck="false" placeholder="#3cb371, rgb(…), hsl(…), teal…"
-        class="flex-1 min-w-[12rem] bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-green-300 placeholder-green-900 font-mono" />
+        class="flex-1 min-w-48 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-green-300 placeholder-green-900 font-mono" />
       <span id="col-error" class="text-red-500 font-mono text-sm"></span>
     </div>
 
     <div class="flex flex-wrap items-stretch gap-3">
-      <div id="col-preview" class="flex-1 min-w-[10rem] min-h-28 rounded border border-green-900 flex items-center justify-center font-mono text-sm"></div>
+      <div id="col-preview" class="flex-1 min-w-40 min-h-28 rounded border border-green-900 flex items-center justify-center font-mono text-sm"></div>
       <div class="flex flex-col gap-2 font-mono text-sm">
         <button data-fmt="hex" class="col-chip border border-green-900 hover:border-green-600 rounded px-3 py-2 text-left text-green-300 cursor-pointer transition-colors"></button>
         <button data-fmt="rgb" class="col-chip border border-green-900 hover:border-green-600 rounded px-3 py-2 text-left text-green-300 cursor-pointer transition-colors"></button>
