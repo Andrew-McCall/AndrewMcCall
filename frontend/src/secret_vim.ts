@@ -1,60 +1,83 @@
-// A real Vim editor, no bundled dependency: CodeMirror 6 and the community
-// Vim keybinding layer are pulled from a CDN as ES modules at runtime — the
-// same trick secret_prettier.ts uses for Prettier. Nothing is added to
-// package.json; the editor core is fetched after the page's `load` event so
-// it never blocks first paint.
-//
-// All the CodeMirror packages are requested from esm.sh with an identical
-// pinned `?deps=` set so every module shares ONE @codemirror/state instance
-// (a mismatched state singleton is the classic reason CM6 + vim silently
-// fails to bind keys).
+// A real Vim editor with no bundled dependency: CodeMirror 5 and its
+// first-party Vim keymap are pulled from a CDN at page load — the same
+// "serve it from a CDN, add nothing to package.json" trick secret_prettier.ts
+// uses for Prettier. CM5 ships as a classic UMD bundle that augments a single
+// `window.CodeMirror`, so the vim/dialog/search add-ons attach to the exact
+// same instance (the CM6 ESM path silently fails to bind keys because esm.sh
+// hands each module its own @codemirror/state copy).
 
-const V = "6"; // pinned deps so esm.sh dedupes @codemirror/state across modules
-const DEPS = `@codemirror/state@${V},@codemirror/view@${V},@codemirror/commands@${V},@codemirror/language@${V}`;
-const url = (pkg: string) => `https://esm.sh/${pkg}?deps=${DEPS}`;
+const VER = "5.65.16";
+const CDN = `https://cdnjs.cloudflare.com/ajax/libs/codemirror/${VER}`;
 
-const CODEMIRROR_URL = url("codemirror@6");
-const VIEW_URL = url("@codemirror/view@6");
-const VIM_URL = url("@replit/codemirror-vim@6");
+const CSS = [`${CDN}/codemirror.min.css`, `${CDN}/addon/dialog/dialog.min.css`];
+// Core must load before the add-ons, which all augment window.CodeMirror.
+const CORE = `${CDN}/codemirror.min.js`;
+const ADDONS = [
+  `${CDN}/keymap/vim.min.js`,
+  `${CDN}/addon/dialog/dialog.min.js`, // vim's ":" / "/" command line
+  `${CDN}/addon/search/searchcursor.min.js`, // vim search (/, n, N, :s)
+];
 
-let editorPromise: Promise<{
-  view: any;
-  container: HTMLElement;
-}> | null = null;
+declare global {
+  interface Window {
+    CodeMirror: any;
+  }
+}
 
-const buildEditor = async (
-  doc: string,
-): Promise<{ view: any; container: HTMLElement }> => {
-  const [cm, viewMod, vimMod] = await Promise.all([
-    import(/* @vite-ignore */ CODEMIRROR_URL),
-    import(/* @vite-ignore */ VIEW_URL),
-    import(/* @vite-ignore */ VIM_URL),
-  ]);
-
-  const { basicSetup } = cm;
-  const { EditorView } = viewMod;
-  const { vim, Vim } = vimMod;
-
-  // Make :w a no-op and :q take you back to the secret menu.
-  Vim.defineEx("write", "w", () => {});
-  Vim.defineEx("quit", "q", () => window.navigate("/secret"));
-
-  const container = document.createElement("div");
-  container.className = "vim-cm w-full";
-
-  const view = new EditorView({
-    doc,
-    // vim() MUST come first so its keymap wins over the default bindings.
-    extensions: [vim({ status: true }), basicSetup],
-    parent: container,
+const loadCss = (href: string) =>
+  new Promise<void>((resolve) => {
+    if (document.querySelector(`link[href="${href}"]`)) return resolve();
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = href;
+    l.onload = () => resolve();
+    l.onerror = () => resolve(); // a missing stylesheet shouldn't block the editor
+    document.head.appendChild(l);
   });
 
-  return { view, container };
+const loadScript = (src: string) =>
+  new Promise<void>((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+
+let editorPromise: Promise<any> | null = null; // resolves to the CodeMirror instance
+
+const buildEditor = async (doc: string): Promise<any> => {
+  CSS.forEach(loadCss);
+  await loadScript(CORE);
+  await Promise.all(ADDONS.map(loadScript));
+
+  const CodeMirror = window.CodeMirror;
+
+  // :w is a no-op here; :q (and :wq) drop you back on the secret menu.
+  CodeMirror.Vim.defineEx("write", "w", () => {});
+  CodeMirror.Vim.defineEx("quit", "q", () => window.navigate("/secret"));
+
+  const host = document.createElement("div");
+  host.className = "vim-cm w-full";
+
+  const cm = CodeMirror(host, {
+    value: doc,
+    keyMap: "vim",
+    lineNumbers: true,
+    showCursorWhenSelecting: true,
+    lineWrapping: true,
+  });
+  cm.setSize("100%", "24rem");
+
+  // Stash the wrapper so the page-render code can (re-)mount it.
+  cm.__host = host;
+  return cm;
 };
 
 const SAMPLE = `Welcome to Vim — the real thing, running in your browser.
 
-This editor is CodeMirror 6 with the community Vim keymap, both loaded
+This editor is CodeMirror with its first-party Vim keymap, both loaded
 straight from a CDN at page load. Nothing is bundled into the site.
 
 Try the classics:
@@ -95,16 +118,17 @@ export default (app: HTMLElement) => {
   const host = app.querySelector("#vim-host") as HTMLElement;
 
   // Build the editor once and reuse it across navigations (preserves the
-  // buffer). The CDN import starts here, on first visit to /secret/vim.
+  // buffer). The CDN fetch starts here, on first visit to /secret/vim.
   if (!editorPromise) editorPromise = buildEditor(SAMPLE);
 
   editorPromise
-    .then(({ container, view }) => {
-      // Guard against the user navigating away before the CDN import resolved.
+    .then((cm) => {
+      // Guard against the user navigating away before the CDN load resolved.
       if (!document.body.contains(host)) return;
       host.innerHTML = "";
-      host.appendChild(container);
-      view.focus();
+      host.appendChild(cm.__host);
+      cm.refresh(); // CM needs a re-measure after being re-parented
+      cm.focus();
     })
     .catch((err) => {
       const loading = host.querySelector("#vim-loading");

@@ -251,9 +251,7 @@ const describeCron = (cron: ParsedCron): string => {
     parts.push(
       minute.restricted
         ? "at minute " + describeField(minute, defs[off])
-        : second
-          ? "every minute"
-          : "every minute",
+        : "every minute",
     );
     if (hour.restricted) parts.push("past hour " + describeField(hour, defs[off + 1]));
   }

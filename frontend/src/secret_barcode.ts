@@ -123,6 +123,33 @@ export default (app: HTMLElement) => {
       </div>
     </div>
 
+    <div class="flex flex-wrap gap-4 items-center text-green-300 font-mono text-sm">
+      <label class="flex items-center gap-2 cursor-pointer select-none" title="Code colour">
+        Foreground
+        <input id="bc-fg" type="color" value="#000000"
+          class="w-8 h-8 bg-transparent border border-green-900 rounded cursor-pointer" />
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer select-none" title="Background colour">
+        Background
+        <input id="bc-bg" type="color" value="#ffffff"
+          class="w-8 h-8 bg-transparent border border-green-900 rounded cursor-pointer" />
+      </label>
+      <button id="bc-swap" type="button"
+        class="border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors"
+        title="Swap foreground and background">
+        Swap
+      </button>
+      <label id="bc-icon-label" class="flex items-center gap-2 cursor-pointer select-none" title="Logo shown in the centre (QR only)">
+        Centre icon
+        <input id="bc-icon" type="file" accept="image/*" class="hidden" />
+        <span id="bc-icon-name" class="border border-green-900 hover:border-green-600 px-3 py-1 rounded transition-colors">Choose…</span>
+      </label>
+      <button id="bc-icon-clear" type="button"
+        class="hidden border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors">
+        Clear icon
+      </button>
+    </div>
+
     <div class="flex flex-wrap gap-2 items-center">
       <button id="bc-generate"
         class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors">
@@ -140,7 +167,10 @@ export default (app: HTMLElement) => {
     </div>
 
     <div id="bc-output"
-      class="flex items-center justify-center min-h-64 bg-white border border-green-900 rounded p-4 overflow-auto"></div>
+      class="hidden self-center mt-2 rounded border border-green-900 overflow-hidden max-w-full"></div>
+    <p id="bc-empty" class="self-center mt-2 text-green-900 font-mono text-sm">
+      No code yet — hit Generate.
+    </p>
   </div>
 </div>
 `;
@@ -158,14 +188,24 @@ export default (app: HTMLElement) => {
   const passInput = app.querySelector("#bc-pass") as HTMLInputElement;
   const encSelect = app.querySelector("#bc-enc") as HTMLSelectElement;
   const hiddenInput = app.querySelector("#bc-hidden") as HTMLInputElement;
+  const fgInput = app.querySelector("#bc-fg") as HTMLInputElement;
+  const bgInput = app.querySelector("#bc-bg") as HTMLInputElement;
+  const swapBtn = app.querySelector("#bc-swap") as HTMLButtonElement;
+  const iconLabel = app.querySelector("#bc-icon-label") as HTMLElement;
+  const iconInput = app.querySelector("#bc-icon") as HTMLInputElement;
+  const iconName = app.querySelector("#bc-icon-name") as HTMLElement;
+  const iconClearBtn = app.querySelector("#bc-icon-clear") as HTMLButtonElement;
   const generateBtn = app.querySelector("#bc-generate") as HTMLButtonElement;
   const svgBtn = app.querySelector("#bc-svg") as HTMLButtonElement;
   const pngBtn = app.querySelector("#bc-png") as HTMLButtonElement;
   const statusEl = app.querySelector("#bc-status") as HTMLElement;
   const output = app.querySelector("#bc-output") as HTMLElement;
+  const emptyEl = app.querySelector("#bc-empty") as HTMLElement;
 
   // The last successfully generated SVG markup, kept for the download buttons.
   let currentSvg: string | null = null;
+  // The chosen centre-icon image as a data URL (QR codes only), or null.
+  let iconDataUrl: string | null = null;
 
   const setStatus = (text: string, isError = false) => {
     statusEl.textContent = text;
@@ -188,6 +228,9 @@ export default (app: HTMLElement) => {
     formatSelect.classList.toggle("hidden", !isBarcode);
     templateSelect.classList.toggle("hidden", isBarcode);
     ecSelect.classList.toggle("hidden", isBarcode);
+    // Centre icons only make sense for QR codes.
+    iconLabel.classList.toggle("hidden", isBarcode);
+    iconClearBtn.classList.toggle("hidden", isBarcode || !iconDataUrl);
 
     input.classList.toggle("hidden", template !== "text");
     websitePanel.classList.toggle("hidden", template !== "website");
@@ -236,16 +279,57 @@ export default (app: HTMLElement) => {
     }
   };
 
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const XLINK_NS = "http://www.w3.org/1999/xlink";
+
+  // Overlay the chosen icon in the centre of a QR SVG, on a small padded
+  // background patch so the surrounding modules stay legible. The QR's own
+  // error correction reconstructs the covered modules when scanned.
+  const overlayIcon = (svg: string, href: string): string => {
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const root = doc.documentElement;
+    const vb = (root.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+    if (vb.length !== 4 || !vb[2]) return svg;
+    const size = vb[2];
+    const icon = size * 0.24;
+    const pad = icon * 0.14;
+    const x = (size - icon) / 2;
+    const y = (size - icon) / 2;
+
+    const rect = doc.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(x - pad));
+    rect.setAttribute("y", String(y - pad));
+    rect.setAttribute("width", String(icon + pad * 2));
+    rect.setAttribute("height", String(icon + pad * 2));
+    rect.setAttribute("rx", String(pad));
+    rect.setAttribute("fill", bgInput.value);
+
+    const image = doc.createElementNS(SVG_NS, "image");
+    image.setAttribute("x", String(x));
+    image.setAttribute("y", String(y));
+    image.setAttribute("width", String(icon));
+    image.setAttribute("height", String(icon));
+    image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    image.setAttribute("href", href);
+    image.setAttributeNS(XLINK_NS, "xlink:href", href);
+
+    root.appendChild(rect);
+    root.appendChild(image);
+    return new XMLSerializer().serializeToString(root);
+  };
+
   const makeQr = async (text: string): Promise<string> => {
     const mod = await loadQrcode();
     const QRCode = mod.default ?? mod;
     // `toString` with type "svg" is pure-JS and needs no DOM/canvas.
-    return QRCode.toString(text, {
+    const svg: string = await QRCode.toString(text, {
       type: "svg",
       errorCorrectionLevel: ecSelect.value,
       margin: 2,
       width: 320,
+      color: { dark: fgInput.value, light: bgInput.value },
     });
+    return iconDataUrl ? overlayIcon(svg, iconDataUrl) : svg;
   };
 
   const makeBarcode = async (text: string): Promise<string> => {
@@ -253,12 +337,13 @@ export default (app: HTMLElement) => {
     const JsBarcode = mod.default ?? mod;
     // JsBarcode renders into an SVG node; we build a detached one so nothing
     // flashes on screen, then hand back its serialized markup.
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS(SVG_NS, "svg");
     JsBarcode(svg, text, {
       format: formatSelect.value,
       displayValue: true,
       margin: 10,
-      background: "#ffffff",
+      lineColor: fgInput.value,
+      background: bgInput.value,
     });
     return new XMLSerializer().serializeToString(svg);
   };
@@ -278,17 +363,23 @@ export default (app: HTMLElement) => {
           : await makeBarcode(text);
       currentSvg = svg;
       output.innerHTML = svg;
-      // Make the rendered SVG scale nicely inside the preview box.
+      // Keep the preview compact so it never dominates the page.
       const svgEl = output.querySelector("svg");
       if (svgEl) {
+        svgEl.style.display = "block";
+        svgEl.style.width = "240px";
         svgEl.style.maxWidth = "100%";
         svgEl.style.height = "auto";
       }
+      output.classList.remove("hidden");
+      emptyEl.classList.add("hidden");
       setDownloadsEnabled(true);
       setStatus("");
     } catch (err) {
       currentSvg = null;
       output.innerHTML = "";
+      output.classList.add("hidden");
+      emptyEl.classList.remove("hidden");
       // JsBarcode throws when the input is invalid for the chosen format.
       setStatus(err instanceof Error ? err.message : String(err), true);
     } finally {
@@ -324,7 +415,7 @@ export default (app: HTMLElement) => {
       canvas.width = (img.naturalWidth || 320) * scale;
       canvas.height = (img.naturalHeight || 320) * scale;
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = bgInput.value;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
@@ -337,8 +428,35 @@ export default (app: HTMLElement) => {
     img.src = url;
   };
 
+  const setIcon = (dataUrl: string | null, label: string) => {
+    iconDataUrl = dataUrl;
+    iconName.textContent = label;
+    iconClearBtn.classList.toggle("hidden", !dataUrl);
+  };
+
   kindSelect.addEventListener("change", syncControls);
   templateSelect.addEventListener("change", syncControls);
+
+  swapBtn.addEventListener("click", () => {
+    const fg = fgInput.value;
+    fgInput.value = bgInput.value;
+    bgInput.value = fg;
+  });
+
+  iconInput.addEventListener("change", () => {
+    const file = iconInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setIcon(String(reader.result), file.name);
+    reader.onerror = () => setStatus("Could not read that image.", true);
+    reader.readAsDataURL(file);
+  });
+
+  iconClearBtn.addEventListener("click", () => {
+    iconInput.value = "";
+    setIcon(null, "Choose…");
+  });
+
   generateBtn.addEventListener("click", run);
   svgBtn.addEventListener("click", downloadSvg);
   pngBtn.addEventListener("click", downloadPng);

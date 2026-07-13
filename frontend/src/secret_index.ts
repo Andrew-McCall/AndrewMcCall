@@ -20,6 +20,8 @@ export default (app: HTMLElement) => {
     <a href="/secret/time" class="text-lime-400 hover:underline hover:text-lime-700">Time</a>
     <a href="/secret/barcode" class="text-lime-400 hover:underline hover:text-lime-700">Barcodes</a>
     <a href="/secret/cron" class="text-lime-400 hover:underline hover:text-lime-700">Cron Generator</a>
+    <a href="/secret/man" class="text-lime-400 hover:underline hover:text-lime-700">Man Pages</a>
+    <a href="/secret/python" class="text-lime-400 hover:underline hover:text-lime-700">Python 3</a>
     <a href="/secret/visits" class="text-lime-400 hover:underline hover:text-lime-700">Visits</a>
     <a href="/secret/notes" class="text-lime-400 hover:underline hover:text-lime-700">Notes</a>
     <a href="/secret/soon" class="text-lime-400 italic line-through hover:cursor-pointer hover:text-lime-700" > coming soon </a>

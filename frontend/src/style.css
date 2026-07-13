@@ -4,11 +4,41 @@ body {
     @apply bg-stone-950 font-mono min-h-screen;
 }
 
-/* CDN-loaded CodeMirror + Vim editor host (see secret_vim.ts). */
-.vim-cm .cm-editor {
-    height: 24rem;
+/* CDN-loaded CodeMirror 5 + Vim editor (see secret_vim.ts). Styled to match
+   the secret area's stone/green terminal look. */
+.vim-cm .CodeMirror {
+    background: transparent;
+    color: #86efac; /* green-300 */
+    font-family: ui-monospace, monospace;
+    font-size: 0.875rem;
 }
 
-.vim-cm .cm-editor.cm-focused {
-    outline: none;
+.vim-cm .CodeMirror-gutters {
+    background: #1c1917; /* stone-900 */
+    border-right: 1px solid #14532d; /* green-900 */
+}
+
+.vim-cm .CodeMirror-linenumber {
+    color: #166534; /* green-800 */
+}
+
+.vim-cm .CodeMirror-cursor {
+    border-left-color: #22c55e; /* green-500 */
+}
+
+/* Block cursor for normal mode (vim keymap adds .cm-fat-cursor). */
+.vim-cm .cm-fat-cursor .CodeMirror-cursor,
+.vim-cm .CodeMirror-fat-cursor .CodeMirror-cursor {
+    background: #22c55e;
+    color: #0c0a09;
+}
+
+.vim-cm .CodeMirror-selected {
+    background: #14532d !important; /* green-900 */
+}
+
+.vim-cm .CodeMirror-dialog {
+    background: #1c1917;
+    color: #86efac;
+    border-color: #14532d;
 }
