@@ -4,14 +4,14 @@ import watermarkAMPlugin from "./vite-plugin-watermark-am";
 export default defineConfig({
   plugins: [tailwindcss(), watermarkAMPlugin()],
   server: {
-    // Mirror the production nginx rule: `/api/*` is stripped of its prefix and
-    // forwarded to the backend (which serves `/password/{template}` etc.).
-    // Without this, Vite answers `/api/*` with the SPA fallback (index.html).
+    // Proxy `/api/*` to the live backend at www.andrewmccall.uk. The `/api`
+    // prefix is kept: the remote nginx strips it and forwards to the backend
+    // (same rule as prod). Without this, Vite answers `/api/*` with the SPA
+    // fallback (index.html).
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: "https://www.andrewmccall.uk",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
   },

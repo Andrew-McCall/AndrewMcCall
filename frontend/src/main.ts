@@ -8,6 +8,13 @@ import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
 import secret_admin from "./secret_admin.ts";
 import secret_admin_visits from "./secret_admin_visits.ts";
+import secret_notes from "./secret_notes.ts";
+import secret_prettier from "./secret_prettier.ts";
+import secret_vim from "./secret_vim.ts";
+import secret_time from "./secret_time.ts";
+import secret_colour from "./secret_colour.ts";
+import secret_barcode from "./secret_barcode.ts";
+import secret_cron from "./secret_cron.ts";
 import { getMe, type Me } from "./session.ts";
 
 window.addEventListener("popstate", () => {
@@ -40,6 +47,13 @@ const routes: Record<string, Route> = {
   "/secret/password": { auth: "public", render: (app) => secret_password(app) },
   "/secret/countries": { auth: "public", render: (app) => secret_countries(app) },
   "/secret/visits": { auth: "public", render: (app) => secret_visits(app) },
+  "/secret/prettier": { auth: "public", render: (app) => secret_prettier(app) },
+  "/secret/vim": { auth: "public", render: (app) => secret_vim(app) },
+  "/secret/time": { auth: "public", render: (app) => secret_time(app) },
+  "/secret/colour": { auth: "public", render: (app) => secret_colour(app) },
+  "/secret/barcode": { auth: "public", render: (app) => secret_barcode(app) },
+  "/secret/cron": { auth: "public", render: (app) => secret_cron(app) },
+  "/secret/notes": { auth: "user", render: (app) => secret_notes(app) },
   "/secret/admin": { auth: "admin", render: (app, me) => secret_admin(app, me!) },
   "/secret/admin/visits": { auth: "admin", render: (app) => secret_admin_visits(app) },
 };

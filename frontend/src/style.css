@@ -3,3 +3,12 @@
 body {
     @apply bg-stone-950 font-mono min-h-screen;
 }
+
+/* CDN-loaded CodeMirror + Vim editor host (see secret_vim.ts). */
+.vim-cm .cm-editor {
+    height: 24rem;
+}
+
+.vim-cm .cm-editor.cm-focused {
+    outline: none;
+}

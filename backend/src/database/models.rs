@@ -126,6 +126,37 @@ impl std::fmt::Debug for User {
     }
 }
 
+/// A note owned by a user (`notes` table). Deletion is soft: `is_deleted` is
+/// flipped rather than the row removed, and every read filters it out, so a
+/// deleted note is hidden from the API but recoverable with direct DB access.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Note {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub is_deleted: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A user-scoped tag (`tags` table). Names are unique per user among live tags
+/// only; like [`Note`], a tag is soft-deleted via `is_deleted`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Tag {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub name: String,
+    pub is_deleted: bool,
+}
+
+/// A link between a note and a tag (`note_tags` join table).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct NoteTag {
+    pub note_id: Uuid,
+    pub tag_id: Uuid,
+}
+
 /// An authentication token issued to a user (`user_tokens` table).
 ///
 /// `Debug` is implemented by hand so the token value never leaks into logs.

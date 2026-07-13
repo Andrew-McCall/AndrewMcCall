@@ -5,6 +5,7 @@ mod countries;
 mod database;
 mod ip;
 mod logs;
+mod notes;
 mod password;
 mod response;
 mod stats;
@@ -97,6 +98,29 @@ async fn route(
                 admin::delete_user(req, peer, &config, &id).await
             } else {
                 ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+            }
+        }
+        "/notes" if req.method() == Method::GET => notes::list_notes(req, peer, &config).await,
+        "/notes" if req.method() == Method::POST => notes::create_note(req, peer, &config).await,
+        "/notes" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/tags" if req.method() == Method::GET => notes::list_tags(req, peer, &config).await,
+        "/tags" if req.method() == Method::POST => notes::create_tag(req, peer, &config).await,
+        "/tags" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        _ if path.starts_with("/notes/") => {
+            // Own the id before moving `req` (it borrows `path`, which borrows `req`).
+            let id = path["/notes/".len()..].to_string();
+            match *req.method() {
+                Method::PUT => notes::update_note(req, peer, &config, &id).await,
+                Method::DELETE => notes::delete_note(req, peer, &config, &id).await,
+                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            }
+        }
+        _ if path.starts_with("/tags/") => {
+            let id = path["/tags/".len()..].to_string();
+            match *req.method() {
+                Method::PUT => notes::update_tag(req, peer, &config, &id).await,
+                Method::DELETE => notes::delete_tag(req, peer, &config, &id).await,
+                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
             }
         }
         _ => match path.strip_prefix("/countries/") {
