@@ -72,6 +72,18 @@ export default (app: HTMLElement) => {
   });
   overlay.appendChild(cover);
 
+  // Escape exits, but that's invisible and unreachable on touch devices with
+  // no keyboard — give everyone a visible, tappable way out too.
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "✕ exit";
+  closeBtn.title = "Back to the secret menu (Esc)";
+  closeBtn.style.cssText =
+    "position:absolute;top:1rem;right:1rem;z-index:1;padding:0.4rem 0.8rem;" +
+    "border:1px solid rgba(34,197,94,0.4);border-radius:0.375rem;background:rgba(12,10,9,0.7);" +
+    "color:#4ade80;font:12px monospace;cursor:pointer";
+  closeBtn.addEventListener("click", () => window.navigate("/secret"));
+  overlay.appendChild(closeBtn);
+
   document.body.appendChild(overlay);
 
   const ctx = canvas.getContext("2d");
@@ -130,5 +142,12 @@ export default (app: HTMLElement) => {
       };
       raf = requestAnimationFrame(loop);
     })
-    .catch((err) => console.error("wasm game failed to load:", err));
+    .catch((err) => {
+      console.error("wasm game failed to load:", err);
+      if (!running) return;
+      // Without this the cover's "click to play" just silently no-ops forever
+      // (`game` never gets set) and the player has no idea anything went wrong.
+      cover.title = "failed to load — use ✕ exit to go back";
+      cover.style.cursor = "not-allowed";
+    });
 };

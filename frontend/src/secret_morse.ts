@@ -161,8 +161,8 @@ Morse Code
 <div class="w-full max-w-lg space-y-4">
 
 <div class="flex gap-2">
-<button id="toggle-drill" class="flex-1 text-xs border border-green-900 px-2 py-2">Drill</button>
-<button id="start-challenge" class="flex-1 text-xs border border-yellow-900 px-2 py-2">60s</button>
+<button id="toggle-drill" class="flex-1 text-xs border border-green-900 hover:border-green-600 px-2 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">Drill</button>
+<button id="start-challenge" class="flex-1 text-xs border border-yellow-900 hover:border-yellow-600 px-2 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">60s</button>
 </div>
 
 <div class="bg-black border border-green-500/20 p-6 rounded">
@@ -181,8 +181,7 @@ class="text-4xl h-12 text-yellow-500 mt-2 font-bold tracking-widest"></div>
 
 <button id="keyer"
 aria-label="Morse keyer press and hold"
-role="button"
-class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center justify-center">
+class="w-full h-44 border border-green-500/20 hover:border-green-500/40 rounded-2xl flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
 
 <div id="light" class="w-10 h-10 rounded-full bg-green-900"></div>
 
@@ -345,6 +344,11 @@ class="w-full h-44 border border-green-500/20 rounded-2xl flex items-center just
   app.querySelector("#toggle-drill")!.addEventListener("click", () => {
     isTraining = !isTraining;
 
+    // Leaving drill mode always fully cancels any in-progress challenge too —
+    // otherwise `isChallenge` stays stuck true with its timer cleared, so the
+    // score keeps being graded invisibly until "60s" is pressed again.
+    isChallenge = false;
+    score = 0;
     if (gameTimer) clearInterval(gameTimer);
 
     drillBox.classList.toggle("hidden", !isTraining);

@@ -1,11 +1,12 @@
 import { mountLogin } from "./secret_login.ts";
 
 type MenuItem = { href: string; label: string; disabled?: boolean };
-type MenuGroup = { title: string; items: MenuItem[] };
+type MenuGroup = { title: string; glyph: string; items: MenuItem[] };
 
 const groups: MenuGroup[] = [
   {
     title: "Developer Tools",
+    glyph: ">_",
     items: [
       { href: "/secret/vim", label: "Vim" },
       { href: "/secret/cron", label: "Cron Generator" },
@@ -16,6 +17,7 @@ const groups: MenuGroup[] = [
   },
   {
     title: "Generators & Utilities",
+    glyph: "#",
     items: [
       { href: "/secret/password", label: "Password Generator" },
       { href: "/secret/colour", label: "Colour Picker" },
@@ -26,6 +28,7 @@ const groups: MenuGroup[] = [
   },
   {
     title: "Games & Curiosities",
+    glyph: "?",
     items: [
       { href: "/secret/countries", label: "Countries Quiz" },
       { href: "/secret/pi", label: "PI Tester" },
@@ -35,6 +38,7 @@ const groups: MenuGroup[] = [
   },
   {
     title: "Site",
+    glyph: "~",
     items: [
       { href: "/secret/visits", label: "Visits" },
       { href: "/secret/soon", label: "coming soon", disabled: true },
@@ -44,13 +48,20 @@ const groups: MenuGroup[] = [
 
 const renderItem = (item: MenuItem) =>
   item.disabled
-    ? `<span class="block bg-stone-900 border border-green-900/60 rounded-lg px-4 py-3 text-center text-lime-700 italic line-through">${item.label}</span>`
-    : `<a href="${item.href}" class="block bg-stone-900 border border-green-900 hover:border-green-600 rounded-lg px-4 py-3 text-center text-lime-400 hover:text-lime-200 transition-colors">${item.label}</a>`;
+    ? `<span class="flex items-center justify-center h-full bg-stone-950/60 border border-green-900/30 rounded-lg px-4 py-3 text-center text-green-900 italic line-through select-none">${item.label}</span>`
+    : `<a href="${item.href}" class="flex items-center justify-center h-full bg-stone-900 border border-green-900 rounded-lg px-4 py-3 text-center text-lime-400
+        transition-all duration-150 ease-out
+        hover:border-green-500 hover:text-lime-200 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)]
+        active:translate-y-0 active:shadow-none
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">${item.label}</a>`;
 
 const renderGroup = (group: MenuGroup) => `
-  <div class="w-full">
-    <h2 class="text-green-700 uppercase tracking-widest text-sm font-bold mb-3 text-left">${group.title}</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+  <div class="w-full bg-stone-950/40 border border-green-900/30 rounded-xl p-4 sm:p-5">
+    <h2 class="flex items-center gap-2 text-green-600 uppercase tracking-widest text-sm font-bold mb-4 text-left">
+      <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-green-950 border border-green-900 text-xs normal-case tracking-normal text-green-500">${group.glyph}</span>
+      ${group.title}
+    </h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       ${group.items.map(renderItem).join("\n")}
     </div>
   </div>
@@ -64,7 +75,7 @@ export default (app: HTMLElement) => {
       Secret Menu
     </h1>
   </a>
-  <div class="w-full max-w-2xl flex flex-col gap-8 mt-8">
+  <div class="w-full max-w-3xl flex flex-col gap-6 mt-8">
     ${groups.map(renderGroup).join("\n")}
   </div>
 

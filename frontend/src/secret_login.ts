@@ -59,12 +59,12 @@ function renderSignedIn(container: HTMLElement, me: Me): void {
 function renderForm(container: HTMLElement): void {
   container.innerHTML = `
 <form id="login-form" class="w-full max-w-xs mx-auto flex flex-col gap-3">
-  <input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password"
+  <input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" aria-label="PIN"
     class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-center tracking-[0.5em] text-green-300 placeholder-green-900 font-mono"
     placeholder="pin" />
 
   <div id="login-2fa" class="hidden flex-col gap-2">
-    <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false"
+    <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" aria-label="Authentication code"
       class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-green-300 placeholder-green-900 font-mono"
       placeholder="6-digit code" />
     <label class="text-green-800 text-sm flex items-center gap-2 cursor-pointer select-none">
@@ -74,7 +74,7 @@ function renderForm(container: HTMLElement): void {
   </div>
 
   <button id="login-submit" type="submit"
-    class="bg-green-700 hover:bg-green-600 active:bg-green-800 text-white font-bold px-6 py-2 rounded cursor-pointer transition-colors">
+    class="bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
     Sign in
   </button>
 
@@ -120,6 +120,7 @@ function renderForm(container: HTMLElement): void {
     }
 
     submit.disabled = true;
+    submit.textContent = "Signing in…";
     try {
       const res = await fetch("/api/auth/login?cookie=true", {
         method: "POST",
@@ -129,7 +130,10 @@ function renderForm(container: HTMLElement): void {
       });
 
       if (res.ok) {
-        window.navigate("/secret/admin");
+        // Swap this panel to the signed-in view in place — most accounts
+        // aren't admins, so navigating to /secret/admin here would just get
+        // them bounced straight back by the router's auth gate.
+        await mountLogin(container);
         return;
       }
 
@@ -149,6 +153,7 @@ function renderForm(container: HTMLElement): void {
       error.textContent = "Network error — is the API up?";
     } finally {
       submit.disabled = false;
+      submit.textContent = "Sign in";
     }
   });
 

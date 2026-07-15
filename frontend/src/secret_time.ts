@@ -6,6 +6,19 @@
 
 type Tab = "unix" | "tz" | "relative" | "cron";
 
+// The relative-time tab runs a 1s ticker while it's on screen; this tears it
+// down. Set on mount, called by the router on navigation away (see main.ts) —
+// mirroring the disposeX pattern used by secret_pi / secret_morse /
+// secret_canvas, rather than the removed/deprecated DOMNodeRemovedFromDocument
+// mutation event, which modern browsers (Chrome included) no longer fire, so
+// the interval would otherwise tick forever in the background after leaving.
+let teardown: (() => void) | null = null;
+
+export function disposeTime(): void {
+  teardown?.();
+  teardown = null;
+}
+
 // Escapes text for safe interpolation into innerHTML.
 const esc = (s: string): string =>
   s.replace(
@@ -41,10 +54,28 @@ interface CronField {
 }
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
 const monthAliases: Record<string, number> = {};
 MONTHS.forEach((m, i) => (monthAliases[m.slice(0, 3).toUpperCase()] = i + 1));
@@ -56,7 +87,13 @@ const CRON_FIELDS: CronField[] = [
   { min: 0, max: 23, name: "hour" },
   { min: 1, max: 31, name: "day-of-month" },
   { min: 1, max: 12, name: "month", labels: MONTHS, aliases: monthAliases },
-  { min: 0, max: 6, name: "day-of-week", labels: WEEKDAYS, aliases: dowAliases },
+  {
+    min: 0,
+    max: 6,
+    name: "day-of-week",
+    labels: WEEKDAYS,
+    aliases: dowAliases,
+  },
 ];
 
 // Named shortcuts accepted in the parser.
@@ -81,7 +118,8 @@ const parseField = (raw: string, field: CronField): ParsedField => {
   const resolve = (tok: string): number => {
     const up = tok.toUpperCase();
     if (field.aliases && up in field.aliases) return field.aliases[up];
-    if (!/^\d+$/.test(tok)) throw new Error(`invalid ${field.name} value "${tok}"`);
+    if (!/^\d+$/.test(tok))
+      throw new Error(`invalid ${field.name} value "${tok}"`);
     return parseInt(tok, 10);
   };
 
@@ -147,7 +185,11 @@ const parseCron = (input: string): ParsedCron => {
 // Does `date` (local time) satisfy the day-of-month / day-of-week rules?
 // Cron quirk: if BOTH are restricted, a match on EITHER counts (OR); if only
 // one is restricted, only that one applies.
-const dayMatches = (date: Date, dom: ParsedField, dow: ParsedField): boolean => {
+const dayMatches = (
+  date: Date,
+  dom: ParsedField,
+  dow: ParsedField,
+): boolean => {
   const domOk = dom.values.has(date.getDate());
   const dowOk = dow.values.has(date.getDay());
   if (dom.restricted && dow.restricted) return domOk || dowOk;
@@ -198,15 +240,12 @@ const nextCronRuns = (cron: ParsedCron, from: Date, count: number): Date[] => {
 const describeField = (f: ParsedField, field: CronField): string => {
   if (!f.restricted) return "every " + field.name;
 
-  const labelOf = (n: number) => field.labels?.[field.name === "month" ? n - 1 : n] ?? String(n);
+  const labelOf = (n: number) =>
+    field.labels?.[field.name === "month" ? n - 1 : n] ?? String(n);
 
   // Detect a clean "*/n" step over the whole range.
   const sorted = [...f.values].sort((a, b) => a - b);
-  if (
-    sorted.length > 1 &&
-    sorted[0] === field.min &&
-    !field.labels
-  ) {
+  if (sorted.length > 1 && sorted[0] === field.min && !field.labels) {
     const step = sorted[1] - sorted[0];
     const isEven = sorted.every((v, i) => v === field.min + i * step);
     const coversRange = sorted[sorted.length - 1] + step > field.max;
@@ -223,18 +262,25 @@ const describeCron = (cron: ParsedCron): string => {
   const parts: string[] = [];
 
   // Time-of-day.
-  if (minute.restricted && hour.restricted && minute.values.size === 1 && hour.values.size === 1) {
+  if (
+    minute.restricted &&
+    hour.restricted &&
+    minute.values.size === 1 &&
+    hour.values.size === 1
+  ) {
     const h = [...hour.values][0];
     const m = [...minute.values][0];
     parts.push(`at ${pad(h)}:${pad(m)}`);
   } else {
     parts.push(describeField(minute, CRON_FIELDS[0]));
-    if (hour.restricted) parts.push("past " + describeField(hour, CRON_FIELDS[1]));
+    if (hour.restricted)
+      parts.push("past " + describeField(hour, CRON_FIELDS[1]));
   }
 
   if (dom.restricted) parts.push("on " + describeField(dom, CRON_FIELDS[2]));
   if (dow.restricted) parts.push("on " + describeField(dow, CRON_FIELDS[4]));
-  if (month.restricted) parts.push("in " + describeField(month, CRON_FIELDS[3]));
+  if (month.restricted)
+    parts.push("in " + describeField(month, CRON_FIELDS[3]));
 
   return parts.join(", ").replace(/^./, (c) => c.toUpperCase());
 };
@@ -265,7 +311,9 @@ const COMMON_ZONES = [
 const allZones = (): string[] => {
   try {
     // Modern browsers expose the full IANA list here.
-    const all = (Intl as any).supportedValuesOf?.("timeZone") as string[] | undefined;
+    const all = (Intl as any).supportedValuesOf?.("timeZone") as
+      | string[]
+      | undefined;
     if (all && all.length) return all;
   } catch {
     /* fall through */
@@ -297,12 +345,15 @@ const formatInZone = (d: Date, zone: string): string => {
 // ---------------------------------------------------------------------------
 
 export default (app: HTMLElement) => {
+  disposeTime(); // drop any ticker from a previous visit
+
   const inputCls =
     "bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-200 font-mono";
   const labelCls = "text-green-700 font-mono text-xs uppercase tracking-widest";
-  const cardCls = "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-3";
+  const cardCls =
+    "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-3";
   const btnCls =
-    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors";
+    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -327,13 +378,13 @@ export default (app: HTMLElement) => {
             class="${inputCls} flex-1 min-w-40" />
           <button id="u-now" class="${btnCls}">Now</button>
         </div>
-        <div id="u-ts-out" class="font-mono text-sm text-green-300 whitespace-pre-wrap break-words"></div>
+        <div id="u-ts-out" class="font-mono text-sm text-green-300 whitespace-pre-wrap wrap-break-word"></div>
       </div>
 
       <div class="${cardCls}">
         <span class="${labelCls}">Date → Unix timestamp</span>
         <input id="u-date" type="datetime-local" step="1" class="${inputCls}" />
-        <div id="u-date-out" class="font-mono text-sm text-green-300 whitespace-pre-wrap break-words"></div>
+        <div id="u-date-out" class="font-mono text-sm text-green-300 whitespace-pre-wrap wrap-break-word"></div>
       </div>
     </section>
 
@@ -396,9 +447,9 @@ export default (app: HTMLElement) => {
   // --- tab switching -------------------------------------------------------
   const tabsEl = app.querySelector<HTMLDivElement>("#time-tabs")!;
   const panels = new Map<Tab, HTMLElement>();
-  app.querySelectorAll<HTMLElement>("[data-panel]").forEach((p) =>
-    panels.set(p.dataset.panel as Tab, p),
-  );
+  app
+    .querySelectorAll<HTMLElement>("[data-panel]")
+    .forEach((p) => panels.set(p.dataset.panel as Tab, p));
 
   const TAB_LABELS: [Tab, string][] = [
     ["unix", "Unix"],
@@ -428,7 +479,8 @@ export default (app: HTMLElement) => {
 
   for (const [tab, label] of TAB_LABELS) {
     const btn = document.createElement("button");
-    btn.className = "border rounded px-4 py-2 cursor-pointer transition-colors";
+    btn.className =
+      "border rounded px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
     btn.textContent = label;
     btn.onclick = () => showTab(tab);
     tabBtns.set(tab, btn);
@@ -508,13 +560,14 @@ export default (app: HTMLElement) => {
     .map((z) => `<option value="${esc(z)}">${esc(z)}</option>`)
     .join("");
   tzSource.innerHTML = zoneOptions;
-  tzAdd.innerHTML = `<option value="">— pick a zone to add —</option>` + zoneOptions;
+  tzAdd.innerHTML =
+    `<option value="">— pick a zone to add —</option>` + zoneOptions;
   tzSource.value = zones.includes(localZone) ? localZone : "UTC";
 
   // Zones currently displayed, in insertion order.
-  const shownZones: string[] = [...new Set([localZone, "UTC", ...COMMON_ZONES.slice(0, 4)])].filter(
-    (z) => zones.includes(z),
-  );
+  const shownZones: string[] = [
+    ...new Set([localZone, "UTC", ...COMMON_ZONES.slice(0, 4)]),
+  ].filter((z) => zones.includes(z));
 
   // Interpret the datetime-local value AS the chosen source zone, returning
   // the true instant. We find the offset the source zone had at that wall
@@ -533,16 +586,24 @@ export default (app: HTMLElement) => {
   const zoneOffsetMs = (d: Date, zone: string): number => {
     const fmt = new Intl.DateTimeFormat("en-US", {
       timeZone: zone,
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
       hour12: false,
     });
     const parts = Object.fromEntries(
       fmt.formatToParts(d).map((p) => [p.type, p.value]),
     );
     const asIfUtc = Date.UTC(
-      +parts.year, +parts.month - 1, +parts.day,
-      +parts.hour % 24, +parts.minute, +parts.second,
+      +parts.year,
+      +parts.month - 1,
+      +parts.day,
+      +parts.hour % 24,
+      +parts.minute,
+      +parts.second,
     );
     return asIfUtc - d.getTime();
   };
@@ -564,7 +625,7 @@ export default (app: HTMLElement) => {
           </div>
           ${
             removable
-              ? `<button data-zone="${esc(z)}" class="text-green-800 hover:text-red-400 cursor-pointer font-mono" aria-label="remove ${esc(z)}">×</button>`
+              ? `<button data-zone="${esc(z)}" class="text-green-800 hover:text-red-400 cursor-pointer font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 rounded" aria-label="remove ${esc(z)}">×</button>`
               : ""
           }
         </div>`;
@@ -589,7 +650,8 @@ export default (app: HTMLElement) => {
   });
   app.querySelector<HTMLButtonElement>("#tz-now")!.onclick = () => {
     tzSource.value = zones.includes(localZone) ? localZone : "UTC";
-    tzDate.value = toLocalInput(new Date()) + ":" + pad(new Date().getSeconds());
+    tzDate.value =
+      toLocalInput(new Date()) + ":" + pad(new Date().getSeconds());
     renderTz();
   };
   tzDate.value = toLocalInput(new Date()) + ":00";
@@ -640,7 +702,8 @@ export default (app: HTMLElement) => {
 
   relDate.addEventListener("input", renderRelative);
   app.querySelector<HTMLButtonElement>("#rel-now")!.onclick = () => {
-    relDate.value = toLocalInput(new Date()) + ":" + pad(new Date().getSeconds());
+    relDate.value =
+      toLocalInput(new Date()) + ":" + pad(new Date().getSeconds());
     renderRelative();
   };
   relDate.value = toLocalInput(new Date(Date.now() + 3600_000)) + ":00";
@@ -649,7 +712,7 @@ export default (app: HTMLElement) => {
   const relTimer = window.setInterval(() => {
     if (active === "relative") renderRelative();
   }, 1000);
-  app.addEventListener("DOMNodeRemovedFromDocument", () => clearInterval(relTimer));
+  teardown = () => clearInterval(relTimer);
 
   // --- Cron ----------------------------------------------------------------
   const cronExpr = app.querySelector<HTMLInputElement>("#cron-expr")!;
@@ -672,8 +735,14 @@ export default (app: HTMLElement) => {
       "bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1.5 text-green-200 font-mono text-center w-full";
     inp.addEventListener("input", () => {
       // Builder edits drive the expression, which drives everything else.
-      cronExpr.value = builderInputs.map((b) => b.value.trim() || "*").join(" ");
-      renderCron(false);
+      // fromBuilder=true is required here: renderCron(false) would call
+      // syncBuilder() and reassign every box's `.value` — including the one
+      // being typed into — which resets its cursor to the end after every
+      // keystroke.
+      cronExpr.value = builderInputs
+        .map((b) => b.value.trim() || "*")
+        .join(" ");
+      renderCron(true);
     });
     wrap.appendChild(inp);
     builderEl.appendChild(wrap);

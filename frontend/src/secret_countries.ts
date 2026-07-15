@@ -57,7 +57,7 @@ const ALL_TYPES = Object.keys(TYPE_LABELS) as QuestionType[];
 // (disabled after answering, so no hover/cursor affordance). Kept here so the
 // answered states stay in sync across every button.
 const CHOICE_BASE =
-  "border border-green-900 hover:bg-green-900/40 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors";
+  "border border-green-900 hover:bg-green-900/40 text-green-300 rounded px-4 py-3 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 const CHOICE_CORRECT =
   "border border-green-500 bg-green-900/60 text-green-300 rounded px-4 py-3 text-left transition-colors";
 const CHOICE_WRONG =
@@ -256,7 +256,7 @@ export default (app: HTMLElement) => {
         <div class="flex items-center gap-2">
           <label for="cq-choice-count">Choices per question:</label>
           <input id="cq-choice-count" type="number" min="2" max="6"
-            class="w-16 bg-stone-900 border border-green-900 rounded px-2 py-1 text-green-300" />
+            class="w-16 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1 text-green-300" />
         </div>
         <div id="cq-types" class="flex flex-col gap-1"></div>
       </div>
@@ -330,6 +330,9 @@ export default (app: HTMLElement) => {
     feedbackEl.className = FEEDBACK_BASE;
     if (question.image) {
       imageEl.src = question.image;
+      // Generic, non-spoiling alt text — anything more specific would give the
+      // answer away to screen reader users before they can guess.
+      imageEl.alt = question.imageIsMap ? "Country outline to identify" : "Flag to identify";
       // brightness(0) collapses the pale map fill to a solid black silhouette
       // that reads clearly on the light panel; flags render with true colour.
       imageEl.style.filter = question.imageIsMap ? "brightness(0)" : "";
