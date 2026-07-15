@@ -1,5 +1,61 @@
 import { mountLogin } from "./secret_login.ts";
 
+type MenuItem = { href: string; label: string; disabled?: boolean };
+type MenuGroup = { title: string; items: MenuItem[] };
+
+const groups: MenuGroup[] = [
+  {
+    title: "Developer Tools",
+    items: [
+      { href: "/secret/vim", label: "Vim" },
+      { href: "/secret/cron", label: "Cron Generator" },
+      { href: "/secret/man", label: "Man Pages" },
+      { href: "/secret/python", label: "Python 3" },
+      { href: "/secret/prettier", label: "Prettier" },
+    ],
+  },
+  {
+    title: "Generators & Utilities",
+    items: [
+      { href: "/secret/password", label: "Password Generator" },
+      { href: "/secret/colour", label: "Colour Picker" },
+      { href: "/secret/barcode", label: "Barcodes" },
+      { href: "/secret/time", label: "Time" },
+      { href: "/secret/notes", label: "Notes" },
+    ],
+  },
+  {
+    title: "Games & Curiosities",
+    items: [
+      { href: "/secret/countries", label: "Countries Quiz" },
+      { href: "/secret/pi", label: "PI Tester" },
+      { href: "/secret/morse", label: "Morse Code" },
+      { href: "/secret/canvas", label: "Rust Canvas" },
+    ],
+  },
+  {
+    title: "Site",
+    items: [
+      { href: "/secret/visits", label: "Visits" },
+      { href: "/secret/soon", label: "coming soon", disabled: true },
+    ],
+  },
+];
+
+const renderItem = (item: MenuItem) =>
+  item.disabled
+    ? `<span class="block bg-stone-900 border border-green-900/60 rounded-lg px-4 py-3 text-center text-lime-700 italic line-through">${item.label}</span>`
+    : `<a href="${item.href}" class="block bg-stone-900 border border-green-900 hover:border-green-600 rounded-lg px-4 py-3 text-center text-lime-400 hover:text-lime-200 transition-colors">${item.label}</a>`;
+
+const renderGroup = (group: MenuGroup) => `
+  <div class="w-full">
+    <h2 class="text-green-700 uppercase tracking-widest text-sm font-bold mb-3 text-left">${group.title}</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      ${group.items.map(renderItem).join("\n")}
+    </div>
+  </div>
+`;
+
 export default (app: HTMLElement) => {
   app.innerHTML += `
 <div class="flex flex-col justify-center items-center py-2">
@@ -8,23 +64,8 @@ export default (app: HTMLElement) => {
       Secret Menu
     </h1>
   </a>
-  <div class="flex justify-center space-y-2 mt-4 flex-col text-center text-lg">
-    <a href="/secret/pi" class="text-lime-400 hover:underline hover:text-lime-700">PI Tester</a>
-    <a href="/secret/morse" class="text-lime-400 hover:underline hover:text-lime-700">Morse Code</a>
-    <a href="/secret/canvas" class="text-lime-400 hover:underline hover:text-lime-700">Rust Canvas</a>
-    <a href="/secret/password" class="text-lime-400 hover:underline hover:text-lime-700">Password Generator</a>
-    <a href="/secret/countries" class="text-lime-400 hover:underline hover:text-lime-700">Countries Quiz</a>
-    <a href="/secret/prettier" class="text-lime-400 hover:underline hover:text-lime-700">Prettier</a>
-    <a href="/secret/vim" class="text-lime-400 hover:underline hover:text-lime-700">Vim</a>
-    <a href="/secret/colour" class="text-lime-400 hover:underline hover:text-lime-700">Colour Picker</a>
-    <a href="/secret/time" class="text-lime-400 hover:underline hover:text-lime-700">Time</a>
-    <a href="/secret/barcode" class="text-lime-400 hover:underline hover:text-lime-700">Barcodes</a>
-    <a href="/secret/cron" class="text-lime-400 hover:underline hover:text-lime-700">Cron Generator</a>
-    <a href="/secret/man" class="text-lime-400 hover:underline hover:text-lime-700">Man Pages</a>
-    <a href="/secret/python" class="text-lime-400 hover:underline hover:text-lime-700">Python 3</a>
-    <a href="/secret/visits" class="text-lime-400 hover:underline hover:text-lime-700">Visits</a>
-    <a href="/secret/notes" class="text-lime-400 hover:underline hover:text-lime-700">Notes</a>
-    <a href="/secret/soon" class="text-lime-400 italic line-through hover:cursor-pointer hover:text-lime-700" > coming soon </a>
+  <div class="w-full max-w-2xl flex flex-col gap-8 mt-8">
+    ${groups.map(renderGroup).join("\n")}
   </div>
 
   <div class="w-full border-t border-green-900/60 mt-8 pt-6"></div>
