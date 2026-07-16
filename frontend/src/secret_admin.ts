@@ -35,6 +35,19 @@ const errorText = async (res: Response): Promise<string> => {
 const fmtDate = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString() : "—";
 
+// Escapes text for safe interpolation into innerHTML. User-supplied names
+// (set freely via the create-user form below) must never go into innerHTML
+// unescaped — this was previously missing here, unlike every other page in
+// this codebase, and was a stored-XSS opening in the admin user table.
+const esc = (s: string): string =>
+  s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+
 export default async (app: HTMLElement, me: Me) => {
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -46,8 +59,8 @@ export default async (app: HTMLElement, me: Me) => {
     </a>
     <div class="flex items-center gap-4 text-sm text-green-700">
       <a href="/secret/admin/visits" class="hover:text-green-400">visits</a>
-      <span>signed in as <span class="text-green-400">${me.name}</span></span>
-      <button id="logout" class="hover:text-green-400 cursor-pointer">log out</button>
+      <span>signed in as <span class="text-green-400">${esc(me.name)}</span></span>
+      <button id="logout" class="hover:text-green-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
     </div>
   </div>
 
@@ -63,8 +76,8 @@ export default async (app: HTMLElement, me: Me) => {
         <option value="standard">standard</option>
         <option value="admin">admin</option>
       </select>
-      <button type="submit"
-        class="bg-green-700 hover:bg-green-600 active:bg-green-800 text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">
+      <button id="create-submit" type="submit"
+        class="bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">
         Create
       </button>
     </form>
@@ -105,8 +118,8 @@ export default async (app: HTMLElement, me: Me) => {
       tr.className = "border-b border-green-900/40";
       const isSelf = user.id === me.id;
       tr.innerHTML = `
-        <td class="py-2 pr-4">${user.name}${isSelf ? " <span class='text-green-700'>(you)</span>" : ""}</td>
-        <td class="py-2 pr-4">${user.role}</td>
+        <td class="py-2 pr-4">${esc(user.name)}${isSelf ? " <span class='text-green-700'>(you)</span>" : ""}</td>
+        <td class="py-2 pr-4">${esc(user.role)}</td>
         <td class="py-2 pr-4">${user.totp_enabled ? "on" : "off"}</td>
         <td class="py-2 pr-4 text-green-700">${fmtDate(user.last_login)}</td>
         <td class="py-2 text-right"></td>`;
@@ -114,7 +127,8 @@ export default async (app: HTMLElement, me: Me) => {
       if (!isSelf) {
         const del = document.createElement("button");
         del.textContent = "delete";
-        del.className = "text-red-500 hover:text-red-400 cursor-pointer";
+        del.className =
+          "text-red-500 hover:text-red-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
         del.onclick = () => deleteUser(user);
         actionCell.appendChild(del);
       }
@@ -154,12 +168,17 @@ export default async (app: HTMLElement, me: Me) => {
   const newName = app.querySelector<HTMLInputElement>("#new-name")!;
   const newPin = app.querySelector<HTMLInputElement>("#new-pin")!;
   const newRole = app.querySelector<HTMLSelectElement>("#new-role")!;
+  const createSubmit = app.querySelector<HTMLButtonElement>("#create-submit")!;
 
   createForm.addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    // Without this, a fast double-click (or double Enter) fires two creates
+    // before the first resolves, making two duplicate accounts.
+    if (createSubmit.disabled) return;
     const name = newName.value.trim();
     const pin = newPin.value.trim();
     if (!name || !pin) return;
+    createSubmit.disabled = true;
     try {
       const res = await api(
         "/admin/users",
@@ -174,6 +193,8 @@ export default async (app: HTMLElement, me: Me) => {
       }
     } catch {
       alert("Network error.");
+    } finally {
+      createSubmit.disabled = false;
     }
   });
 
@@ -185,13 +206,13 @@ export default async (app: HTMLElement, me: Me) => {
         <div class="flex gap-2">
           <input id="disable-code" type="text" placeholder="current or recovery code" autocomplete="off"
             class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
-          <button id="disable-btn" class="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded cursor-pointer">Disable</button>
+          <button id="disable-btn" class="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Disable</button>
         </div>`;
       totpPanel.querySelector<HTMLButtonElement>("#disable-btn")!.onclick = disableTotp;
     } else {
       totpPanel.innerHTML = `
         <p class="text-green-700 mb-3">Two-factor authentication is off.</p>
-        <button id="setup-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer">Enable 2FA</button>`;
+        <button id="setup-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Enable 2FA</button>`;
       totpPanel.querySelector<HTMLButtonElement>("#setup-btn")!.onclick = startTotpSetup;
     }
   };
@@ -204,12 +225,12 @@ export default async (app: HTMLElement, me: Me) => {
       totpPanel.innerHTML = `
         <p class="text-green-400 mb-2">Add this secret to your authenticator app, then enter the code it shows.</p>
         <p class="mb-1 text-green-700">Secret</p>
-        <code class="block break-all text-green-300 mb-2">${secret_base32}</code>
-        <a href="${otpauth_uri}" class="text-green-600 hover:text-green-400 text-xs break-all block mb-3">${otpauth_uri}</a>
+        <code class="block break-all text-green-300 mb-2">${esc(secret_base32)}</code>
+        <a href="${esc(otpauth_uri)}" class="text-green-600 hover:text-green-400 text-xs break-all block mb-3">${esc(otpauth_uri)}</a>
         <div class="flex gap-2">
           <input id="enable-code" type="text" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code"
             class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
-          <button id="enable-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer">Confirm</button>
+          <button id="enable-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Confirm</button>
         </div>`;
       const codeEl = totpPanel.querySelector<HTMLInputElement>("#enable-code")!;
       totpPanel.querySelector<HTMLButtonElement>("#enable-btn")!.onclick = () =>
@@ -229,9 +250,9 @@ export default async (app: HTMLElement, me: Me) => {
       totpPanel.innerHTML = `
         <p class="text-green-400 mb-2 font-bold">2FA enabled. Save these recovery codes now — they won't be shown again.</p>
         <div class="grid grid-cols-2 gap-1 font-mono text-green-300 mb-3">
-          ${(recovery_codes as string[]).map((c) => `<code>${c}</code>`).join("")}
+          ${(recovery_codes as string[]).map((c) => `<code>${esc(c)}</code>`).join("")}
         </div>
-        <button id="totp-done" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer">Done</button>`;
+        <button id="totp-done" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Done</button>`;
       totpPanel.querySelector<HTMLButtonElement>("#totp-done")!.onclick = renderTotpPanel;
     } catch {
       alert("Network error.");

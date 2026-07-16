@@ -143,10 +143,9 @@ const parseField = (raw: string, field: CronField): ParsedField => {
       hi = resolve(b);
     } else {
       lo = hi = resolve(rangePart);
-      // day-of-week 7 is an accepted alias for Sunday (0).
-      if (field.name === "day-of-week" && lo === 7) lo = hi = 0;
     }
 
+    // day-of-week 7 is an accepted alias for Sunday (0).
     if (field.name === "day-of-week") {
       if (lo === 7) lo = 0;
       if (hi === 7) hi = 0;

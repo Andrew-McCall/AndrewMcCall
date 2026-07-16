@@ -135,32 +135,32 @@ export default (app: HTMLElement) => {
           class="w-8 h-8 bg-transparent border border-green-900 rounded cursor-pointer" />
       </label>
       <button id="bc-swap" type="button"
-        class="border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors"
+        class="border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
         title="Swap foreground and background">
         Swap
       </button>
       <label id="bc-icon-label" class="flex items-center gap-2 cursor-pointer select-none" title="Logo shown in the centre (QR only)">
         Centre icon
-        <input id="bc-icon" type="file" accept="image/*" class="hidden" />
+        <input id="bc-icon" type="file" accept="image/*" class="sr-only focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500" />
         <span id="bc-icon-name" class="border border-green-900 hover:border-green-600 px-3 py-1 rounded transition-colors">Choose…</span>
       </label>
       <button id="bc-icon-clear" type="button"
-        class="hidden border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors">
+        class="hidden border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Clear icon
       </button>
     </div>
 
     <div class="flex flex-wrap gap-2 items-center">
       <button id="bc-generate"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors">
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Generate
       </button>
       <button id="bc-svg"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors" disabled>
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
         Download SVG
       </button>
       <button id="bc-png"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors" disabled>
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
         Download PNG
       </button>
       <span id="bc-status" class="text-sm font-mono text-green-800"></span>
@@ -348,10 +348,16 @@ export default (app: HTMLElement) => {
     return new XMLSerializer().serializeToString(svg);
   };
 
+  // Guards against a slow generate (CDN library still downloading) landing
+  // after a newer one was kicked off — otherwise a stale result could
+  // overwrite a newer one that already resolved.
+  let requestId = 0;
+
   const run = async () => {
     const text = buildPayload();
     if (text === null) return;
 
+    const id = ++requestId;
     generateBtn.disabled = true;
     setDownloadsEnabled(false);
     setStatus("Generating…");
@@ -361,6 +367,7 @@ export default (app: HTMLElement) => {
         kindSelect.value === "qr"
           ? await makeQr(text)
           : await makeBarcode(text);
+      if (id !== requestId) return;
       currentSvg = svg;
       output.innerHTML = svg;
       // Keep the preview compact so it never dominates the page.
@@ -376,6 +383,7 @@ export default (app: HTMLElement) => {
       setDownloadsEnabled(true);
       setStatus("");
     } catch (err) {
+      if (id !== requestId) return;
       currentSvg = null;
       output.innerHTML = "";
       output.classList.add("hidden");
@@ -383,7 +391,7 @@ export default (app: HTMLElement) => {
       // JsBarcode throws when the input is invalid for the chosen format.
       setStatus(err instanceof Error ? err.message : String(err), true);
     } finally {
-      generateBtn.disabled = false;
+      if (id === requestId) generateBtn.disabled = false;
     }
   };
 

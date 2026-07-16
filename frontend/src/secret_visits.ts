@@ -185,7 +185,7 @@ export default (app: HTMLElement) => {
     <div id="vs-content" class="hidden flex-col gap-6">
       <div class="flex items-center justify-end gap-2 text-sm">
         <label for="vs-route" class="text-green-700">Page</label>
-        <select id="vs-route" class="bg-stone-900 border border-green-900 rounded px-2 py-1 text-green-300 font-mono max-w-[70%]">
+        <select id="vs-route" class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1 text-green-300 font-mono max-w-[70%]">
           <option value="">All pages</option>
         </select>
       </div>
@@ -270,7 +270,14 @@ export default (app: HTMLElement) => {
     );
   };
 
+  // Guards against a slow fetch landing after a newer one (e.g. clicking two
+  // different route filters in quick succession) — without this, the stale
+  // response could win the race and clobber the freshly-rendered charts with
+  // outdated data.
+  let requestId = 0;
+
   const load = async () => {
+    const id = ++requestId;
     try {
       // Bucket days/hours in the viewer's own timezone. The backend hands the
       // IANA name to Postgres' `AT TIME ZONE`, so DST is handled correctly.
@@ -284,11 +291,13 @@ export default (app: HTMLElement) => {
       ]);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const stats = (await res.json()) as Stats;
+      if (id !== requestId) return; // a newer load superseded this one
       // Guard against the user navigating away while the chunk/fetch was in
       // flight — the router would have cleared this page's DOM.
       if (!document.body.contains(statusEl)) return;
       render(ApexChartsCtor, stats);
     } catch {
+      if (id !== requestId) return;
       if (document.body.contains(statusEl)) {
         statusEl.textContent = "Network error — is the API up?";
         statusEl.classList.remove("hidden");

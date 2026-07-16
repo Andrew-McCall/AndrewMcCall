@@ -308,7 +308,7 @@ export default (app: HTMLElement) => {
   const labelCls = "text-green-700 font-mono text-xs uppercase tracking-widest";
   const cardCls = "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-3";
   const btnCls =
-    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors";
+    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -451,7 +451,7 @@ export default (app: HTMLElement) => {
       const expr = seconds() ? "0 " + base : base;
       const btn = document.createElement("button");
       btn.className =
-        "border border-green-900 hover:border-green-600 text-green-400 hover:text-green-200 font-mono text-xs px-3 py-1.5 rounded cursor-pointer transition-colors";
+        "border border-green-900 hover:border-green-600 text-green-400 hover:text-green-200 font-mono text-xs px-3 py-1.5 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
       btn.textContent = label;
       btn.title = expr;
       btn.onclick = () => {
@@ -464,16 +464,21 @@ export default (app: HTMLElement) => {
 
   cronExpr.addEventListener("input", () => renderCron(false));
 
+  // A pending revert timeout captured `prev` label text at click time; a
+  // second click before it fired would capture "Copied!" as `prev`, so the
+  // first timeout later reset the button back to "Copied!" forever instead of
+  // "Copy". Always reverting to the literal default, and cancelling any
+  // pending timer first, keeps rapid clicks from desyncing the label.
+  let copyResetTimer: number | undefined;
   cronCopy.addEventListener("click", async () => {
+    if (copyResetTimer) window.clearTimeout(copyResetTimer);
     try {
       await navigator.clipboard.writeText(cronExpr.value);
-      const prev = cronCopy.textContent;
       cronCopy.textContent = "Copied!";
-      window.setTimeout(() => (cronCopy.textContent = prev), 1200);
     } catch {
       cronCopy.textContent = "Failed";
-      window.setTimeout(() => (cronCopy.textContent = "Copy"), 1200);
     }
+    copyResetTimer = window.setTimeout(() => (cronCopy.textContent = "Copy"), 1200);
   });
 
   // Switching modes rebuilds the boxes and re-frames the current expression:

@@ -65,7 +65,7 @@ async fn route(
             stats::stats_response(&config, req.uri().query()).await
         }
         "/stats" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/auth/login" if req.method() == Method::POST => auth::login(req, &config).await,
+        "/auth/login" if req.method() == Method::POST => auth::login(req, peer, &config).await,
         "/auth/logout" if req.method() == Method::POST => auth::logout(req, peer, &config).await,
         "/auth/me" if req.method() == Method::GET => auth::me(req, peer, &config).await,
         "/auth/totp/setup" if req.method() == Method::POST => {
