@@ -23,6 +23,7 @@
 
 use chrono::NaiveDate;
 use sonic_rs::Serialize;
+use std::sync::LazyLock;
 
 use crate::config::ApiConfig;
 use crate::response::{ApiError, Body, ResponseBuilder};
@@ -59,7 +60,7 @@ const VALID_ROUTES: &[&str] = &[
 /// A Postgres `text[]` literal of `VALID_ROUTES`. Built once at startup;
 /// interpolated straight into SQL rather than bound, since the contents are a
 /// compile-time constant, never user input.
-static VALID_ROUTES_ARRAY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+static VALID_ROUTES_ARRAY: LazyLock<String> = LazyLock::new(|| {
     let quoted: Vec<String> = VALID_ROUTES.iter().map(|r| format!("'{r}'")).collect();
     format!("ARRAY[{}]::text[]", quoted.join(","))
 });
