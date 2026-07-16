@@ -421,8 +421,8 @@ impl Sim {
         self.pitch = lay.pitch;
         self.gw = grid_dim(w, lay.pitch).min(MAX_GW);
         self.gh = grid_dim(h, lay.pitch).min(MAX_GH);
-        self.ox = (w.saturating_sub(self.gw * self.pitch + 1)) / 2;
-        self.oy = (h.saturating_sub(self.gh * self.pitch + 1)) / 2;
+        self.ox = (w.saturating_sub(self.gw * self.pitch + 1)) / 3;
+        self.oy = (h.saturating_sub(self.gh * self.pitch + 1)) / 3;
         self.t = 0.0;
         self.step_acc = 0.0;
         self.spawn_in = 0.0;
