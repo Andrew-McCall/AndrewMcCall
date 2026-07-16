@@ -2,7 +2,13 @@ import { mountLogin } from "./secret_login.ts";
 import { getMe } from "./session.ts";
 
 // `auth` items are hidden until the visitor is signed in.
-type MenuItem = { href: string; label: string; disabled?: boolean; auth?: boolean };
+type MenuItem = {
+  href: string;
+  label: string;
+  disabled?: boolean;
+  auth?: boolean;
+  desktop?: boolean;
+};
 type MenuGroup = { title: string; glyph: string; items: MenuItem[] };
 
 const groups: MenuGroup[] = [
@@ -10,7 +16,7 @@ const groups: MenuGroup[] = [
     title: "Developer Tools",
     glyph: ">_",
     items: [
-      { href: "/secret/vim", label: "Vim" },
+      { href: "/secret/vim", label: "Vim", desktop: true },
       { href: "/secret/cron", label: "Cron Generator" },
       { href: "/secret/man", label: "Man Pages" },
       { href: "/secret/python", label: "Python 3" },
@@ -57,7 +63,13 @@ const renderItem = (item: MenuItem) =>
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">${item.label}</a>`;
 
 const renderGroup = (group: MenuGroup, signedIn: boolean) => {
-  const items = group.items.filter((item) => !item.auth || signedIn);
+  const isOnDesktop =
+    window.matchMedia("(any-hover: hover)").matches &&
+    window.matchMedia("(any-pointer: fine)").matches &&
+    !("ontouchstart" in window && navigator.maxTouchPoints > 0);
+  const items = group.items
+    .filter((item) => !item.auth || signedIn)
+    .filter((item) => !item.desktop || isOnDesktop);
   if (items.length === 0) return "";
   return `
   <div class="w-full bg-stone-950/40 border border-green-900/30 rounded-xl p-4 sm:p-5">
