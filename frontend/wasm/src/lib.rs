@@ -9,9 +9,19 @@
 //!   * `reset()`                -> restart the simulation (call when (re)shown)
 //!   * `seed(s)`                -> seed the PRNG (call once with e.g. Date.now())
 //!   * `paint(x0,y0,x1,y1,a)`   -> stroke a line of births (a != 0) or kills (a == 0)
+//!   * `hold(x,y,mode)`         -> mouse-hold point; 1 heals alpha, 2 erodes, 0 clears
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
+//!
+//! Every tile carries an alpha that live cells erode one step per generation
+//! (opaque to fully transparent in 255 generations); once a neighbourhood has
+//! faded, its grid lines fade with it and the page rendered beneath the canvas
+//! shows through. Holding the left button heals the alpha around the cursor,
+//! the right button erodes it. Once a tile and 3 of its neighbours are wholly
+//! transparent, the cell there is treated as alive every generation —
+//! invisible, but feeding the life rule at the erosion frontier — until the
+//! ground under it is healed back.
 //!
 //! The sim opens by spelling "Andrew David McCall" in live cells (Menlo Bold
 //! pre-rasterised to 16x32 bitmaps, integer-scaled to fit the viewport), holds
@@ -46,6 +56,13 @@ static mut CELLS: [u8; MAX_CELLS] = [0; MAX_CELLS];
 static mut NEXT: [u8; MAX_CELLS] = [0; MAX_CELLS];
 /// Which cells the name was stamped on — ambient births favour this region.
 static mut TEXT_MASK: [u8; MAX_CELLS] = [0; MAX_CELLS];
+/// Per-tile alpha. Live cells erode it; it sticks after they die, so ground
+/// that life has burned through stays see-through until the mouse heals it.
+static mut TILE_A: [u8; MAX_CELLS] = [0; MAX_CELLS];
+/// Cells gone permanently alive: once a tile and 3 of its neighbours fully
+/// erode, the cell there counts as alive every generation — until the ground
+/// under it is healed, which makes it mortal again.
+static mut PERMA: [u8; MAX_CELLS] = [0; MAX_CELLS];
 
 /// Seconds the stamped name stays frozen before evolution begins.
 const HOLD: f32 = 2.5;
@@ -55,6 +72,13 @@ const SPAWN_START: f32 = 2.0;
 /// Automaton generations per second.
 const STEP_DT: f32 = 1.0 / 12.0;
 const MAX_METROIDS: usize = 4;
+
+/// Alpha a live cell's tile loses per generation: 255 generations from
+/// opaque to fully transparent.
+const DECAY: u8 = 1;
+/// Alpha a mouse hold adds (left) or removes (right) per generation on the
+/// held tile and its 4 orthogonal neighbours.
+const HOLD_STEP: u8 = 20;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
@@ -343,6 +367,63 @@ fn paint_line(
     }
 }
 
+/// Every tile under a live cell erodes a little each generation; dead tiles
+/// keep whatever alpha they last had.
+fn decay_tiles(cells: &[u8], tile_a: &mut [u8], n: usize) {
+    for i in 0..n {
+        if cells[i] > 0 {
+            tile_a[i] = tile_a[i].saturating_sub(DECAY);
+        }
+    }
+}
+
+/// Mark cells whose tile and at least 3 of its 8 neighbours have fully
+/// eroded. Marked cells are forced alive each generation, so wholly dissolved
+/// ground keeps seeding the frontier even though nothing there renders. A
+/// mark lasts only while its own tile stays fully eroded — healed ground goes
+/// mortal again.
+fn mark_perma(tile_a: &[u8], perma: &mut [u8], gw: usize, gh: usize) {
+    for y in 0..gh {
+        for x in 0..gw {
+            let i = y * gw + x;
+            if tile_a[i] > 0 {
+                perma[i] = 0;
+                continue;
+            }
+            if perma[i] > 0 {
+                continue;
+            }
+            let mut n = 0u32;
+            for ny in y.saturating_sub(1)..=(y + 1).min(gh - 1) {
+                for nx in x.saturating_sub(1)..=(x + 1).min(gw - 1) {
+                    if (nx != x || ny != y) && tile_a[ny * gw + nx] == 0 {
+                        n += 1;
+                    }
+                }
+            }
+            if n >= 3 {
+                perma[i] = 1;
+            }
+        }
+    }
+}
+
+/// Adjust alpha on the plus of 5 tiles around (cx, cy): the held tile and its
+/// orthogonal neighbours. `heal` restores toward opaque, otherwise erodes.
+fn hold_plus(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: bool) {
+    for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+        let (x, y) = (cx + dx, cy + dy);
+        if x >= 0 && y >= 0 && (x as usize) < gw && (y as usize) < gh {
+            let a = &mut tile_a[y as usize * gw + x as usize];
+            *a = if heal {
+                a.saturating_add(HOLD_STEP)
+            } else {
+                a.saturating_sub(HOLD_STEP)
+            };
+        }
+    }
+}
+
 // --- Simulation state ------------------------------------------------------
 
 #[derive(Clone, Copy)]
@@ -376,6 +457,10 @@ struct Sim {
     rng: u32,
     spawn_in: f32,
     metroids: [Metroid; MAX_METROIDS],
+    hold_x: f32,
+    hold_y: f32,
+    /// 0 = none, 1 = left button (heal), 2 = right button (erode).
+    hold_mode: u32,
 }
 
 static mut SIM: Sim = Sim {
@@ -392,6 +477,9 @@ static mut SIM: Sim = Sim {
     rng: 0x9d2c_5680, // works unseeded; JS overrides via `seed()`
     spawn_in: 0.0,
     metroids: [DEAD_METROID; MAX_METROIDS],
+    hold_x: 0.0,
+    hold_y: 0.0,
+    hold_mode: 0,
 };
 
 impl Sim {
@@ -414,7 +502,15 @@ impl Sim {
 
     /// (Re)start for a viewport: lay out and stamp the name, clear timers.
     /// Runs on first tick, on `reset()`, and whenever the viewport resizes.
-    fn init(&mut self, w: usize, h: usize, cells: &mut [u8], mask: &mut [u8]) {
+    fn init(
+        &mut self,
+        w: usize,
+        h: usize,
+        cells: &mut [u8],
+        mask: &mut [u8],
+        tile_a: &mut [u8],
+        perma: &mut [u8],
+    ) {
         let lay = plan_layout(w, h);
         self.w = w;
         self.h = h;
@@ -428,6 +524,8 @@ impl Sim {
         self.spawn_in = 0.0;
         self.metroids = [DEAD_METROID; MAX_METROIDS];
         mask.fill(0);
+        tile_a.fill(255);
+        perma.fill(0);
         stamp_text(mask, self.gw, self.gh, &lay);
         cells.fill(0);
         let n = self.gw * self.gh;
@@ -521,7 +619,7 @@ impl Sim {
 
 // --- Framebuffer helpers ----------------------------------------------------
 
-fn fill_rect(fb: &mut [u8], w: usize, h: usize, x: i32, y: i32, rw: i32, rh: i32, c: [u8; 3]) {
+fn fill_rect(fb: &mut [u8], w: usize, h: usize, x: i32, y: i32, rw: i32, rh: i32, c: [u8; 3], a: u8) {
     let x0 = x.max(0) as usize;
     let y0 = y.max(0) as usize;
     let x1 = (x + rw).clamp(0, w as i32) as usize;
@@ -533,7 +631,7 @@ fn fill_rect(fb: &mut [u8], w: usize, h: usize, x: i32, y: i32, rw: i32, rh: i32
             fb[i] = c[0];
             fb[i + 1] = c[1];
             fb[i + 2] = c[2];
-            fb[i + 3] = 0xff;
+            fb[i + 3] = a;
         }
     }
 }
@@ -556,6 +654,17 @@ pub extern "C" fn reset() {
 #[no_mangle]
 pub extern "C" fn seed(s: u32) {
     unsafe { (*addr_of_mut!(SIM)).rng = if s == 0 { 0x9e37_79b9 } else { s } }
+}
+
+/// Report the mouse-hold point in framebuffer pixels. `mode` 1 heals tile
+/// alpha (left button), 2 erodes it (right button), 0 clears the hold. The
+/// effect is applied once per generation while the hold is active.
+#[no_mangle]
+pub extern "C" fn hold(x: f32, y: f32, mode: u32) {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    sim.hold_x = x;
+    sim.hold_y = y;
+    sim.hold_mode = mode;
 }
 
 /// Stroke between two framebuffer-pixel points, so JS can join successive
@@ -590,9 +699,11 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     let cells: &mut [u8] = unsafe { &mut *addr_of_mut!(CELLS) };
     let next: &mut [u8] = unsafe { &mut *addr_of_mut!(NEXT) };
     let mask: &mut [u8] = unsafe { &mut *addr_of_mut!(TEXT_MASK) };
+    let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
+    let perma: &mut [u8] = unsafe { &mut *addr_of_mut!(PERMA) };
 
     if !sim.ready || sim.w != width || sim.h != height {
-        sim.init(width, height, cells, mask);
+        sim.init(width, height, cells, mask, tile_a, perma);
     }
     sim.t += dt;
 
@@ -618,6 +729,21 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             cells[..n_cells].copy_from_slice(&next[..n_cells]);
             sim.ambient_births(cells, mask);
         }
+        decay_tiles(cells, tile_a, n_cells);
+        if sim.hold_mode != 0 {
+            // Same floor-via-offset trick as paint_line for cursor positions
+            // left/above the grid.
+            let p = sim.pitch as f32;
+            let cx = ((sim.hold_x - sim.ox as f32) / p + 4096.0) as i32 - 4096;
+            let cy = ((sim.hold_y - sim.oy as f32) / p + 4096.0) as i32 - 4096;
+            hold_plus(tile_a, sim.gw, sim.gh, cx, cy, sim.hold_mode == 1);
+        }
+        mark_perma(tile_a, perma, gw, gh);
+        for i in 0..n_cells {
+            if perma[i] > 0 {
+                cells[i] = cells[i].max(1);
+            }
+        }
     }
 
     sim.update_metroids(dt, cells);
@@ -631,42 +757,58 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
         px[3] = 0xff;
     }
 
-    let span_w = (gw * pitch + 1) as i32;
-    let span_h = (gh * pitch + 1) as i32;
-    for i in 0..=gw {
-        fill_rect(
-            fb,
-            width,
-            height,
-            ox + (i * pitch) as i32,
-            oy,
-            1,
-            span_h,
-            GRID_LINE,
-        );
-    }
+    // Grid lines fade with the ground: each segment takes the max alpha of
+    // the (up to) two tiles it separates, so the grid vanishes over fully
+    // eroded neighbourhoods. Segments overlap one pixel at intersections;
+    // whichever draws last wins, which is invisible at 1px.
+    let tile = |cx: usize, cy: usize| tile_a[cy * gw + cx];
     for j in 0..=gh {
-        fill_rect(
-            fb,
-            width,
-            height,
-            ox,
-            oy + (j * pitch) as i32,
-            span_w,
-            1,
-            GRID_LINE,
-        );
+        for cx in 0..gw {
+            let above = if j > 0 { tile(cx, j - 1) } else { 0 };
+            let below = if j < gh { tile(cx, j) } else { 0 };
+            fill_rect(
+                fb,
+                width,
+                height,
+                ox + (cx * pitch) as i32,
+                oy + (j * pitch) as i32,
+                pitch as i32 + 1,
+                1,
+                GRID_LINE,
+                above.max(below),
+            );
+        }
+    }
+    for i in 0..=gw {
+        for cy in 0..gh {
+            let left = if i > 0 { tile(i - 1, cy) } else { 0 };
+            let right = if i < gw { tile(i, cy) } else { 0 };
+            fill_rect(
+                fb,
+                width,
+                height,
+                ox + (i * pitch) as i32,
+                oy + (cy * pitch) as i32,
+                1,
+                pitch as i32 + 1,
+                GRID_LINE,
+                left.max(right),
+            );
+        }
     }
 
     let cell_px = (pitch - 1) as i32;
     for cy in 0..gh {
         for cx in 0..gw {
             let age = cells[cy * gw + cx];
-            if age > 0 {
-                let x = ox + (cx * pitch) as i32 + 1;
-                let y = oy + (cy * pitch) as i32 + 1;
-                fill_rect(fb, width, height, x, y, cell_px, cell_px, cell_colour(age));
+            let a = tile_a[cy * gw + cx];
+            if age == 0 && a == 255 {
+                continue; // opaque background already filled
             }
+            let x = ox + (cx * pitch) as i32 + 1;
+            let y = oy + (cy * pitch) as i32 + 1;
+            let c = if age > 0 { cell_colour(age) } else { BG };
+            fill_rect(fb, width, height, x, y, cell_px, cell_px, c, a);
         }
     }
 }
@@ -761,6 +903,91 @@ mod tests {
         // Erasing along the same path with a wider brush kills everything.
         paint_line(&mut cells, gw, gh, 2.0, 3.0, 27.0, 15.0, false, 2);
         assert!(alive_set(&cells, gw, gh).is_empty());
+    }
+
+    /// Drives the real exports end to end: after the hold phase plus a couple
+    /// hundred generations, live cells must have eroded some tiles, and the
+    /// rendered framebuffer must carry non-opaque alpha for the page beneath
+    /// to show through. Runs alone against the shared statics — the only test
+    /// that touches them.
+    #[test]
+    fn tick_erodes_alpha_into_framebuffer() {
+        let (w, h) = (320usize, 200usize);
+        seed(1);
+        reset();
+        for _ in 0..400 {
+            tick(w, h, 0.05); // 20 simulated seconds ≈ 240 generations
+        }
+        let fb = unsafe { core::slice::from_raw_parts(frame_ptr(), w * h * 4) };
+        let faded = fb.chunks_exact(4).filter(|px| px[3] < 0xff).count();
+        assert!(faded > 0, "no framebuffer pixel ever lost alpha");
+        reset();
+    }
+
+    #[test]
+    fn tiles_decay_only_under_live_cells() {
+        let n = 9;
+        let mut cells = vec![0u8; n];
+        let mut tile_a = vec![255u8; n];
+        cells[4] = 1;
+        for _ in 0..255 {
+            decay_tiles(&cells, &mut tile_a, n);
+        }
+        assert_eq!(tile_a[4], 0, "live tile fully transparent after 255 gens");
+        assert!(tile_a.iter().enumerate().all(|(i, &a)| i == 4 || a == 255));
+        // Saturates at zero and dead tiles never recover on their own.
+        decay_tiles(&cells, &mut tile_a, n);
+        cells[4] = 0;
+        decay_tiles(&cells, &mut tile_a, n);
+        assert_eq!(tile_a[4], 0);
+    }
+
+    #[test]
+    fn perma_needs_own_tile_and_three_neighbours_transparent() {
+        let (gw, gh) = (4, 4);
+        let mut tile_a = vec![255u8; gw * gh];
+        let mut perma = vec![0u8; gw * gh];
+        for (x, y) in [(1, 1), (0, 0), (1, 0), (2, 0)] {
+            tile_a[y * gw + x] = 0;
+        }
+        mark_perma(&tile_a, &mut perma, gw, gh);
+        // (1,1) and (1,0) each see 3 transparent neighbours; the corner (0,0)
+        // and edge (2,0) only 2; (2,1) has 3 but its own tile is opaque.
+        let got: Vec<_> = (0..gh)
+            .flat_map(|y| (0..gw).map(move |x| (x, y)))
+            .filter(|&(x, y)| perma[y * gw + x] > 0)
+            .collect();
+        assert_eq!(got, vec![(1, 0), (1, 1)]);
+        // Healing a marked tile clears its mark: the cell goes mortal again.
+        tile_a[gw + 1] = 1;
+        mark_perma(&tile_a, &mut perma, gw, gh);
+        assert_eq!(perma[gw + 1], 0, "healed tile unmarked");
+        assert_eq!(perma[1], 1, "still-eroded tile stays marked");
+    }
+
+    #[test]
+    fn hold_plus_heals_erodes_and_clips() {
+        let (gw, gh) = (5, 5);
+        let mut tile_a = vec![100u8; gw * gh];
+        hold_plus(&mut tile_a, gw, gh, 2, 2, true);
+        for (x, y, want) in [(2, 2, 120), (1, 2, 120), (3, 2, 120), (2, 1, 120), (2, 3, 120)] {
+            assert_eq!(tile_a[y * gw + x], want, "plus tile ({x},{y})");
+        }
+        assert_eq!(tile_a[gw + 1], 100, "diagonal untouched");
+        // Erode undoes the heal and saturates at fully transparent.
+        for _ in 0..20 {
+            hold_plus(&mut tile_a, gw, gh, 2, 2, false);
+        }
+        assert_eq!(tile_a[2 * gw + 2], 0);
+        // A corner hold clips its out-of-bounds neighbours; healing caps at 255.
+        for _ in 0..20 {
+            hold_plus(&mut tile_a, gw, gh, 0, 0, true);
+        }
+        assert_eq!(tile_a[0], 255);
+        // A hold left of the grid touches nothing and must not panic.
+        let before = tile_a.clone();
+        hold_plus(&mut tile_a, gw, gh, -2, -2, true);
+        assert_eq!(tile_a, before);
     }
 
     #[test]

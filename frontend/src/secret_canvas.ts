@@ -1,6 +1,10 @@
 // Fullscreen Game of Life, rendered by wasm into an RGBA framebuffer that we
 // blit each frame. Left-drag draws cells, right-drag erases; ten clean clicks
 // (or Escape) leads to /secret.
+//
+// Live cells erode their tile's alpha over time, dissolving the board into
+// the page rendered beneath the canvas. Holding left heals the ground under
+// the cursor, holding right erodes it.
 
 import { float_alert } from "./float_alert";
 
@@ -18,6 +22,7 @@ interface GameWasm {
     alive: number,
     radius: number,
   ) => void;
+  hold: (x: number, y: number, mode: number) => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -46,8 +51,30 @@ export function hideGame(): void {
   teardown = null;
 }
 
+// Placeholder content the eroding canvas reveals — swap for real posts / CV.
+const LOREM =
+  "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod " +
+  "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim " +
+  "veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea " +
+  "commodo consequat.";
+
+function renderCards(app: HTMLElement): void {
+  app.innerHTML = `
+    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-16 text-stone-300">
+      ${[1, 2, 3]
+        .map(
+          (i) => `
+      <article class="rounded-lg border border-stone-800 bg-stone-900 p-6">
+        <h2 class="mb-2 text-lg font-bold text-lime-300">Post ${i}</h2>
+        <p class="text-sm leading-relaxed">${LOREM}</p>
+      </article>`,
+        )
+        .join("")}
+    </main>`;
+}
+
 export default (app: HTMLElement) => {
-  app.innerHTML = "";
+  renderCards(app);
   if (teardown) return;
 
   const overlay = document.createElement("div");
@@ -88,6 +115,7 @@ export default (app: HTMLElement) => {
       stroke.alive,
       stroke.alive ? DRAW_RADIUS : ERASE_RADIUS,
     );
+    game?.hold?.(x, y, stroke.alive ? 1 : 2);
   });
 
   overlay.addEventListener("pointermove", (ev) => {
@@ -107,10 +135,14 @@ export default (app: HTMLElement) => {
       stroke.x = x;
       stroke.y = y;
     }
+    game?.hold?.(stroke.x, stroke.y, stroke.alive ? 1 : 2);
   });
 
   const endStroke = (ev: PointerEvent) => {
-    if (stroke && ev.pointerId === stroke.id) stroke = null;
+    if (stroke && ev.pointerId === stroke.id) {
+      stroke = null;
+      game?.hold?.(0, 0, 0);
+    }
   };
   overlay.addEventListener("pointerup", endStroke);
   overlay.addEventListener("pointercancel", endStroke);
@@ -118,7 +150,6 @@ export default (app: HTMLElement) => {
   overlay.addEventListener("click", (ev) => {
     if (dragged) return;
     if (secret_counter < 6) {
-      w;
       if (secret_counter < 1) return window.navigate("/secret");
       float_alert(
         ev.x,
@@ -176,6 +207,7 @@ export default (app: HTMLElement) => {
       wasm.reset();
       const ptr = wasm.frame_ptr();
       let last = performance.now();
+      let revealed = false;
 
       const loop = (now: number) => {
         if (!running) return;
@@ -189,6 +221,12 @@ export default (app: HTMLElement) => {
             w * h * 4,
           );
           ctx.putImageData(new ImageData(pixels, w, h), 0, 0);
+          if (!revealed) {
+            // The canvas now covers the viewport, so drop the overlay's
+            // backdrop: framebuffer transparency reveals the cards beneath.
+            revealed = true;
+            overlay.style.background = "transparent";
+          }
         }
         raf = requestAnimationFrame(loop);
       };
