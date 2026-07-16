@@ -75,7 +75,7 @@ const MAX_METROIDS: usize = 4;
 
 /// Alpha a live cell's tile loses per generation: 255 generations from
 /// opaque to fully transparent.
-const DECAY: u8 = 1;
+const DECAY: u8 = 2;
 /// Alpha a mouse hold adds (left) or removes (right) per generation on the
 /// held tile and its 4 orthogonal neighbours.
 const HOLD_STEP: u8 = 20;
@@ -619,7 +619,17 @@ impl Sim {
 
 // --- Framebuffer helpers ----------------------------------------------------
 
-fn fill_rect(fb: &mut [u8], w: usize, h: usize, x: i32, y: i32, rw: i32, rh: i32, c: [u8; 3], a: u8) {
+fn fill_rect(
+    fb: &mut [u8],
+    w: usize,
+    h: usize,
+    x: i32,
+    y: i32,
+    rw: i32,
+    rh: i32,
+    c: [u8; 3],
+    a: u8,
+) {
     let x0 = x.max(0) as usize;
     let y0 = y.max(0) as usize;
     let x1 = (x + rw).clamp(0, w as i32) as usize;
@@ -970,7 +980,13 @@ mod tests {
         let (gw, gh) = (5, 5);
         let mut tile_a = vec![100u8; gw * gh];
         hold_plus(&mut tile_a, gw, gh, 2, 2, true);
-        for (x, y, want) in [(2, 2, 120), (1, 2, 120), (3, 2, 120), (2, 1, 120), (2, 3, 120)] {
+        for (x, y, want) in [
+            (2, 2, 120),
+            (1, 2, 120),
+            (3, 2, 120),
+            (2, 1, 120),
+            (2, 3, 120),
+        ] {
             assert_eq!(tile_a[y * gw + x], want, "plus tile ({x},{y})");
         }
         assert_eq!(tile_a[gw + 1], 100, "diagonal untouched");
