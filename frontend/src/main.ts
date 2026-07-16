@@ -1,4 +1,3 @@
-import index from "./index.ts";
 import secret_index from "./secret_index.ts";
 import secret_morse, { disposeMorse } from "./secret_morse.ts";
 import secret_pi, { disposePi } from "./secret_pi.ts";
@@ -41,11 +40,10 @@ interface Route {
 }
 
 const routes: Record<string, Route> = {
-  "/": { auth: "public", render: (app) => index(app) },
+  "/": { auth: "public", render: (app) => secret_canvas(app) },
   "/secret": { auth: "public", render: (app) => secret_index(app) },
   "/secret/pi": { auth: "public", render: (app) => secret_pi(app) },
   "/secret/morse": { auth: "public", render: (app) => secret_morse(app) },
-  "/secret/canvas": { auth: "public", render: (app) => secret_canvas(app) },
   "/secret/password": { auth: "public", render: (app) => secret_password(app) },
   "/secret/countries": { auth: "public", render: (app) => secret_countries(app) },
   "/secret/visits": { auth: "public", render: (app) => secret_visits(app) },
@@ -68,8 +66,8 @@ async function renderPage(): Promise<void> {
   }
 
   const page = window.location.pathname.toLowerCase();
-  if (page !== "/secret/canvas") {
-    hideGame(); // dismiss the fullscreen game overlay when navigating away
+  if (page !== "/") {
+    hideGame(); // dismiss the fullscreen Game of Life when leaving the front page
   }
   if (page !== "/secret/visits") {
     disposeVisits(); // tear down the ApexCharts when navigating away
@@ -96,7 +94,7 @@ async function renderPage(): Promise<void> {
   if (!route) {
     // 404 — send them home and render it.
     window.history.pushState({}, "", "/");
-    return index(app);
+    return secret_canvas(app);
   }
 
   // Middleware gate: resolve the session for protected routes and bounce anyone

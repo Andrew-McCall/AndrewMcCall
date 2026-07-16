@@ -8,6 +8,7 @@
 //!   * `tick(w, h, dt)`         -> advance the simulation by `dt` seconds and render
 //!   * `reset()`                -> restart the simulation (call when (re)shown)
 //!   * `seed(s)`                -> seed the PRNG (call once with e.g. Date.now())
+//!   * `paint(x0,y0,x1,y1,a)`   -> stroke a line of births (a != 0) or kills (a == 0)
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -228,6 +229,30 @@ fn step_life(cur: &[u8], next: &mut [u8], gw: usize, gh: usize) {
     }
 }
 
+/// Paint a straight stroke in cell space, stamping a square brush of radius
+/// `r` cells at each step of a DDA walk — the interpolation that keeps fast
+/// drags solid instead of dotted. Births start at age 1 (already-live cells
+/// keep their age); kills clear outright.
+fn paint_line(cells: &mut [u8], gw: usize, gh: usize, x0: f32, y0: f32, x1: f32, y1: f32, alive: bool, r: i32) {
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    let len = dx.abs().max(dy.abs());
+    let steps = if len < 1.0 { 1 } else { (len as i32 + 1).min(4096) };
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        // Floor via a large offset so the cast truncates toward -inf, keeping
+        // brush edges stable when the stroke starts left of the grid.
+        let cx = (x0 + dx * t + 4096.0) as i32 - 4096;
+        let cy = (y0 + dy * t + 4096.0) as i32 - 4096;
+        for by in (cy - r).max(0)..=(cy + r).min(gh as i32 - 1) {
+            for bx in (cx - r).max(0)..=(cx + r).min(gw as i32 - 1) {
+                let c = &mut cells[by as usize * gw + bx as usize];
+                *c = if alive { (*c).max(1) } else { 0 };
+            }
+        }
+    }
+}
+
 // --- Simulation state ------------------------------------------------------
 
 #[derive(Clone, Copy)]
@@ -410,6 +435,28 @@ pub extern "C" fn seed(s: u32) {
     unsafe { (*addr_of_mut!(SIM)).rng = if s == 0 { 0x9e37_79b9 } else { s } }
 }
 
+/// Stroke between two framebuffer-pixel points, so JS can join successive
+/// pointer events into one continuous line. `alive != 0` births cells under
+/// the stroke; `0` kills them. `radius` is the brush half-width in cells
+/// (0 = single cell).
+#[no_mangle]
+pub extern "C" fn paint(x0: f32, y0: f32, x1: f32, y1: f32, alive: u32, radius: u32) {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    if !sim.ready {
+        return;
+    }
+    let cells: &mut [u8] = unsafe { &mut *addr_of_mut!(CELLS) };
+    let p = sim.pitch as f32;
+    let (ox, oy) = (sim.ox as f32, sim.oy as f32);
+    #[rustfmt::skip]
+    paint_line(
+        cells, sim.gw, sim.gh,
+        (x0 - ox) / p, (y0 - oy) / p,
+        (x1 - ox) / p, (y1 - oy) / p,
+        alive != 0, radius.min(16) as i32,
+    );
+}
+
 /// Advance the simulation by `dt` seconds, then render into the framebuffer.
 #[no_mangle]
 pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
@@ -550,6 +597,24 @@ mod tests {
         // Desktop should render the name big: stacked words at a multi-cell scale.
         let lay = plan_layout(1920, 1080);
         assert!(lay.scale >= 2, "desktop scale too small: {}", lay.scale);
+    }
+
+    #[test]
+    fn paint_stroke_is_gap_free_and_erases() {
+        let (gw, gh) = (30, 20);
+        let mut cells = vec![0u8; gw * gh];
+        paint_line(&mut cells, gw, gh, 2.0, 3.0, 27.0, 15.0, true, 1);
+        let alive = alive_set(&cells, gw, gh);
+        assert!(!alive.is_empty());
+        // A fast diagonal drag must leave a solid line: every column the
+        // stroke crosses holds at least the brush's width of cells.
+        for x in 3..=26 {
+            let col = alive.iter().filter(|&&(ax, _)| ax == x).count();
+            assert!(col >= 3, "column {x} too thin: {col} cells");
+        }
+        // Erasing along the same path with a wider brush kills everything.
+        paint_line(&mut cells, gw, gh, 2.0, 3.0, 27.0, 15.0, false, 2);
+        assert!(alive_set(&cells, gw, gh).is_empty());
     }
 
     #[test]
