@@ -15,22 +15,32 @@ const api = (path: string, init?: RequestInit) =>
   fetch(`/api${path}`, { credentials: "include", ...init });
 
 // Renders the sign-in area into `container`, choosing the signed-in panel or the
-// PIN form based on the current session.
-export async function mountLogin(container: HTMLElement): Promise<void> {
-  try {
-    const res = await api("/auth/me");
-    if (res.ok) {
-      renderSignedIn(container, await res.json());
-      return;
+// PIN form based on the current session. Pass `me` (or null) to skip the
+// `/auth/me` fetch; `onChange` fires after a sign-in or sign-out instead of the
+// default in-place re-render.
+export async function mountLogin(
+  container: HTMLElement,
+  me?: Me | null,
+  onChange?: () => void,
+): Promise<void> {
+  if (me === undefined) {
+    try {
+      const res = await api("/auth/me");
+      me = res.ok ? await res.json() : null;
+    } catch {
+      me = null; // offline / API down — fall through to the PIN form
     }
-  } catch {
-    /* offline / API down — fall through to the PIN form */
   }
-  renderForm(container);
+  if (me) renderSignedIn(container, me, onChange);
+  else renderForm(container, onChange);
 }
 
 // Compact panel shown when a session already exists.
-function renderSignedIn(container: HTMLElement, me: Me): void {
+function renderSignedIn(
+  container: HTMLElement,
+  me: Me,
+  onChange?: () => void,
+): void {
   const adminLink =
     me.role === "admin"
       ? `<a href="/secret/admin" class="text-lime-400 hover:underline hover:text-lime-700">Admin</a>`
@@ -51,12 +61,13 @@ function renderSignedIn(container: HTMLElement, me: Me): void {
       } catch {
         /* clearing the cookie server-side is best-effort */
       }
-      renderForm(container);
+      if (onChange) onChange();
+      else renderForm(container);
     };
 }
 
 // The PIN entry form (with the lazily-revealed 2FA field).
-function renderForm(container: HTMLElement): void {
+function renderForm(container: HTMLElement, onChange?: () => void): void {
   container.innerHTML = `
 <form id="login-form" class="w-full max-w-xs mx-auto flex flex-col gap-3">
   <input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" aria-label="PIN"
@@ -133,7 +144,8 @@ function renderForm(container: HTMLElement): void {
         // Swap this panel to the signed-in view in place — most accounts
         // aren't admins, so navigating to /secret/admin here would just get
         // them bounced straight back by the router's auth gate.
-        await mountLogin(container);
+        if (onChange) onChange();
+        else await mountLogin(container);
         return;
       }
 
