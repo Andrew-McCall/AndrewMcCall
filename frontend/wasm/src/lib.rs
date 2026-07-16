@@ -75,7 +75,7 @@ fn cell_colour(age: u8) -> [u8; 3] {
 const GLYPH_W: usize = 16;
 const GLYPH_H: usize = 32;
 /// Vertical gap between lines, in cells, at glyph scale 1.
-const LINE_GAP: usize = GLYPH_H / 4;
+const LINE_GAP: usize = GLYPH_H / 6;
 
 /// Menlo Bold pre-rasterised to 16x32 (MSB = leftmost pixel), trimmed to just
 /// the characters of the name. Generated offline from the system font.
