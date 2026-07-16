@@ -125,11 +125,11 @@ export default (app: HTMLElement) => {
         ev.y,
         `You are ${secret_counter} clicks away from becoming a nerd`,
       );
+      setTimeout(() => {
+        secret_counter += 1;
+      }, 5000);
     }
     secret_counter -= 1;
-    setTimeout(() => {
-      secret_counter += 1;
-    }, 5000);
   });
 
   document.body.appendChild(overlay);
