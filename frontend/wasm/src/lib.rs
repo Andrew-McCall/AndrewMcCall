@@ -15,10 +15,10 @@
 //!
 //! The sim opens by spelling "Andrew David McCall" in live cells (Menlo Bold
 //! pre-rasterised to 16x32 bitmaps, integer-scaled to fit the viewport), holds
-//! the name for a moment, then evolves it under B3/S23. Meteor streaks fly
-//! through from the top-right toward the bottom-left birthing a trail of live
-//! cells, and ambient births — strongly biased to the cells under the letters —
-//! keep the name ghosting back through the chaos.
+//! the name for a moment, then evolves it under B3/S23. Comets fly through
+//! from the top-right toward the bottom-left, visible only as the trail of
+//! live cells they birth, and ambient births — strongly biased to the cells
+//! under the letters — keep the name ghosting back through the chaos.
 
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
@@ -55,12 +55,9 @@ const SPAWN_START: f32 = 2.0;
 /// Automaton generations per second.
 const STEP_DT: f32 = 1.0 / 12.0;
 const MAX_METROIDS: usize = 4;
-const TRAIL_DOTS: i32 = 14;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
-const METEOR_HEAD: [u8; 3] = [0xec, 0xfc, 0xcb]; // lime-100
-const METEOR_TAIL: [u8; 3] = [0x4d, 0x7c, 0x0f]; // lime-700
 
 /// Cell colour by age: newborns flash bright lime; long-lived stable patterns
 /// settle into a deep green that sits quietly against the background.
@@ -405,8 +402,9 @@ impl Sim {
             if m.x < -60.0 || m.y > self.h as f32 + 60.0 {
                 m.active = false;
             } else {
-                // Birth a few cells just behind the head — the evolving trail.
-                let births = 1 + self.rand() % 3;
+                // The comet has no sprite: the cells it births each frame are
+                // the only thing you see, so keep the trail dense enough to read.
+                let births = 2 + self.rand() % 3;
                 for _ in 0..births {
                     let px = m.x - m.vx * 0.02 + self.rand_range(-1.5, 1.5) * self.pitch as f32;
                     let py = m.y - m.vy * 0.02 + self.rand_range(-1.5, 1.5) * self.pitch as f32;
@@ -442,11 +440,6 @@ fn fill_rect(fb: &mut [u8], w: usize, h: usize, x: i32, y: i32, rw: i32, rh: i32
             fb[i + 3] = 0xff;
         }
     }
-}
-
-fn lerp_colour(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
-    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t) as u8;
-    [mix(a[0], b[0]), mix(a[1], b[1]), mix(a[2], b[2])]
 }
 
 // --- Exports -----------------------------------------------------------------
@@ -533,7 +526,7 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
 
     sim.update_metroids(dt, cells);
 
-    // Render: background, 1px grid lines, cells, meteor streaks.
+    // Render: background, 1px grid lines, cells.
     let fb = unsafe { core::slice::from_raw_parts_mut(frame_ptr(), width * height * 4) };
     for px in fb.chunks_exact_mut(4) {
         px[0] = BG[0];
@@ -560,17 +553,6 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
                 let y = oy + (cy * pitch) as i32 + 1;
                 fill_rect(fb, width, height, x, y, cell_px, cell_px, cell_colour(age));
             }
-        }
-    }
-
-    for m in sim.metroids.iter().filter(|m| m.active) {
-        for k in 0..TRAIL_DOTS {
-            let t = k as f32 / TRAIL_DOTS as f32;
-            let x = m.x - m.vx * 0.0085 * k as f32;
-            let y = m.y - m.vy * 0.0085 * k as f32;
-            let size = (5 - k * 4 / TRAIL_DOTS).max(1);
-            let c = lerp_colour(METEOR_HEAD, METEOR_TAIL, t);
-            fill_rect(fb, width, height, x as i32 - size / 2, y as i32 - size / 2, size, size, c);
         }
     }
 }

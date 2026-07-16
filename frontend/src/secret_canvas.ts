@@ -80,7 +80,14 @@ export default (app: HTMLElement) => {
     downY = ev.clientY;
     dragged = false;
     overlay.setPointerCapture(ev.pointerId);
-    game?.paint?.(x, y, x, y, stroke.alive, stroke.alive ? DRAW_RADIUS : ERASE_RADIUS);
+    game?.paint?.(
+      x,
+      y,
+      x,
+      y,
+      stroke.alive,
+      stroke.alive ? DRAW_RADIUS : ERASE_RADIUS,
+    );
   });
 
   overlay.addEventListener("pointermove", (ev) => {
@@ -89,7 +96,14 @@ export default (app: HTMLElement) => {
     const points = ev.getCoalescedEvents?.() ?? [];
     for (const p of points.length > 0 ? points : [ev]) {
       const { x, y } = toFb(p);
-      game?.paint?.(stroke.x, stroke.y, x, y, stroke.alive, stroke.alive ? DRAW_RADIUS : ERASE_RADIUS);
+      game?.paint?.(
+        stroke.x,
+        stroke.y,
+        x,
+        y,
+        stroke.alive,
+        stroke.alive ? DRAW_RADIUS : ERASE_RADIUS,
+      );
       stroke.x = x;
       stroke.y = y;
     }
@@ -104,6 +118,7 @@ export default (app: HTMLElement) => {
   overlay.addEventListener("click", (ev) => {
     if (dragged) return;
     if (secret_counter < 6) {
+      w;
       if (secret_counter < 1) return window.navigate("/secret");
       float_alert(
         ev.x,
@@ -112,6 +127,9 @@ export default (app: HTMLElement) => {
       );
     }
     secret_counter -= 1;
+    setTimeout(() => {
+      secret_counter += 1;
+    }, 5000);
   });
 
   document.body.appendChild(overlay);
@@ -165,7 +183,11 @@ export default (app: HTMLElement) => {
         last = now;
         if (w > 0 && h > 0) {
           wasm.tick(w, h, dt);
-          const pixels = new Uint8ClampedArray(wasm.memory.buffer, ptr, w * h * 4);
+          const pixels = new Uint8ClampedArray(
+            wasm.memory.buffer,
+            ptr,
+            w * h * 4,
+          );
           ctx.putImageData(new ImageData(pixels, w, h), 0, 0);
         }
         raf = requestAnimationFrame(loop);
