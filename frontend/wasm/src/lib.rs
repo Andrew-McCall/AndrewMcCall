@@ -13,11 +13,12 @@
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
 //!
-//! The sim opens by spelling "Andrew David McCall" in live cells (an embedded
-//! 8x8 bitmap font, integer-scaled with Scale2x corner smoothing to fit the
-//! viewport), holds the name for a moment, then evolves it under B3/S23.
-//! Meteor streaks periodically fly through from the top-right toward the
-//! bottom-left, birthing a trail of live cells as they pass.
+//! The sim opens by spelling "Andrew David McCall" in live cells (Menlo Bold
+//! pre-rasterised to 16x32 bitmaps, integer-scaled to fit the viewport), holds
+//! the name for a moment, then evolves it under B3/S23. Meteor streaks fly
+//! through from the top-right toward the bottom-left birthing a trail of live
+//! cells, and ambient births — strongly biased to the cells under the letters —
+//! keep the name ghosting back through the chaos.
 
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
@@ -37,12 +38,14 @@ const MAX_H: usize = 1080;
 static mut FRAME: [u8; MAX_W * MAX_H * 4] = [0; MAX_W * MAX_H * 4];
 
 /// Cell grids sized for the densest pitch the layout will ever pick.
-const MIN_PITCH: usize = 4;
+const MIN_PITCH: usize = 3;
 const MAX_GW: usize = MAX_W / MIN_PITCH;
 const MAX_GH: usize = MAX_H / MIN_PITCH;
 const MAX_CELLS: usize = MAX_GW * MAX_GH;
 static mut CELLS: [u8; MAX_CELLS] = [0; MAX_CELLS];
 static mut NEXT: [u8; MAX_CELLS] = [0; MAX_CELLS];
+/// Which cells the name was stamped on — ambient births favour this region.
+static mut TEXT_MASK: [u8; MAX_CELLS] = [0; MAX_CELLS];
 
 /// Seconds the stamped name stays frozen before evolution begins.
 const HOLD: f32 = 2.5;
@@ -70,27 +73,32 @@ fn cell_colour(age: u8) -> [u8; 3] {
     }
 }
 
-// --- Text: embedded 8x8 bitmap font + viewport-fitting layout ---------------
+// --- Text: embedded 16x32 bitmap font + viewport-fitting layout -------------
 
-/// Glyphs from the public-domain font8x8 basic set (LSB = leftmost pixel),
-/// trimmed to just the characters of the name.
-fn glyph(c: u8) -> [u8; 8] {
+const GLYPH_W: usize = 16;
+const GLYPH_H: usize = 32;
+/// Vertical gap between lines, in cells, at glyph scale 1.
+const LINE_GAP: usize = GLYPH_H / 4;
+
+/// Menlo Bold pre-rasterised to 16x32 (MSB = leftmost pixel), trimmed to just
+/// the characters of the name. Generated offline from the system font.
+fn glyph(c: u8) -> [u16; GLYPH_H] {
     match c {
-        b'A' => [0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00],
-        b'C' => [0x3C, 0x66, 0x03, 0x03, 0x03, 0x66, 0x3C, 0x00],
-        b'D' => [0x1F, 0x36, 0x66, 0x66, 0x66, 0x36, 0x1F, 0x00],
-        b'M' => [0x63, 0x77, 0x7F, 0x7F, 0x6B, 0x63, 0x63, 0x00],
-        b'a' => [0x00, 0x00, 0x1E, 0x30, 0x3E, 0x33, 0x6E, 0x00],
-        b'c' => [0x00, 0x00, 0x1E, 0x33, 0x03, 0x33, 0x1E, 0x00],
-        b'd' => [0x38, 0x30, 0x30, 0x3E, 0x33, 0x33, 0x6E, 0x00],
-        b'e' => [0x00, 0x00, 0x1E, 0x33, 0x3F, 0x03, 0x1E, 0x00],
-        b'i' => [0x0C, 0x00, 0x0E, 0x0C, 0x0C, 0x0C, 0x1E, 0x00],
-        b'l' => [0x0E, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00],
-        b'n' => [0x00, 0x00, 0x1B, 0x37, 0x33, 0x33, 0x33, 0x00],
-        b'r' => [0x00, 0x00, 0x3B, 0x6E, 0x66, 0x06, 0x0F, 0x00],
-        b'v' => [0x00, 0x00, 0x33, 0x33, 0x33, 0x1E, 0x0C, 0x00],
-        b'w' => [0x00, 0x00, 0x63, 0x6B, 0x7F, 0x7F, 0x36, 0x00],
-        _ => [0; 8],
+        b'A' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x07C0, 0x07E0, 0x07E0, 0x0FE0, 0x0FE0, 0x0EF0, 0x0EF0, 0x1E70, 0x1E78, 0x1E78, 0x1C78, 0x3FF8, 0x3FFC, 0x3FFC, 0x383C, 0x781C, 0x781E, 0x781E, 0xF01E, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'C' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x03F8, 0x07FC, 0x0FFC, 0x1F0C, 0x1E04, 0x3E00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3E00, 0x1E04, 0x1F0C, 0x0FFC, 0x07FC, 0x03F8, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'D' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x3FC0, 0x3FF0, 0x3FF8, 0x3CF8, 0x3C7C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3E, 0x3C3E, 0x3C3E, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C7C, 0x3CF8, 0x3FF8, 0x3FF0, 0x3FC0, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'M' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x7C3E, 0x7C3E, 0x7C7E, 0x7E7E, 0x7E7E, 0x7EFE, 0x76FE, 0x77FE, 0x77DE, 0x73DE, 0x73DE, 0x73DE, 0x701E, 0x701E, 0x701E, 0x701E, 0x701E, 0x701E, 0x701E, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'a' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0FE0, 0x3FF8, 0x3FF8, 0x183C, 0x003C, 0x0FFC, 0x3FFC, 0x3FFC, 0x7C3C, 0x783C, 0x7C7C, 0x7FFC, 0x3FFC, 0x1FBC, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'c' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x03F8, 0x0FFC, 0x1FFC, 0x1F0C, 0x3E00, 0x3C00, 0x3C00, 0x3C00, 0x3C00, 0x3E00, 0x1F0C, 0x1FFC, 0x0FFC, 0x03F0, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'd' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x003C, 0x003C, 0x003C, 0x003C, 0x003C, 0x003C, 0x0F3C, 0x1FFC, 0x3FFC, 0x3C7C, 0x787C, 0x783C, 0x783C, 0x783C, 0x783C, 0x787C, 0x3C7C, 0x3FFC, 0x1FFC, 0x0F3C, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'e' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x07E0, 0x1FF0, 0x3FF8, 0x3E7C, 0x7C3C, 0x781E, 0x7FFE, 0x7FFE, 0x7FFE, 0x7800, 0x3C0C, 0x3FFC, 0x1FFC, 0x07F8, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'i' => [0x0000, 0x0000, 0x0000, 0x0000, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x0000, 0x0000, 0x0000, 0x1FC0, 0x1FC0, 0x1FC0, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x03C0, 0x3FFE, 0x3FFE, 0x3FFE, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'l' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x7F80, 0x7F80, 0x7F80, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x0780, 0x07C0, 0x07FC, 0x03FC, 0x01FC, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'n' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x3DF0, 0x3FF8, 0x3FF8, 0x3E7C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x3C3C, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'r' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0F7C, 0x0FFE, 0x0FFE, 0x0FC6, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0F00, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'v' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x781E, 0x783C, 0x3C3C, 0x3C3C, 0x3C78, 0x1C78, 0x1E78, 0x1E70, 0x0EF0, 0x0FF0, 0x0FE0, 0x07E0, 0x07E0, 0x07C0, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        b'w' => [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xE00F, 0xE00E, 0xF00E, 0x700E, 0x73CE, 0x73CE, 0x73DE, 0x77DC, 0x7FDC, 0x3EFC, 0x3E7C, 0x3E7C, 0x3E78, 0x3C78, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+        _ => [0; GLYPH_H],
     }
 }
 
@@ -112,10 +120,9 @@ fn grid_dim(px: usize, pitch: usize) -> usize {
     ((px.saturating_sub(1)) / pitch).max(1)
 }
 
-/// Height of an n-line block in cells at glyph scale s: 8s per line plus a
-/// 2s gap between lines.
+/// Height of an n-line block in cells at glyph scale s.
 fn block_height(n: usize, s: usize) -> usize {
-    8 * s * n + 2 * s * (n - 1)
+    GLYPH_H * s * n + LINE_GAP * s * (n - 1)
 }
 
 /// Pick the pitch, glyph scale and word-wrapping that render the name biggest
@@ -123,13 +130,13 @@ fn block_height(n: usize, s: usize) -> usize {
 /// (pitch 8) are tried first; small viewports fall back to finer pitches so a
 /// phone in portrait still fits the stacked name.
 fn plan_layout(w: usize, h: usize) -> Layout {
-    for &pitch in &[8usize, 6, 5, 4] {
+    for &pitch in &[8usize, 6, 5, 4, 3] {
         let gw = grid_dim(w, pitch);
         let gh = grid_dim(h, pitch);
         let mut best: Option<(usize, &'static [&'static str])> = None;
         for &lines in CANDIDATES.iter() {
             let max_chars = lines.iter().map(|l| l.len()).fold(1, usize::max);
-            let s_w = (gw * 9 / 10) / (max_chars * 8);
+            let s_w = (gw * 9 / 10) / (max_chars * GLYPH_W);
             let s_h = (gh * 8 / 10) / block_height(lines.len(), 1);
             let s = s_w.min(s_h);
             if s >= 1 && best.map_or(true, |(bs, _)| s > bs) {
@@ -144,8 +151,10 @@ fn plan_layout(w: usize, h: usize) -> Layout {
     Layout { pitch: MIN_PITCH, scale: 1, lines: &LINES_3 }
 }
 
-fn font_px(g: &[u8; 8], x: i32, y: i32) -> bool {
-    (0..8).contains(&x) && (0..8).contains(&y) && (g[y as usize] >> x) & 1 == 1
+fn font_px(g: &[u16; GLYPH_H], x: i32, y: i32) -> bool {
+    (0..GLYPH_W as i32).contains(&x)
+        && (0..GLYPH_H as i32).contains(&y)
+        && (g[y as usize] >> (GLYPH_W as i32 - 1 - x)) & 1 == 1
 }
 
 /// Stamp one glyph as live cells, each font pixel becoming an s×s block.
@@ -154,8 +163,8 @@ fn font_px(g: &[u8; 8], x: i32, y: i32) -> bool {
 /// read chunky-smooth instead of raw nearest-neighbour.
 fn stamp_glyph(cells: &mut [u8], gw: usize, gh: usize, cx0: usize, cy0: usize, ch: u8, s: usize) {
     let g = glyph(ch);
-    for fy in 0..8i32 {
-        for fx in 0..8i32 {
+    for fy in 0..GLYPH_H as i32 {
+        for fx in 0..GLYPH_W as i32 {
             let e = font_px(&g, fx, fy);
             let up = font_px(&g, fx, fy - 1);
             let left = font_px(&g, fx - 1, fy);
@@ -193,11 +202,11 @@ fn stamp_text(cells: &mut [u8], gw: usize, gh: usize, lay: &Layout) {
     let s = lay.scale;
     let mut y = gh.saturating_sub(block_height(lay.lines.len(), s)) / 2;
     for line in lay.lines {
-        let x = gw.saturating_sub(line.len() * 8 * s) / 2;
+        let x = gw.saturating_sub(line.len() * GLYPH_W * s) / 2;
         for (i, &ch) in line.as_bytes().iter().enumerate() {
-            stamp_glyph(cells, gw, gh, x + i * 8 * s, y, ch, s);
+            stamp_glyph(cells, gw, gh, x + i * GLYPH_W * s, y, ch, s);
         }
-        y += 10 * s;
+        y += (GLYPH_H + LINE_GAP) * s;
     }
 }
 
@@ -318,7 +327,7 @@ impl Sim {
 
     /// (Re)start for a viewport: lay out and stamp the name, clear timers.
     /// Runs on first tick, on `reset()`, and whenever the viewport resizes.
-    fn init(&mut self, w: usize, h: usize, cells: &mut [u8]) {
+    fn init(&mut self, w: usize, h: usize, cells: &mut [u8], mask: &mut [u8]) {
         let lay = plan_layout(w, h);
         self.w = w;
         self.h = h;
@@ -331,9 +340,34 @@ impl Sim {
         self.step_acc = 0.0;
         self.spawn_in = 0.0;
         self.metroids = [DEAD_METROID; MAX_METROIDS];
+        mask.fill(0);
+        stamp_text(mask, self.gw, self.gh, &lay);
         cells.fill(0);
-        stamp_text(cells, self.gw, self.gh, &lay);
+        let n = self.gw * self.gh;
+        cells[..n].copy_from_slice(&mask[..n]);
         self.ready = true;
+    }
+
+    /// Spontaneous births, heavily biased to the cells under the name so it
+    /// keeps ghosting back through the chaos. Each hit lands a small cluster
+    /// rather than a lone cell, which would die before ever being drawn.
+    fn ambient_births(&mut self, cells: &mut [u8], mask: &[u8]) {
+        let n = self.gw * self.gh;
+        for _ in 0..16 {
+            let i = self.rand() as usize % n;
+            let chance = if mask[i] > 0 { 256 } else { 3 }; // per 256
+            if (self.rand() & 0xff) as usize >= chance {
+                continue;
+            }
+            for _ in 0..4 {
+                let cx = i % self.gw + self.rand() as usize % 3;
+                let cy = i / self.gw + self.rand() as usize % 3;
+                if cx < self.gw && cy < self.gh {
+                    let c = &mut cells[cy * self.gw + cx];
+                    *c = (*c).max(1);
+                }
+            }
+        }
     }
 
     /// Spawn timer + integration + cell trail for the meteor streaks. They
@@ -466,9 +500,10 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     let sim = unsafe { &mut *addr_of_mut!(SIM) };
     let cells: &mut [u8] = unsafe { &mut *addr_of_mut!(CELLS) };
     let next: &mut [u8] = unsafe { &mut *addr_of_mut!(NEXT) };
+    let mask: &mut [u8] = unsafe { &mut *addr_of_mut!(TEXT_MASK) };
 
     if !sim.ready || sim.w != width || sim.h != height {
-        sim.init(width, height, cells);
+        sim.init(width, height, cells, mask);
     }
     sim.t += dt;
 
@@ -492,6 +527,7 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
         } else {
             step_life(cells, next, gw, gh);
             cells[..n_cells].copy_from_slice(&next[..n_cells]);
+            sim.ambient_births(cells, mask);
         }
     }
 
@@ -591,12 +627,12 @@ mod tests {
             let gh = grid_dim(h, lay.pitch);
             assert!(lay.scale >= 1, "{w}x{h} got scale 0");
             let max_chars = lay.lines.iter().map(|l| l.len()).max().unwrap();
-            assert!(max_chars * 8 * lay.scale <= gw, "{w}x{h} overflows width");
+            assert!(max_chars * GLYPH_W * lay.scale <= gw, "{w}x{h} overflows width");
             assert!(block_height(lay.lines.len(), lay.scale) <= gh, "{w}x{h} overflows height");
         }
-        // Desktop should render the name big: stacked words at a multi-cell scale.
+        // Desktop should render the name big: letters at least 32 cells tall.
         let lay = plan_layout(1920, 1080);
-        assert!(lay.scale >= 2, "desktop scale too small: {}", lay.scale);
+        assert!(GLYPH_H * lay.scale >= 32, "desktop letters too small");
     }
 
     #[test]
@@ -633,7 +669,7 @@ mod tests {
         let max_y = alive.iter().map(|&(_, y)| y).max().unwrap();
         assert!(max_x < gw && max_y < gh);
         // Margins on opposite sides should be within one glyph advance.
-        let advance = 8 * lay.scale;
+        let advance = GLYPH_W * lay.scale;
         assert!(min_x.abs_diff(gw - 1 - max_x) <= advance);
         assert!(min_y.abs_diff(gh - 1 - max_y) <= advance);
     }
