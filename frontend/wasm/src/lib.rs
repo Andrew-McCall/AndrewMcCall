@@ -10,6 +10,7 @@
 //!   * `seed(s)`                -> seed the PRNG (call once with e.g. Date.now())
 //!   * `paint(x0,y0,x1,y1,a)`   -> stroke a line of births (a != 0) or kills (a == 0)
 //!   * `hold(x,y,mode)`         -> mouse-hold point; 1 heals alpha, 2 erodes, 0 clears
+//!   * `fade(d)`                -> shift every tile's alpha by d (scroll wheel)
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -784,6 +785,31 @@ pub extern "C" fn hold(x: f32, y: f32, mode: u32) {
     sim.hold_mode = mode;
 }
 
+/// Shift every tile's alpha by `d`, clamped at both ends: positive restores
+/// opacity, negative erodes it.
+fn fade_tiles(tile_a: &mut [u8], d: i32) {
+    let step = d.unsigned_abs().min(255) as u8;
+    for a in tile_a.iter_mut() {
+        *a = if d >= 0 {
+            a.saturating_add(step)
+        } else {
+            a.saturating_sub(step)
+        };
+    }
+}
+
+/// Board-wide alpha shift driven by page scrolling: JS converts wheel travel
+/// into `d` (positive = restore, negative = erode).
+#[no_mangle]
+pub extern "C" fn fade(d: i32) {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    if !sim.ready {
+        return;
+    }
+    let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
+    fade_tiles(&mut tile_a[..sim.gw * sim.gh], d);
+}
+
 /// Stroke between two framebuffer-pixel points, so JS can join successive
 /// pointer events into one continuous line. `alive != 0` births cells under
 /// the stroke; `0` kills them. `radius` is the brush half-width in cells
@@ -1088,6 +1114,15 @@ mod tests {
         cells[4] = 0;
         decay_tiles(&cells, &mut tile_a, gw, gh);
         assert_eq!(tile_a[4], 0);
+    }
+
+    #[test]
+    fn fade_tiles_shifts_and_clamps() {
+        let mut tile_a = vec![0u8, 100, 250];
+        fade_tiles(&mut tile_a, 10);
+        assert_eq!(tile_a, vec![10, 110, 255]);
+        fade_tiles(&mut tile_a, -15);
+        assert_eq!(tile_a, vec![0, 95, 240]);
     }
 
     #[test]

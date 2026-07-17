@@ -1,6 +1,6 @@
 // The front page: home content rendered beneath the eroding Game of Life
-// canvas. The first viewport is left to the canvas name; scrolling (or eroded
-// ground) reveals the profile, GitHub activity, pinned projects and posts.
+// canvas. Posts sit in the first viewport so erosion reveals them without
+// scrolling; the profile, GitHub activity and pinned projects follow.
 
 import secret_canvas from "./secret_canvas";
 import { api, esc, fmtDate } from "./helpers";
@@ -47,7 +47,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
       ${
         profile.profile_image_url
           ? `<img src="${esc(profile.profile_image_url)}" alt="Andrew McCall"
-               class="w-28 h-28 border border-green-900 object-cover" />`
+               class="w-28 h-28 border border-green-900 object-cover duotone-green" />`
           : ""
       }
       <div class="flex-1 flex flex-col gap-3 text-stone-300">
@@ -113,9 +113,6 @@ const renderHome = (root: HTMLElement, home: Home) => {
     .join("");
 
   root.innerHTML = `
-    ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
-    ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
-    ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}
     ${
       posts.length > 0
         ? section(
@@ -124,7 +121,10 @@ const renderHome = (root: HTMLElement, home: Home) => {
              <a href="/posts" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm">all posts →</a>`,
           )
         : ""
-    }`;
+    }
+    ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
+    ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
+    ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}`;
 
   for (const row of root.querySelectorAll<HTMLTableRowElement>("tr[data-url]")) {
     row.onclick = () => window.open(row.dataset.url, "_blank", "noopener");
@@ -133,10 +133,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-    <div class="min-h-dvh flex flex-col items-center justify-end pb-8">
-      <span class="text-green-900 text-2xl animate-bounce select-none">↓</span>
-    </div>
-    <main id="home-content" class="text-green-500 pb-16 select-text"></main>`;
+    <main id="home-content" class="text-green-500 pt-6 pb-16 select-text"></main>`;
 
   secret_canvas();
 

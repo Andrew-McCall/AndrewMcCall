@@ -25,6 +25,7 @@ interface GameWasm {
     radius: number,
   ) => void;
   hold: (x: number, y: number, mode: number) => void;
+  fade: (d: number) => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -93,17 +94,37 @@ export default () => {
     return pixels[(py * w + px) * 4 + 3];
   };
 
-  // Hand a click on see-through ground to the revealed element beneath.
-  const forwardClick = (ev: MouseEvent): boolean => {
+  // The page element visible beneath the overlay at a client position.
+  const elementBeneath = (ev: { clientX: number; clientY: number }) => {
     overlay.style.pointerEvents = "none";
     const el = document.elementFromPoint(ev.clientX, ev.clientY);
     overlay.style.pointerEvents = "";
-    const target = el?.closest("a, button");
+    return el;
+  };
+
+  // Hand a click on see-through ground to the revealed element beneath.
+  const forwardClick = (ev: MouseEvent): boolean => {
+    const target = elementBeneath(ev)?.closest("a, button");
     if (target instanceof HTMLElement) {
       target.click();
       return true;
     }
     return false;
+  };
+
+  // The overlay eats CSS :hover, so mirror it for the duotone profile image
+  // when the pointer rests on see-through ground above it.
+  let hovered: Element | null = null;
+  const syncHover = (ev: { clientX: number; clientY: number } | null) => {
+    const img =
+      ev && !stroke && alphaAt(ev) < CLICK_THROUGH_ALPHA
+        ? (elementBeneath(ev)?.closest(".duotone-green") ?? null)
+        : null;
+    if (img !== hovered) {
+      hovered?.classList.remove("duotone-hover");
+      img?.classList.add("duotone-hover");
+      hovered = img;
+    }
   };
 
   overlay.addEventListener("contextmenu", (ev) => ev.preventDefault());
@@ -128,6 +149,7 @@ export default () => {
   });
 
   overlay.addEventListener("pointermove", (ev) => {
+    syncHover(ev);
     if (!stroke || ev.pointerId !== stroke.id) return;
     if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 4) dragged = true;
     const points = ev.getCoalescedEvents?.() ?? [];
@@ -155,6 +177,31 @@ export default () => {
   };
   overlay.addEventListener("pointerup", endStroke);
   overlay.addEventListener("pointercancel", endStroke);
+  overlay.addEventListener("pointerleave", () => syncHover(null));
+
+  // Wheel fades the whole board instead of scrolling: up restores 10 alpha
+  // per page of travel, down erodes 5. Fractional pages accumulate.
+  let fadeAcc = 0;
+  overlay.addEventListener(
+    "wheel",
+    (ev) => {
+      ev.preventDefault();
+      const pageH = Math.max(window.innerHeight, 1);
+      const px =
+        ev.deltaMode === 2
+          ? ev.deltaY * pageH
+          : ev.deltaMode === 1
+            ? ev.deltaY * 40
+            : ev.deltaY;
+      fadeAcc += (-px / pageH) * (px < 0 ? 10 : 5);
+      const d = Math.trunc(fadeAcc);
+      if (d !== 0) {
+        fadeAcc -= d;
+        game?.fade?.(d);
+      }
+    },
+    { passive: false },
+  );
 
   overlay.addEventListener("click", (ev) => {
     if (dragged) return;
@@ -172,6 +219,12 @@ export default () => {
     }
     secret_counter -= 1;
   });
+
+  // Scroll is repurposed for fading while the game is up, so hide the bar.
+  const scrollbarHide = document.createElement("style");
+  scrollbarHide.textContent =
+    "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}";
+  document.head.appendChild(scrollbarHide);
 
   document.body.appendChild(overlay);
 
@@ -199,9 +252,11 @@ export default () => {
 
   teardown = () => {
     running = false;
+    syncHover(null);
     cancelAnimationFrame(raf);
     window.removeEventListener("resize", resize);
     window.removeEventListener("keydown", onKey);
+    scrollbarHide.remove();
     overlay.remove();
   };
 
