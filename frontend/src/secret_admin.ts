@@ -59,6 +59,9 @@ export default async (app: HTMLElement, me: Me) => {
     </a>
     <div class="flex items-center gap-4 text-sm text-green-700">
       <a href="/secret/admin/visits" class="hover:text-green-400">visits</a>
+      <a href="/secret/admin/posts" class="hover:text-green-400">posts</a>
+      <a href="/secret/admin/projects" class="hover:text-green-400">projects</a>
+      <a href="/secret/admin/profile" class="hover:text-green-400">profile</a>
       <span>signed in as <span class="text-green-400">${esc(me.name)}</span></span>
       <button id="logout" class="hover:text-green-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
     </div>

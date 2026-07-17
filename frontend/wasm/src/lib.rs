@@ -17,8 +17,8 @@
 //! Every tile carries an alpha that live cells erode one step per generation
 //! (opaque to fully transparent in 255 generations); once a neighbourhood has
 //! faded, its grid lines fade with it and the page rendered beneath the canvas
-//! shows through. Holding the left button heals the alpha around the cursor,
-//! the right button erodes it. Once a tile and 3 of its neighbours are wholly
+//! shows through. Holding the left button erodes the alpha around the cursor,
+//! the right button repairs it. Once a tile and 3 of its neighbours are wholly
 //! transparent, the cell there is treated as alive every generation —
 //! invisible, but feeding the life rule at the erosion frontier — until the
 //! ground under it is healed back.
@@ -77,9 +77,10 @@ const MAX_METROIDS: usize = 4;
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
 const DECAY: u8 = 2;
-/// Alpha a mouse hold adds (left) or removes (right) per generation at the
-/// brush centre.
-const HOLD_STEP: u8 = 48;
+/// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
+/// brush centre; erasing bites harder than repairing restores.
+const HOLD_HEAL: u8 = 48;
+const HOLD_ERODE: u8 = 96;
 /// Brush radius in tiles; strength falls off non-linearly to ~0 at the rim.
 const HOLD_R: i32 = 3;
 
@@ -427,10 +428,11 @@ fn mark_perma(tile_a: &[u8], perma: &mut [u8], gw: usize, gh: usize) {
 }
 
 /// Adjust alpha in a disc of radius HOLD_R around (cx, cy). `heal` restores
-/// toward opaque, otherwise erodes. Strength peaks at HOLD_STEP under the
-/// cursor and drops off quadratically in distance², so a hold sinks a smooth
-/// crater rather than punching a flat-sided hole.
+/// toward opaque, otherwise erodes. Strength peaks under the cursor and drops
+/// off quadratically in distance², so a hold sinks a smooth crater rather
+/// than punching a flat-sided hole.
 fn hold_brush(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: bool) {
+    let peak = if heal { HOLD_HEAL } else { HOLD_ERODE };
     let r2 = HOLD_R * HOLD_R;
     for dy in -HOLD_R..=HOLD_R {
         for dx in -HOLD_R..=HOLD_R {
@@ -441,7 +443,7 @@ fn hold_brush(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: b
             }
             let f = (r2 + 1 - d2) as u32;
             let step =
-                ((HOLD_STEP as u32 * f * f) / ((r2 + 1) * (r2 + 1)) as u32).max(1) as u8;
+                ((peak as u32 * f * f) / ((r2 + 1) * (r2 + 1)) as u32).max(1) as u8;
             let a = &mut tile_a[y as usize * gw + x as usize];
             *a = if heal {
                 a.saturating_add(step)
@@ -487,7 +489,7 @@ struct Sim {
     metroids: [Metroid; MAX_METROIDS],
     hold_x: f32,
     hold_y: f32,
-    /// 0 = none, 1 = left button (heal), 2 = right button (erode).
+    /// 0 = none, 1 = right button (heal), 2 = left button (erode).
     hold_mode: u32,
 }
 
@@ -695,7 +697,7 @@ pub extern "C" fn seed(s: u32) {
 }
 
 /// Report the mouse-hold point in framebuffer pixels. `mode` 1 heals tile
-/// alpha (left button), 2 erodes it (right button), 0 clears the hold. The
+/// alpha (right button), 2 erodes it (left button), 0 clears the hold. The
 /// effect is applied once per generation while the hold is active.
 #[no_mangle]
 pub extern "C" fn hold(x: f32, y: f32, mode: u32) {
@@ -1025,12 +1027,15 @@ mod tests {
         let at = |t: &[u8], x: usize, y: usize| t[y * gw + x];
         // Full strength under the cursor, fading with distance out to HOLD_R;
         // beyond the rim nothing changes.
-        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_STEP);
+        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_HEAL);
         let ring: Vec<u8> = (4..=8).map(|x| at(&tile_a, x, 4)).collect();
         assert!(ring.windows(2).all(|w| w[0] > w[1]), "falloff monotonic");
         assert_eq!(ring[4], 100, "tile beyond radius untouched");
         // Non-linear: the drop from centre to 1 out is gentler than 1 to 2.
         assert!(ring[0] - ring[1] < ring[1] - ring[2]);
+        // Erasing bites harder than repairing: one erode outweighs one heal.
+        hold_brush(&mut tile_a, gw, gh, 4, 4, false);
+        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_HEAL - HOLD_ERODE);
         // Erode undoes the heal and saturates at fully transparent.
         for _ in 0..20 {
             hold_brush(&mut tile_a, gw, gh, 4, 4, false);

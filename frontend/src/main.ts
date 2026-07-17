@@ -1,7 +1,12 @@
 import secret_index from "./secret_index.ts";
 import secret_morse, { disposeMorse } from "./secret_morse.ts";
 import secret_pi, { disposePi } from "./secret_pi.ts";
-import secret_canvas, { hideGame } from "./secret_canvas.ts";
+import { hideGame } from "./secret_canvas.ts";
+import home from "./home.ts";
+import { postsList, postPage } from "./posts.ts";
+import secret_admin_posts from "./secret_admin_posts.ts";
+import secret_admin_projects from "./secret_admin_projects.ts";
+import secret_admin_profile from "./secret_admin_profile.ts";
 import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
@@ -40,7 +45,8 @@ interface Route {
 }
 
 const routes: Record<string, Route> = {
-  "/": { auth: "public", render: (app) => secret_canvas(app) },
+  "/": { auth: "public", render: (app) => home(app) },
+  "/posts": { auth: "public", render: (app) => postsList(app) },
   "/secret": { auth: "public", render: (app) => secret_index(app) },
   "/secret/pi": { auth: "public", render: (app) => secret_pi(app) },
   "/secret/morse": { auth: "public", render: (app) => secret_morse(app) },
@@ -58,7 +64,19 @@ const routes: Record<string, Route> = {
   "/secret/notes": { auth: "user", render: (app) => secret_notes(app) },
   "/secret/admin": { auth: "admin", render: (app, me) => secret_admin(app, me!) },
   "/secret/admin/visits": { auth: "admin", render: (app) => secret_admin_visits(app) },
+  "/secret/admin/posts": { auth: "admin", render: (app) => secret_admin_posts(app) },
+  "/secret/admin/projects": { auth: "admin", render: (app) => secret_admin_projects(app) },
+  "/secret/admin/profile": { auth: "admin", render: (app) => secret_admin_profile(app) },
 };
+
+// Routes with a path parameter, matched by prefix after the exact table misses.
+const prefixRoutes: {
+  prefix: string;
+  auth: Auth;
+  render: (app: HTMLElement, param: string, me: Me | null) => void | Promise<void>;
+}[] = [
+  { prefix: "/posts/", auth: "public", render: (app, slug) => postPage(app, slug) },
+];
 
 async function renderPage(): Promise<void> {
   if (!app) {
@@ -92,9 +110,16 @@ async function renderPage(): Promise<void> {
 
   const route = routes[page];
   if (!route) {
+    const prefixed = prefixRoutes.find(
+      (r) => page.startsWith(r.prefix) && page.length > r.prefix.length,
+    );
+    if (prefixed) {
+      // Only public prefix routes exist today, so no session gate here.
+      return prefixed.render(app, page.slice(prefixed.prefix.length), null);
+    }
     // 404 — send them home and render it.
     window.history.pushState({}, "", "/");
-    return secret_canvas(app);
+    return home(app);
   }
 
   // Middleware gate: resolve the session for protected routes and bounce anyone

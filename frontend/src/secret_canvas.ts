@@ -3,8 +3,10 @@
 // (or Escape) leads to /secret.
 //
 // Live cells erode their tile's alpha over time, dissolving the board into
-// the page rendered beneath the canvas. Holding left heals the ground under
-// the cursor, holding right erodes it.
+// the home page rendered beneath the canvas. Holding left erodes the ground
+// under the cursor, holding right repairs it. The overlay is fixed over the
+// whole viewport while the page scrolls beneath it; a click landing on a
+// see-through pixel is forwarded to whatever link or button it revealed.
 
 import { float_alert } from "./float_alert";
 
@@ -32,6 +34,9 @@ const MAX_H = 1080;
 const DRAW_RADIUS = 1;
 const ERASE_RADIUS = 2;
 
+// Framebuffer alpha below which a click falls through to the page beneath.
+const CLICK_THROUGH_ALPHA = 64;
+
 let teardown: (() => void) | null = null;
 let secret_counter = 10;
 
@@ -51,30 +56,7 @@ export function hideGame(): void {
   teardown = null;
 }
 
-// Placeholder content the eroding canvas reveals — swap for real posts / CV.
-const LOREM =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod " +
-  "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim " +
-  "veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea " +
-  "commodo consequat.";
-
-function renderCards(app: HTMLElement): void {
-  app.innerHTML = `
-    <main class="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-16 text-stone-300">
-      ${[1, 2, 3]
-        .map(
-          (i) => `
-      <article class="rounded-lg border border-stone-800 bg-stone-900 p-6">
-        <h2 class="mb-2 text-lg font-bold text-lime-300">Post ${i}</h2>
-        <p class="text-sm leading-relaxed">${LOREM}</p>
-      </article>`,
-        )
-        .join("")}
-    </main>`;
-}
-
-export default (app: HTMLElement) => {
-  renderCards(app);
+export default () => {
   if (teardown) return;
 
   const overlay = document.createElement("div");
@@ -82,11 +64,14 @@ export default (app: HTMLElement) => {
     "position:fixed;inset:0;z-index:50;background:#0c0a09;overflow:hidden";
 
   const canvas = document.createElement("canvas");
+  // pan-y keeps vertical touch swipes scrolling the page beneath; horizontal
+  // strokes still draw.
   canvas.style.cssText =
-    "width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none";
+    "width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
   let game: GameWasm | null = null;
+  let framePtr = 0;
   let stroke: { id: number; alive: number; x: number; y: number } | null = null;
   let downX = 0;
   let downY = 0;
@@ -96,6 +81,30 @@ export default (app: HTMLElement) => {
     x: (ev.clientX * canvas.width) / Math.max(canvas.clientWidth, 1),
     y: (ev.clientY * canvas.height) / Math.max(canvas.clientHeight, 1),
   });
+
+  // Alpha of the last rendered frame at a client position; opaque if unknown.
+  const alphaAt = (ev: { clientX: number; clientY: number }): number => {
+    if (!game || framePtr === 0 || w === 0 || h === 0) return 255;
+    const { x, y } = toFb(ev);
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= w || py >= h) return 255;
+    const pixels = new Uint8ClampedArray(game.memory.buffer, framePtr, w * h * 4);
+    return pixels[(py * w + px) * 4 + 3];
+  };
+
+  // Hand a click on see-through ground to the revealed element beneath.
+  const forwardClick = (ev: MouseEvent): boolean => {
+    overlay.style.pointerEvents = "none";
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    overlay.style.pointerEvents = "";
+    const target = el?.closest("a, button");
+    if (target instanceof HTMLElement) {
+      target.click();
+      return true;
+    }
+    return false;
+  };
 
   overlay.addEventListener("contextmenu", (ev) => ev.preventDefault());
 
@@ -115,7 +124,7 @@ export default (app: HTMLElement) => {
       stroke.alive,
       stroke.alive ? DRAW_RADIUS : ERASE_RADIUS,
     );
-    game?.hold?.(x, y, stroke.alive ? 1 : 2);
+    game?.hold?.(x, y, stroke.alive ? 2 : 1);
   });
 
   overlay.addEventListener("pointermove", (ev) => {
@@ -135,7 +144,7 @@ export default (app: HTMLElement) => {
       stroke.x = x;
       stroke.y = y;
     }
-    game?.hold?.(stroke.x, stroke.y, stroke.alive ? 1 : 2);
+    game?.hold?.(stroke.x, stroke.y, stroke.alive ? 2 : 1);
   });
 
   const endStroke = (ev: PointerEvent) => {
@@ -149,6 +158,7 @@ export default (app: HTMLElement) => {
 
   overlay.addEventListener("click", (ev) => {
     if (dragged) return;
+    if (alphaAt(ev) < CLICK_THROUGH_ALPHA && forwardClick(ev)) return;
     if (secret_counter < 6) {
       if (secret_counter < 1) return window.navigate("/secret");
       float_alert(
@@ -205,7 +215,7 @@ export default (app: HTMLElement) => {
       game = wasm;
       wasm.seed?.(Date.now() >>> 0);
       wasm.reset();
-      const ptr = wasm.frame_ptr();
+      framePtr = wasm.frame_ptr();
       let last = performance.now();
       let revealed = false;
 
@@ -217,13 +227,13 @@ export default (app: HTMLElement) => {
           wasm.tick(w, h, dt);
           const pixels = new Uint8ClampedArray(
             wasm.memory.buffer,
-            ptr,
+            framePtr,
             w * h * 4,
           );
           ctx.putImageData(new ImageData(pixels, w, h), 0, 0);
           if (!revealed) {
             // The canvas now covers the viewport, so drop the overlay's
-            // backdrop: framebuffer transparency reveals the cards beneath.
+            // backdrop: framebuffer transparency reveals the page beneath.
             revealed = true;
             overlay.style.background = "transparent";
           }
