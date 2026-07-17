@@ -53,8 +53,28 @@ fn clean_url(raw: &str) -> Result<Option<String>, ApiError> {
 }
 
 /// Validates a GitHub `owner/name` repo reference; empty becomes `None`.
+/// Forgiving about pasted URLs: strips a github.com prefix (https/ssh) and a
+/// trailing `.git` or `/` before validating.
 fn clean_repo(raw: &str) -> Result<Option<String>, ApiError> {
-    let repo = raw.trim();
+    let mut repo = raw.trim();
+    for prefix in [
+        "https://github.com/",
+        "http://github.com/",
+        "https://www.github.com/",
+        "http://www.github.com/",
+        "www.github.com/",
+        "github.com/",
+        "git@github.com:",
+    ] {
+        if let Some(rest) = repo.strip_prefix(prefix) {
+            repo = rest;
+            break;
+        }
+    }
+    repo = repo
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .trim_end_matches('/');
     if repo.is_empty() {
         return Ok(None);
     }
@@ -546,8 +566,27 @@ mod tests {
             clean_repo("Andrew-McCall/AndrewMcCall").unwrap().as_deref(),
             Some("Andrew-McCall/AndrewMcCall")
         );
+        assert_eq!(
+            clean_repo("https://github.com/Andrew-McCall/AndrewMcCall")
+                .unwrap()
+                .as_deref(),
+            Some("Andrew-McCall/AndrewMcCall")
+        );
+        assert_eq!(
+            clean_repo("git@github.com:Andrew-McCall/AndrewMcCall.git")
+                .unwrap()
+                .as_deref(),
+            Some("Andrew-McCall/AndrewMcCall")
+        );
+        assert_eq!(
+            clean_repo("github.com/Andrew-McCall/AndrewMcCall/")
+                .unwrap()
+                .as_deref(),
+            Some("Andrew-McCall/AndrewMcCall")
+        );
         assert_eq!(clean_repo("").unwrap(), None);
         assert!(clean_repo("no-slash").is_err());
+        assert!(clean_repo("https://gitlab.com/owner/name").is_err());
         assert!(clean_repo("bad/na me").is_err());
         assert!(clean_repo("/name").is_err());
     }

@@ -76,7 +76,7 @@ const MAX_METROIDS: usize = 4;
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 = 2;
+const DECAY: u8 = 3;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
@@ -91,7 +91,7 @@ const MARGIN_FRAC: usize = 20;
 /// quadratically to ~0 at the band's inner line. Beats even 3x interior
 /// decay right at the edge but loses to it midway in, so the erosion
 /// frontier never settles there — it keeps wiggling inside the band.
-const MARGIN_HEAL: u8 = 8;
+const MARGIN_HEAL: u8 = 12;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
