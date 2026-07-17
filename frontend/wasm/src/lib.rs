@@ -84,6 +84,15 @@ const HOLD_ERODE: u8 = 96;
 /// Brush radius in tiles; strength falls off non-linearly to ~0 at the rim.
 const HOLD_R: i32 = 3;
 
+/// The outer 1/20th (5%) of the grid on every side self-heals each
+/// generation.
+const MARGIN_FRAC: usize = 20;
+/// Alpha the margin regains per generation at the very border, fading
+/// quadratically to ~0 at the band's inner line. Beats even 3x interior
+/// decay right at the edge but loses to it midway in, so the erosion
+/// frontier never settles there — it keeps wiggling inside the band.
+const MARGIN_HEAL: u8 = 8;
+
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
 
@@ -392,6 +401,25 @@ fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize) {
             }
             let d = DECAY as u32 + (DECAY as u32 * 2 * n * n) / 64;
             tile_a[i] = tile_a[i].saturating_sub(d as u8);
+        }
+    }
+}
+
+/// Regrow alpha in the outer margin of the grid. Heal strength ramps
+/// quadratically from ~0 at the band's inner edge to MARGIN_HEAL at the
+/// border, so the screen edge always wins back opacity while the band's
+/// inner half stays contested by decay.
+fn heal_margin(tile_a: &mut [u8], gw: usize, gh: usize) {
+    let m = (gw.min(gh) / MARGIN_FRAC).max(1);
+    for y in 0..gh {
+        for x in 0..gw {
+            let d = x.min(y).min(gw - 1 - x).min(gh - 1 - y);
+            if d >= m {
+                continue;
+            }
+            let f = (m - d) as u32;
+            let heal = ((MARGIN_HEAL as u32 * f * f) / (m * m) as u32).max(1) as u8;
+            tile_a[y * gw + x] = tile_a[y * gw + x].saturating_add(heal);
         }
     }
 }
@@ -770,6 +798,7 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             sim.ambient_births(cells, mask);
         }
         decay_tiles(cells, tile_a, gw, gh);
+        heal_margin(tile_a, gw, gh);
         if sim.hold_mode != 0 {
             // Same floor-via-offset trick as paint_line for cursor positions
             // left/above the grid.
@@ -980,6 +1009,21 @@ mod tests {
         cells[4] = 0;
         decay_tiles(&cells, &mut tile_a, gw, gh);
         assert_eq!(tile_a[4], 0);
+    }
+
+    #[test]
+    fn margin_heals_strongest_at_border() {
+        let (gw, gh) = (40, 40);
+        let mut tile_a = vec![100u8; gw * gh];
+        heal_margin(&mut tile_a, gw, gh);
+        // m = 40/20 = 2: the border row gains full MARGIN_HEAL, one row in a
+        // quarter of it, two rows in nothing.
+        assert_eq!(tile_a[20], 100 + MARGIN_HEAL);
+        assert_eq!(tile_a[gw + 20], 100 + MARGIN_HEAL / 4);
+        assert_eq!(tile_a[2 * gw + 20], 100, "inside the band untouched");
+        // The very border must out-heal even 3x interior decay so the screen
+        // edge never dissolves for good.
+        assert!(MARGIN_HEAL > 3 * DECAY);
     }
 
     #[test]
