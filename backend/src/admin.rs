@@ -17,7 +17,7 @@ use crate::response::{self, ApiError, Body, ResponseBuilder};
 /// Authenticates the request and requires the `admin` role. A valid non-admin
 /// token is [`ApiError::Forbidden`]; a missing/invalid token is
 /// [`ApiError::Unauthorized`] (propagated from [`auth::authenticate`]).
-async fn require_admin(
+pub async fn require_admin(
     req: &Request<hyper::body::Incoming>,
     peer: SocketAddr,
     config: &ApiConfig,

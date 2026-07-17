@@ -3,11 +3,15 @@ mod auth;
 mod config;
 mod countries;
 mod database;
+mod github;
+mod http_client;
 mod ip;
 mod logs;
 mod notes;
 mod password;
+mod posts;
 mod response;
+mod site;
 mod stats;
 
 use config::{ApiConfig, SharedConfig};
@@ -96,6 +100,51 @@ async fn route(
             let id = path["/admin/users/".len()..].to_string();
             if req.method() == Method::DELETE {
                 admin::delete_user(req, peer, &config, &id).await
+            } else {
+                ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+            }
+        }
+        "/home" if req.method() == Method::GET => site::home(&config).await,
+        "/home" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/posts" if req.method() == Method::GET => posts::list_published(&config).await,
+        "/posts" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/admin/posts" if req.method() == Method::GET => posts::admin_list(req, peer, &config).await,
+        "/admin/posts" if req.method() == Method::POST => posts::create(req, peer, &config).await,
+        "/admin/posts" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/admin/projects" if req.method() == Method::GET => {
+            site::list_projects(req, peer, &config).await
+        }
+        "/admin/projects" if req.method() == Method::POST => {
+            site::create_project(req, peer, &config).await
+        }
+        "/admin/projects" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        "/admin/profile" if req.method() == Method::GET => {
+            site::get_profile(req, peer, &config).await
+        }
+        "/admin/profile" if req.method() == Method::PUT => {
+            site::update_profile(req, peer, &config).await
+        }
+        "/admin/profile" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+        _ if path.starts_with("/admin/posts/") => {
+            let id = path["/admin/posts/".len()..].to_string();
+            match *req.method() {
+                Method::PUT => posts::update(req, peer, &config, &id).await,
+                Method::DELETE => posts::delete(req, peer, &config, &id).await,
+                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            }
+        }
+        _ if path.starts_with("/admin/projects/") => {
+            let id = path["/admin/projects/".len()..].to_string();
+            match *req.method() {
+                Method::PUT => site::update_project(req, peer, &config, &id).await,
+                Method::DELETE => site::delete_project(req, peer, &config, &id).await,
+                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            }
+        }
+        _ if path.starts_with("/posts/") => {
+            let slug = path["/posts/".len()..].to_string();
+            if req.method() == Method::GET {
+                posts::get_by_slug(&config, &slug).await
             } else {
                 ResponseBuilder::from(ApiError::MethodNotAllowed).into()
             }
@@ -197,6 +246,8 @@ fn main() {
             .expect("failed to apply database migrations");
 
         ensure_admin(&config).await;
+
+        github::spawn_sync(Arc::clone(&config));
 
         loop {
             let (stream, peer) = match listener.accept().await {

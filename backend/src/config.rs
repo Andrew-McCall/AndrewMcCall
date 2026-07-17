@@ -15,6 +15,14 @@ pub struct ApiConfig {
     pub admin_name: Option<String>,
     /// The plaintext PIN for the bootstrap admin (hashed before storage).
     pub admin_pin: Option<String>,
+    /// The GitHub account whose public push events feed the commits cache.
+    /// Unset disables the sync entirely.
+    pub github_username: Option<String>,
+    /// Optional GitHub token; raises the API rate limit but isn't required for
+    /// the one conditional request per interval.
+    pub github_token: Option<String>,
+    /// Minutes between GitHub sync fetches.
+    pub github_sync_minutes: u64,
 }
 
 pub type SharedConfig = std::sync::Arc<ApiConfig>;
@@ -33,6 +41,12 @@ impl ApiConfig {
                 .unwrap_or(true),
             admin_name: non_empty_env("ADMIN_NAME"),
             admin_pin: non_empty_env("ADMIN_PIN"),
+            github_username: non_empty_env("GITHUB_USERNAME"),
+            github_token: non_empty_env("GITHUB_TOKEN"),
+            github_sync_minutes: std::env::var("GITHUB_SYNC_MINUTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
         }
     }
 }

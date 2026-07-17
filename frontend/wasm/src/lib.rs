@@ -73,12 +73,15 @@ const SPAWN_START: f32 = 2.0;
 const STEP_DT: f32 = 1.0 / 12.0;
 const MAX_METROIDS: usize = 4;
 
-/// Alpha a live cell's tile loses per generation: 255 generations from
-/// opaque to fully transparent.
+/// Base alpha a live cell's tile loses per generation. Interior cells —
+/// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
+/// colony edges dissolve at the base rate while their cores burn through.
 const DECAY: u8 = 2;
-/// Alpha a mouse hold adds (left) or removes (right) per generation on the
-/// held tile and its 4 orthogonal neighbours.
-const HOLD_STEP: u8 = 20;
+/// Alpha a mouse hold adds (left) or removes (right) per generation at the
+/// brush centre.
+const HOLD_STEP: u8 = 48;
+/// Brush radius in tiles; strength falls off non-linearly to ~0 at the rim.
+const HOLD_R: i32 = 3;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
@@ -367,12 +370,27 @@ fn paint_line(
     }
 }
 
-/// Every tile under a live cell erodes a little each generation; dead tiles
-/// keep whatever alpha they last had.
-fn decay_tiles(cells: &[u8], tile_a: &mut [u8], n: usize) {
-    for i in 0..n {
-        if cells[i] > 0 {
-            tile_a[i] = tile_a[i].saturating_sub(DECAY);
+/// Every tile under a live cell erodes each generation; dead tiles keep
+/// whatever alpha they last had. Erosion scales with how buried the cell is:
+/// 1x at the colony edge up to 3x when all 8 neighbours are alive, ramped
+/// quadratically so the speed-up only kicks in well inside the frontier.
+fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize) {
+    for y in 0..gh {
+        for x in 0..gw {
+            let i = y * gw + x;
+            if cells[i] == 0 {
+                continue;
+            }
+            let mut n = 0u32;
+            for ny in y.saturating_sub(1)..=(y + 1).min(gh - 1) {
+                for nx in x.saturating_sub(1)..=(x + 1).min(gw - 1) {
+                    if (nx != x || ny != y) && cells[ny * gw + nx] > 0 {
+                        n += 1;
+                    }
+                }
+            }
+            let d = DECAY as u32 + (DECAY as u32 * 2 * n * n) / 64;
+            tile_a[i] = tile_a[i].saturating_sub(d as u8);
         }
     }
 }
@@ -408,17 +426,27 @@ fn mark_perma(tile_a: &[u8], perma: &mut [u8], gw: usize, gh: usize) {
     }
 }
 
-/// Adjust alpha on the plus of 5 tiles around (cx, cy): the held tile and its
-/// orthogonal neighbours. `heal` restores toward opaque, otherwise erodes.
-fn hold_plus(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: bool) {
-    for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
-        let (x, y) = (cx + dx, cy + dy);
-        if x >= 0 && y >= 0 && (x as usize) < gw && (y as usize) < gh {
+/// Adjust alpha in a disc of radius HOLD_R around (cx, cy). `heal` restores
+/// toward opaque, otherwise erodes. Strength peaks at HOLD_STEP under the
+/// cursor and drops off quadratically in distance², so a hold sinks a smooth
+/// crater rather than punching a flat-sided hole.
+fn hold_brush(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: bool) {
+    let r2 = HOLD_R * HOLD_R;
+    for dy in -HOLD_R..=HOLD_R {
+        for dx in -HOLD_R..=HOLD_R {
+            let d2 = dx * dx + dy * dy;
+            let (x, y) = (cx + dx, cy + dy);
+            if d2 > r2 || x < 0 || y < 0 || x as usize >= gw || y as usize >= gh {
+                continue;
+            }
+            let f = (r2 + 1 - d2) as u32;
+            let step =
+                ((HOLD_STEP as u32 * f * f) / ((r2 + 1) * (r2 + 1)) as u32).max(1) as u8;
             let a = &mut tile_a[y as usize * gw + x as usize];
             *a = if heal {
-                a.saturating_add(HOLD_STEP)
+                a.saturating_add(step)
             } else {
-                a.saturating_sub(HOLD_STEP)
+                a.saturating_sub(step)
             };
         }
     }
@@ -739,14 +767,14 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             cells[..n_cells].copy_from_slice(&next[..n_cells]);
             sim.ambient_births(cells, mask);
         }
-        decay_tiles(cells, tile_a, n_cells);
+        decay_tiles(cells, tile_a, gw, gh);
         if sim.hold_mode != 0 {
             // Same floor-via-offset trick as paint_line for cursor positions
             // left/above the grid.
             let p = sim.pitch as f32;
             let cx = ((sim.hold_x - sim.ox as f32) / p + 4096.0) as i32 - 4096;
             let cy = ((sim.hold_y - sim.oy as f32) / p + 4096.0) as i32 - 4096;
-            hold_plus(tile_a, sim.gw, sim.gh, cx, cy, sim.hold_mode == 1);
+            hold_brush(tile_a, sim.gw, sim.gh, cx, cy, sim.hold_mode == 1);
         }
         mark_perma(tile_a, perma, gw, gh);
         for i in 0..n_cells {
@@ -936,20 +964,34 @@ mod tests {
 
     #[test]
     fn tiles_decay_only_under_live_cells() {
-        let n = 9;
-        let mut cells = vec![0u8; n];
-        let mut tile_a = vec![255u8; n];
+        let (gw, gh) = (3, 3);
+        let mut cells = vec![0u8; gw * gh];
+        let mut tile_a = vec![255u8; gw * gh];
         cells[4] = 1;
         for _ in 0..255 {
-            decay_tiles(&cells, &mut tile_a, n);
+            decay_tiles(&cells, &mut tile_a, gw, gh);
         }
         assert_eq!(tile_a[4], 0, "live tile fully transparent after 255 gens");
         assert!(tile_a.iter().enumerate().all(|(i, &a)| i == 4 || a == 255));
         // Saturates at zero and dead tiles never recover on their own.
-        decay_tiles(&cells, &mut tile_a, n);
+        decay_tiles(&cells, &mut tile_a, gw, gh);
         cells[4] = 0;
-        decay_tiles(&cells, &mut tile_a, n);
+        decay_tiles(&cells, &mut tile_a, gw, gh);
         assert_eq!(tile_a[4], 0);
+    }
+
+    #[test]
+    fn interior_tiles_decay_faster_than_edges() {
+        let (gw, gh) = (3, 3);
+        let cells = vec![1u8; gw * gh];
+        let mut tile_a = vec![255u8; gw * gh];
+        decay_tiles(&cells, &mut tile_a, gw, gh);
+        // Centre has 8 live neighbours: 3x decay. Corners (3 neighbours) stay
+        // at the base rate; the quadratic ramp rounds their bonus to zero.
+        assert_eq!(255 - tile_a[4], 3 * DECAY);
+        assert_eq!(255 - tile_a[0], DECAY);
+        // Side cells (5 neighbours) land between the two.
+        assert!(tile_a[0] > tile_a[1] && tile_a[1] > tile_a[4]);
     }
 
     #[test]
@@ -976,33 +1018,32 @@ mod tests {
     }
 
     #[test]
-    fn hold_plus_heals_erodes_and_clips() {
-        let (gw, gh) = (5, 5);
+    fn hold_brush_heals_erodes_and_clips() {
+        let (gw, gh) = (9, 9);
         let mut tile_a = vec![100u8; gw * gh];
-        hold_plus(&mut tile_a, gw, gh, 2, 2, true);
-        for (x, y, want) in [
-            (2, 2, 120),
-            (1, 2, 120),
-            (3, 2, 120),
-            (2, 1, 120),
-            (2, 3, 120),
-        ] {
-            assert_eq!(tile_a[y * gw + x], want, "plus tile ({x},{y})");
-        }
-        assert_eq!(tile_a[gw + 1], 100, "diagonal untouched");
+        hold_brush(&mut tile_a, gw, gh, 4, 4, true);
+        let at = |t: &[u8], x: usize, y: usize| t[y * gw + x];
+        // Full strength under the cursor, fading with distance out to HOLD_R;
+        // beyond the rim nothing changes.
+        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_STEP);
+        let ring: Vec<u8> = (4..=8).map(|x| at(&tile_a, x, 4)).collect();
+        assert!(ring.windows(2).all(|w| w[0] > w[1]), "falloff monotonic");
+        assert_eq!(ring[4], 100, "tile beyond radius untouched");
+        // Non-linear: the drop from centre to 1 out is gentler than 1 to 2.
+        assert!(ring[0] - ring[1] < ring[1] - ring[2]);
         // Erode undoes the heal and saturates at fully transparent.
         for _ in 0..20 {
-            hold_plus(&mut tile_a, gw, gh, 2, 2, false);
+            hold_brush(&mut tile_a, gw, gh, 4, 4, false);
         }
-        assert_eq!(tile_a[2 * gw + 2], 0);
-        // A corner hold clips its out-of-bounds neighbours; healing caps at 255.
+        assert_eq!(at(&tile_a, 4, 4), 0);
+        // A corner hold clips its out-of-bounds tiles; healing caps at 255.
         for _ in 0..20 {
-            hold_plus(&mut tile_a, gw, gh, 0, 0, true);
+            hold_brush(&mut tile_a, gw, gh, 0, 0, true);
         }
         assert_eq!(tile_a[0], 255);
-        // A hold left of the grid touches nothing and must not panic.
+        // A hold far off-grid touches nothing and must not panic.
         let before = tile_a.clone();
-        hold_plus(&mut tile_a, gw, gh, -2, -2, true);
+        hold_brush(&mut tile_a, gw, gh, -5, -5, true);
         assert_eq!(tile_a, before);
     }
 

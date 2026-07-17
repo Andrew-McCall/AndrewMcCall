@@ -209,6 +209,58 @@ pub struct RecoveryCode {
     pub used_at: Option<DateTime<Utc>>,
 }
 
+/// A blog post (`posts` table). `slug` is the public URL segment; `body` is
+/// markdown rendered client-side. Invisible to the public until `is_published`;
+/// `published_at` is set on first publish and kept stable. Soft-deleted like
+/// [`Note`].
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Post {
+    pub id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub body: String,
+    pub is_published: bool,
+    pub published_at: Option<DateTime<Utc>>,
+    pub is_deleted: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A pinned project on the home page (`projects` table). `repo` is a GitHub
+/// `owner/name`; `sort_order` ascending decides display order.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Project {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub url: Option<String>,
+    pub repo: Option<String>,
+    pub sort_order: i32,
+    pub is_deleted: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A cached GitHub commit (`github_commits` table), upserted by the background
+/// sync and pruned to the newest N.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct GithubCommit {
+    pub sha: String,
+    pub repo: String,
+    pub message: String,
+    pub url: String,
+    pub committed_at: DateTime<Utc>,
+    pub fetched_at: DateTime<Utc>,
+}
+
+/// A site-wide key/value setting (`site_settings` table).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SiteSetting {
+    pub key: String,
+    pub value: String,
+    pub updated_at: DateTime<Utc>,
+}
+
 impl std::fmt::Debug for RecoveryCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RecoveryCode")
