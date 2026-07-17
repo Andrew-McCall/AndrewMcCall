@@ -107,7 +107,7 @@ export default (app: HTMLElement) => {
   </p>
 
   <div id="vim-host"
-    class="w-full max-w-3xl mt-6 bg-stone-900 border border-green-900 focus-within:border-green-600 rounded overflow-hidden">
+    class="w-full max-w-3xl mt-6 bg-stone-900 border border-green-900 focus-within:border-green-600 overflow-hidden">
     <div id="vim-loading" class="px-4 py-16 text-center text-green-800 font-mono text-sm">
       Loading editor…
     </div>

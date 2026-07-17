@@ -25,7 +25,7 @@ export default async (app: HTMLElement) => {
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-3">
     <h2 class="text-green-600 font-mono text-sm uppercase tracking-widest">Pinned projects</h2>
     <div id="project-list" class="flex flex-col gap-4"></div>
-    <button id="add-btn" class="self-start bg-green-700 hover:bg-green-600 text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors mt-2">Add project</button>
+    <button id="add-btn" class="self-start bg-transparent border border-green-500 hover:bg-green-500/10 text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors mt-2">Add project</button>
   </div>
 </div>`;
 
@@ -40,11 +40,11 @@ export default async (app: HTMLElement) => {
     extra = "",
   ) => `
     <input data-field="${id}" type="text" placeholder="${placeholder}" value="${esc(value)}" spellcheck="false" autocomplete="off"
-      class="bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm ${extra}" />`;
+      class="bg-stone-950 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm ${extra}" />`;
 
   const card = (project: Project | null): HTMLDivElement => {
     const div = document.createElement("div");
-    div.className = "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-2";
+    div.className = "bg-stone-900 border border-green-900 p-4 flex flex-col gap-2";
     div.innerHTML = `
       <div class="flex gap-2">
         ${field("name", "name", project?.name ?? "", "flex-1")}
@@ -56,7 +56,7 @@ export default async (app: HTMLElement) => {
         ${field("repo", "owner/name", project?.repo ?? "", "flex-1")}
       </div>
       <div class="flex gap-4 text-sm">
-        <button data-action="save" class="bg-green-700 hover:bg-green-600 disabled:opacity-60 text-white font-bold px-4 py-1.5 rounded cursor-pointer transition-colors">Save</button>
+        <button data-action="save" class="bg-transparent border border-green-500 hover:bg-green-500/10 disabled:opacity-60 text-green-400 font-bold px-4 py-1.5 cursor-pointer transition-colors">Save</button>
         ${project ? `<button data-action="delete" class="text-red-500 hover:text-red-400 cursor-pointer ml-auto">delete</button>` : ""}
       </div>`;
 

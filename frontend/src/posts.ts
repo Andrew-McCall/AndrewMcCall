@@ -46,7 +46,7 @@ export const postsList = async (app: HTMLElement) => {
     container.innerHTML = posts
       .map(
         (p) => `
-        <a href="/posts/${esc(p.slug)}" class="block rounded-lg border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
+        <a href="/posts/${esc(p.slug)}" class="block border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
           <div class="flex items-baseline justify-between gap-4">
             <h2 class="text-lg font-bold text-lime-300">${esc(p.title)}</h2>
             <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>

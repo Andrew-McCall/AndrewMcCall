@@ -23,27 +23,27 @@ export default async (app: HTMLElement) => {
         Posts
       </h1>
     </a>
-    <button id="new-post" class="bg-green-700 hover:bg-green-600 text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">New post</button>
+    <button id="new-post" class="bg-transparent border border-green-500 hover:bg-green-500/10 text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors">New post</button>
   </div>
 
   <div class="w-full max-w-5xl mt-8 grid md:grid-cols-[16rem_1fr] gap-6">
     <div id="post-list" class="flex flex-col gap-1 md:border-r md:border-green-900 md:pr-4"></div>
     <div id="editor" class="hidden flex-col gap-3">
       <input id="edit-title" type="text" placeholder="title" spellcheck="false"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
       <input id="edit-slug" type="text" placeholder="slug (blank = from title)" spellcheck="false" autocomplete="off"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
       <textarea id="edit-body" rows="16" placeholder="markdown…" spellcheck="false"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-y"></textarea>
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-y"></textarea>
       <div class="flex items-center gap-4 flex-wrap">
         <label class="flex items-center gap-2 text-sm text-green-400 cursor-pointer">
           <input id="edit-published" type="checkbox" class="accent-green-600" /> published
         </label>
-        <button id="save-btn" class="bg-green-700 hover:bg-green-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">Save</button>
+        <button id="save-btn" class="bg-transparent border border-green-500 hover:bg-green-500/10 disabled:opacity-60 disabled:cursor-not-allowed text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors">Save</button>
         <button id="preview-btn" class="text-green-600 hover:text-green-400 cursor-pointer text-sm">preview</button>
         <button id="delete-btn" class="hidden text-red-500 hover:text-red-400 cursor-pointer text-sm ml-auto">delete</button>
       </div>
-      <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 rounded p-4 select-text"></div>
+      <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4 select-text"></div>
     </div>
   </div>
 </div>`;
@@ -68,7 +68,7 @@ export default async (app: HTMLElement) => {
       : `<p class="text-green-700 text-sm">no posts yet</p>`;
     for (const post of posts) {
       const btn = document.createElement("button");
-      btn.className = `text-left px-2 py-1.5 rounded cursor-pointer text-sm hover:bg-stone-900 ${
+      btn.className = `text-left px-2 py-1.5 cursor-pointer text-sm hover:bg-stone-900 ${
         current?.id === post.id ? "bg-stone-900 text-green-300" : "text-green-500"
       }`;
       btn.innerHTML = `${esc(post.title || "(untitled)")}${

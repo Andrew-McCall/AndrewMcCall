@@ -43,8 +43,8 @@ use core::ptr::addr_of_mut;
 /// Max backing resolution the framebuffer supports. It is a zero-initialised
 /// static (wasm bss), so it costs nothing in the compiled binary and lets us
 /// skip a heap allocator entirely. JS must never pass a larger `w`/`h`.
-const MAX_W: usize = 1920;
-const MAX_H: usize = 1080;
+const MAX_W: usize = 2560;
+const MAX_H: usize = 1440;
 static mut FRAME: [u8; MAX_W * MAX_H * 4] = [0; MAX_W * MAX_H * 4];
 
 /// Cell grids sized for the densest pitch the layout will ever pick.
@@ -380,6 +380,29 @@ fn paint_line(
     }
 }
 
+/// Re-shape a flat row-major grid buffer in place from (ogw, ogh) to
+/// (gw, gh). Content keeps its grid coordinates: the overlap is preserved,
+/// clipped cells drop, and newly exposed ground takes `fill`. Row 0 never
+/// moves; when rows grow they are walked bottom-up so sources aren't
+/// clobbered before they're read.
+fn remap_grid(buf: &mut [u8], ogw: usize, ogh: usize, gw: usize, gh: usize, fill: u8) {
+    let cw = ogw.min(gw);
+    let ch = ogh.min(gh);
+    if gw < ogw {
+        for y in 1..ch {
+            buf.copy_within(y * ogw..y * ogw + cw, y * gw);
+        }
+    } else if gw > ogw {
+        for y in (1..ch).rev() {
+            buf.copy_within(y * ogw..y * ogw + cw, y * gw);
+        }
+    }
+    for y in 0..ch {
+        buf[y * gw + cw..(y + 1) * gw].fill(fill);
+    }
+    buf[ch * gw..gh * gw].fill(fill);
+}
+
 /// Every tile under a live cell erodes each generation; dead tiles keep
 /// whatever alpha they last had. Erosion scales with how buried the cell is:
 /// 1x at the colony edge up to 3x when all 8 neighbours are alive, ramped
@@ -559,7 +582,8 @@ impl Sim {
     }
 
     /// (Re)start for a viewport: lay out and stamp the name, clear timers.
-    /// Runs on first tick, on `reset()`, and whenever the viewport resizes.
+    /// Runs on first tick and on `reset()`; a viewport change on a live sim
+    /// goes through `resize` instead.
     fn init(
         &mut self,
         w: usize,
@@ -589,6 +613,31 @@ impl Sim {
         let n = self.gw * self.gh;
         cells[..n].copy_from_slice(&mask[..n]);
         self.ready = true;
+    }
+
+    /// Adapt a live sim to a new viewport without restarting. The grid keeps
+    /// its pitch and every buffer keeps its content in grid coordinates:
+    /// shrinking clips cells off the far edges, growing exposes fresh ground —
+    /// dead, unmasked, fully opaque. Timers, meteors and the RNG run on.
+    fn resize(
+        &mut self,
+        w: usize,
+        h: usize,
+        cells: &mut [u8],
+        mask: &mut [u8],
+        tile_a: &mut [u8],
+        perma: &mut [u8],
+    ) {
+        let (ogw, ogh) = (self.gw, self.gh);
+        self.w = w;
+        self.h = h;
+        self.gw = grid_dim(w, self.pitch).min(MAX_GW);
+        self.gh = grid_dim(h, self.pitch).min(MAX_GH);
+        self.ox = (w.saturating_sub(self.gw * self.pitch + 1)) / 3;
+        self.oy = (h.saturating_sub(self.gh * self.pitch + 1)) / 3;
+        for (buf, fill) in [(cells, 0u8), (mask, 0), (tile_a, 255), (perma, 0)] {
+            remap_grid(buf, ogw, ogh, self.gw, self.gh, fill);
+        }
     }
 
     /// Spontaneous births, heavily biased to the cells under the name so it
@@ -770,8 +819,10 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
     let perma: &mut [u8] = unsafe { &mut *addr_of_mut!(PERMA) };
 
-    if !sim.ready || sim.w != width || sim.h != height {
+    if !sim.ready {
         sim.init(width, height, cells, mask, tile_a, perma);
+    } else if sim.w != width || sim.h != height {
+        sim.resize(width, height, cells, mask, tile_a, perma);
     }
     sim.t += dt;
 
@@ -974,6 +1025,26 @@ mod tests {
         assert!(alive_set(&cells, gw, gh).is_empty());
     }
 
+    #[test]
+    fn remap_grid_clips_and_expands() {
+        // 3x2 grid grown to 5x4: content pins to the top-left, new ground
+        // takes the fill value.
+        let mut buf = vec![0u8; 5 * 4];
+        buf[..6].copy_from_slice(&[1, 2, 3, 4, 5, 6]);
+        remap_grid(&mut buf, 3, 2, 5, 4, 9);
+        #[rustfmt::skip]
+        assert_eq!(
+            buf,
+            [1, 2, 3, 9, 9,
+             4, 5, 6, 9, 9,
+             9, 9, 9, 9, 9,
+             9, 9, 9, 9, 9]
+        );
+        // Shrink to 2x3: the overlap survives the round trip, the rest drops.
+        remap_grid(&mut buf, 5, 4, 2, 3, 7);
+        assert_eq!(buf[..6], [1, 2, 4, 5, 9, 9]);
+    }
+
     /// Drives the real exports end to end: after the hold phase plus a couple
     /// hundred generations, live cells must have eroded some tiles, and the
     /// rendered framebuffer must carry non-opaque alpha for the page beneath
@@ -990,6 +1061,14 @@ mod tests {
         let fb = unsafe { core::slice::from_raw_parts(frame_ptr(), w * h * 4) };
         let faded = fb.chunks_exact(4).filter(|px| px[3] < 0xff).count();
         assert!(faded > 0, "no framebuffer pixel ever lost alpha");
+        // A mid-run viewport change must clip/expand the live board, not
+        // restart it: ground eroded at the old size still reads through at
+        // the new one (a restart would render fully opaque).
+        let (w2, h2) = (400usize, 260usize);
+        tick(w2, h2, 0.0);
+        let fb = unsafe { core::slice::from_raw_parts(frame_ptr(), w2 * h2 * 4) };
+        let faded = fb.chunks_exact(4).filter(|px| px[3] < 0xff).count();
+        assert!(faded > 0, "resize wiped the eroded ground");
         reset();
     }
 

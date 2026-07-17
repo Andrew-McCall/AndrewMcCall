@@ -24,22 +24,22 @@ export default async (app: HTMLElement) => {
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-3">
     <label class="text-green-600 font-mono text-sm uppercase tracking-widest">Intro (markdown)</label>
     <textarea id="intro" rows="10" spellcheck="false" placeholder="who are you?"
-      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-y"></textarea>
+      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-y"></textarea>
 
     <label class="text-green-600 font-mono text-sm uppercase tracking-widest mt-4">Profile image URL</label>
     <input id="image-url" type="text" spellcheck="false" autocomplete="off" placeholder="/profile.jpg or https://…"
-      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
 
     <label class="text-green-600 font-mono text-sm uppercase tracking-widest mt-4">GitHub URL</label>
     <input id="github-url" type="text" spellcheck="false" autocomplete="off" placeholder="https://github.com/…"
-      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
 
     <div class="flex items-center gap-4 mt-4">
-      <button id="save-btn" class="bg-green-700 hover:bg-green-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">Save</button>
+      <button id="save-btn" class="bg-transparent border border-green-500 hover:bg-green-500/10 disabled:opacity-60 disabled:cursor-not-allowed text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors">Save</button>
       <button id="preview-btn" class="text-green-600 hover:text-green-400 cursor-pointer text-sm">preview</button>
       <span id="status" class="text-green-700 text-sm"></span>
     </div>
-    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 rounded p-4 select-text"></div>
+    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4 select-text"></div>
   </div>
 </div>`;
 

@@ -28,8 +28,8 @@ interface GameWasm {
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
-const MAX_W = 1920;
-const MAX_H = 1080;
+const MAX_W = 2560;
+const MAX_H = 1440;
 
 const DRAW_RADIUS = 1;
 const ERASE_RADIUS = 2;

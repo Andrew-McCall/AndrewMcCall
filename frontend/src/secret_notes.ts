@@ -67,7 +67,7 @@ export default async (app: HTMLElement) => {
     <div class="flex items-center gap-4 text-sm text-green-700">
       <span>signed in as <span class="text-green-400">${esc(me.name)}</span></span>
       <a href="/secret/admin" class="hover:text-green-400 ${me.role === "admin" ? "" : "hidden"}">admin</a>
-      <button id="logout" class="hover:text-green-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
+      <button id="logout" class="hover:text-green-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
     </div>
   </div>
 
@@ -76,10 +76,10 @@ export default async (app: HTMLElement) => {
     <div class="md:w-72 shrink-0 flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <h2 class="text-green-600 font-mono text-sm uppercase tracking-widest">Notes</h2>
-        <button id="new-note" class="text-green-400 hover:text-green-300 cursor-pointer font-mono text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">+ new</button>
+        <button id="new-note" class="text-green-400 hover:text-green-300 cursor-pointer font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">+ new</button>
       </div>
       <select id="tag-filter"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono text-sm">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono text-sm">
         <option value="">all tags</option>
       </select>
       <div id="note-list" class="flex flex-col gap-1"></div>
@@ -148,7 +148,7 @@ export default async (app: HTMLElement) => {
     for (const note of shown) {
       const item = document.createElement("button");
       item.className =
-        "text-left rounded px-3 py-2 border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 " +
+        "text-left px-3 py-2 border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 " +
         (note.id === selectedId
           ? "border-green-600 bg-stone-900"
           : "border-green-900/40 hover:border-green-700 hover:bg-stone-900/50");
@@ -161,7 +161,7 @@ export default async (app: HTMLElement) => {
             ? `<div class="flex flex-wrap gap-1 mt-1">${note.tags
                 .map(
                   (t) =>
-                    `<span class="text-green-600 bg-green-900/30 rounded px-1.5 text-xs font-mono">${esc(t)}</span>`,
+                    `<span class="text-green-600 bg-green-900/30 px-1.5 text-xs font-mono">${esc(t)}</span>`,
                 )
                 .join("")}</div>`
             : ""
@@ -190,26 +190,26 @@ export default async (app: HTMLElement) => {
     editorEl.innerHTML = `
       <input id="ed-title" type="text" placeholder="title" autocomplete="off" spellcheck="false"
         value="${esc(note?.title ?? "")}"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-200 text-lg placeholder-green-900 font-mono" />
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-200 text-lg placeholder-green-900 font-mono" />
       <textarea id="ed-body" placeholder="write here…" rows="14" spellcheck="false"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono resize-y">${esc(note?.body ?? "")}</textarea>
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono resize-y">${esc(note?.body ?? "")}</textarea>
 
       <div class="flex flex-col gap-2">
         <div id="ed-chips" class="flex flex-wrap gap-1 items-center"></div>
         <div class="flex gap-2">
           <input id="ed-tag" type="text" placeholder="add a tag" autocomplete="off" spellcheck="false" list="tag-options"
-            class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+            class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
           <datalist id="tag-options">
             ${tags.map((t) => `<option value="${esc(t.name)}"></option>`).join("")}
           </datalist>
-          <button id="ed-tag-add" class="border border-green-800 text-green-400 hover:bg-green-900/40 px-3 rounded cursor-pointer font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">add</button>
+          <button id="ed-tag-add" class="border border-green-800 text-green-400 hover:bg-green-900/40 px-3 cursor-pointer font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">add</button>
         </div>
       </div>
 
       <div class="flex items-center justify-between mt-1">
         <div class="flex gap-2">
-          <button id="ed-save" class="bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Save</button>
-          ${note ? `<button id="ed-delete" class="text-red-500 hover:text-red-400 px-3 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">delete</button>` : ""}
+          <button id="ed-save" class="bg-transparent border border-green-500 hover:bg-green-500/10 active:bg-green-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Save</button>
+          ${note ? `<button id="ed-delete" class="text-red-500 hover:text-red-400 px-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">delete</button>` : ""}
         </div>
         <span id="ed-status" class="text-green-700 text-sm"></span>
       </div>`;
@@ -226,8 +226,8 @@ export default async (app: HTMLElement) => {
       for (const t of editTags) {
         const chip = document.createElement("span");
         chip.className =
-          "flex items-center gap-1 text-green-400 bg-green-900/30 rounded px-2 py-0.5 text-sm font-mono";
-        chip.innerHTML = `${esc(t)} <button class="text-green-600 hover:text-red-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500" aria-label="remove ${esc(t)}">×</button>`;
+          "flex items-center gap-1 text-green-400 bg-green-900/30 px-2 py-0.5 text-sm font-mono";
+        chip.innerHTML = `${esc(t)} <button class="text-green-600 hover:text-red-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500" aria-label="remove ${esc(t)}">×</button>`;
         chip.querySelector("button")!.onclick = () => {
           editTags = editTags.filter((x) => x !== t);
           renderChips();

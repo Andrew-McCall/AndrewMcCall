@@ -95,8 +95,8 @@ export default async (app: HTMLElement) => {
     <div class="flex items-center justify-between text-sm text-green-700">
       <span id="vz-range">—</span>
       <div class="flex items-center gap-2">
-        <button id="vz-prev" class="px-3 py-1 border border-green-900 rounded hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">prev</button>
-        <button id="vz-next" class="px-3 py-1 border border-green-900 rounded hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">next</button>
+        <button id="vz-prev" class="px-3 py-1 border border-green-900 hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">prev</button>
+        <button id="vz-next" class="px-3 py-1 border border-green-900 hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">next</button>
       </div>
     </div>
   </div>
@@ -116,9 +116,9 @@ export default async (app: HTMLElement) => {
       const active = kind === value;
       const btn = document.createElement("button");
       btn.textContent = label;
-      btn.className = `rounded-full px-3 py-1 border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 ${
+      btn.className = `px-3 py-1 border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 ${
         active
-          ? "bg-green-700 border-green-700 text-white"
+          ? "bg-green-500/10 border-green-500 text-green-300"
           : "border-green-900 text-green-400 hover:bg-green-900/40 hover:text-green-200"
       }`;
       btn.onclick = () => {

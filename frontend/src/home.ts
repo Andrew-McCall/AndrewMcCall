@@ -47,7 +47,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
       ${
         profile.profile_image_url
           ? `<img src="${esc(profile.profile_image_url)}" alt="Andrew McCall"
-               class="w-28 h-28 rounded-lg border border-green-900 object-cover" />`
+               class="w-28 h-28 border border-green-900 object-cover" />`
           : ""
       }
       <div class="flex-1 flex flex-col gap-3 text-stone-300">
@@ -88,7 +88,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const projectCards = projects
     .map(
       (p) => `
-      <div class="rounded-lg border border-green-900 bg-stone-900 p-5 flex flex-col gap-2">
+      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
         <div class="flex gap-4 text-sm">
@@ -102,7 +102,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const postCards = posts
     .map(
       (p) => `
-      <a href="/posts/${esc(p.slug)}" class="block rounded-lg border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
+      <a href="/posts/${esc(p.slug)}" class="block border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
         <div class="flex items-baseline justify-between gap-4">
           <h3 class="text-lg font-bold text-lime-300">${esc(p.title)}</h3>
           <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>

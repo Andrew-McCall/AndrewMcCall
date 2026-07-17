@@ -16,7 +16,6 @@ export function float_alert(x: number, y: number, text: string): void {
         'z-[9999]',
         'text-sm',
         'px-2', 'py-1',
-        'rounded',
         'shadow',
         'text-white',
         'select-none'

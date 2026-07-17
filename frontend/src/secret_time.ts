@@ -347,12 +347,12 @@ export default (app: HTMLElement) => {
   disposeTime(); // drop any ticker from a previous visit
 
   const inputCls =
-    "bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-200 font-mono";
+    "bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-200 font-mono";
   const labelCls = "text-green-700 font-mono text-xs uppercase tracking-widest";
   const cardCls =
-    "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-3";
+    "bg-stone-900 border border-green-900 p-4 flex flex-col gap-3";
   const btnCls =
-    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
+    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -479,7 +479,7 @@ export default (app: HTMLElement) => {
   for (const [tab, label] of TAB_LABELS) {
     const btn = document.createElement("button");
     btn.className =
-      "border rounded px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
+      "border px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
     btn.textContent = label;
     btn.onclick = () => showTab(tab);
     tabBtns.set(tab, btn);
@@ -617,14 +617,14 @@ export default (app: HTMLElement) => {
       .map((z) => {
         const removable = shownZones.length > 1;
         return `
-        <div class="bg-stone-900 border border-green-900 rounded px-4 py-3 flex items-center justify-between gap-3">
+        <div class="bg-stone-900 border border-green-900 px-4 py-3 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <div class="text-green-500 font-mono text-sm truncate">${esc(z)}</div>
             <div class="text-green-300 font-mono">${esc(formatInZone(instant, z))}</div>
           </div>
           ${
             removable
-              ? `<button data-zone="${esc(z)}" class="text-green-800 hover:text-red-400 cursor-pointer font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 rounded" aria-label="remove ${esc(z)}">×</button>`
+              ? `<button data-zone="${esc(z)}" class="text-green-800 hover:text-red-400 cursor-pointer font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" aria-label="remove ${esc(z)}">×</button>`
               : ""
           }
         </div>`;
@@ -731,7 +731,7 @@ export default (app: HTMLElement) => {
     inp.autocomplete = "off";
     inp.value = "*";
     inp.className =
-      "bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1.5 text-green-200 font-mono text-center w-full";
+      "bg-stone-950 border border-green-900 focus:border-green-600 outline-none px-2 py-1.5 text-green-200 font-mono text-center w-full";
     inp.addEventListener("input", () => {
       // Builder edits drive the expression, which drives everything else.
       // fromBuilder=true is required here: renderCron(false) would call

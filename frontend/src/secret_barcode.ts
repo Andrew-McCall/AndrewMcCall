@@ -64,20 +64,20 @@ export default (app: HTMLElement) => {
   <div class="w-full max-w-2xl mt-8 flex flex-col gap-4">
     <div class="flex flex-wrap gap-2 items-center">
       <select id="bc-kind"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         <option value="qr">QR code</option>
         <option value="barcode">Barcode</option>
       </select>
 
       <select id="bc-format"
-        class="hidden bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="hidden bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         ${BARCODE_FORMATS.map(
           ([value, label]) => `<option value="${value}">${label}</option>`,
         ).join("")}
       </select>
 
       <select id="bc-template"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono"
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono"
         title="What kind of QR code to build">
         <option value="text">Plain text</option>
         <option value="website">Website</option>
@@ -85,7 +85,7 @@ export default (app: HTMLElement) => {
       </select>
 
       <select id="bc-ec"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono"
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono"
         title="QR error-correction level">
         <option value="L">EC: Low</option>
         <option value="M" selected>EC: Medium</option>
@@ -96,22 +96,22 @@ export default (app: HTMLElement) => {
 
     <textarea id="bc-input" spellcheck="false" rows="3"
       placeholder="Text or URL to encode… (Ctrl/Cmd+Enter to generate)"
-      class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-none"></textarea>
+      class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-none"></textarea>
 
     <div id="bc-website" class="hidden flex-col gap-2">
       <input id="bc-url" type="text" spellcheck="false"
         placeholder="example.com (https:// is added if you omit it)"
-        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
     </div>
 
     <div id="bc-wifi" class="hidden flex-col gap-2">
       <input id="bc-ssid" type="text" spellcheck="false" placeholder="Network name (SSID)"
-        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
       <input id="bc-pass" type="text" spellcheck="false" placeholder="Password"
-        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+        class="w-full bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
       <div class="flex flex-wrap gap-3 items-center">
         <select id="bc-enc"
-          class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono text-sm">
+          class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono text-sm">
           <option value="WPA">WPA/WPA2</option>
           <option value="WEP">WEP</option>
           <option value="nopass">No password</option>
@@ -127,47 +127,47 @@ export default (app: HTMLElement) => {
       <label class="flex items-center gap-2 cursor-pointer select-none" title="Code colour">
         Foreground
         <input id="bc-fg" type="color" value="#000000"
-          class="w-8 h-8 bg-transparent border border-green-900 rounded cursor-pointer" />
+          class="w-8 h-8 bg-transparent border border-green-900 cursor-pointer" />
       </label>
       <label class="flex items-center gap-2 cursor-pointer select-none" title="Background colour">
         Background
         <input id="bc-bg" type="color" value="#ffffff"
-          class="w-8 h-8 bg-transparent border border-green-900 rounded cursor-pointer" />
+          class="w-8 h-8 bg-transparent border border-green-900 cursor-pointer" />
       </label>
       <button id="bc-swap" type="button"
-        class="border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
+        class="border border-green-900 hover:border-green-600 px-3 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
         title="Swap foreground and background">
         Swap
       </button>
       <label id="bc-icon-label" class="flex items-center gap-2 cursor-pointer select-none" title="Logo shown in the centre (QR only)">
         Centre icon
         <input id="bc-icon" type="file" accept="image/*" class="sr-only focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500" />
-        <span id="bc-icon-name" class="border border-green-900 hover:border-green-600 px-3 py-1 rounded transition-colors">Choose…</span>
+        <span id="bc-icon-name" class="border border-green-900 hover:border-green-600 px-3 py-1 transition-colors">Choose…</span>
       </label>
       <button id="bc-icon-clear" type="button"
-        class="hidden border border-green-900 hover:border-green-600 px-3 py-1 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        class="hidden border border-green-900 hover:border-green-600 px-3 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Clear icon
       </button>
     </div>
 
     <div class="flex flex-wrap gap-2 items-center">
       <button id="bc-generate"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Generate
       </button>
       <button id="bc-svg"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
         Download SVG
       </button>
       <button id="bc-png"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" disabled>
         Download PNG
       </button>
       <span id="bc-status" class="text-sm font-mono text-green-800"></span>
     </div>
 
     <div id="bc-output"
-      class="hidden self-center mt-2 rounded border border-green-900 overflow-hidden max-w-full"></div>
+      class="hidden self-center mt-2 border border-green-900 overflow-hidden max-w-full"></div>
     <p id="bc-empty" class="self-center mt-2 text-green-900 font-mono text-sm">
       No code yet — hit Generate.
     </p>

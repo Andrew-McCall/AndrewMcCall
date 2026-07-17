@@ -304,11 +304,11 @@ export default (app: HTMLElement) => {
   };
 
   const inputCls =
-    "bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-200 font-mono";
+    "bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-200 font-mono";
   const labelCls = "text-green-700 font-mono text-xs uppercase tracking-widest";
-  const cardCls = "bg-stone-900 border border-green-900 rounded p-4 flex flex-col gap-3";
+  const cardCls = "bg-stone-900 border border-green-900 p-4 flex flex-col gap-3";
   const btnCls =
-    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
+    "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -398,7 +398,7 @@ export default (app: HTMLElement) => {
       inp.value = "*";
       inp.title = `${name} — allowed ${def.min}-${def.max}`;
       inp.className =
-        "bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1.5 text-green-200 font-mono text-center w-full";
+        "bg-stone-950 border border-green-900 focus:border-green-600 outline-none px-2 py-1.5 text-green-200 font-mono text-center w-full";
       inp.addEventListener("input", () => {
         cronExpr.value = builderInputs.map((b) => b.value.trim() || "*").join(" ");
         renderCron(true);
@@ -451,7 +451,7 @@ export default (app: HTMLElement) => {
       const expr = seconds() ? "0 " + base : base;
       const btn = document.createElement("button");
       btn.className =
-        "border border-green-900 hover:border-green-600 text-green-400 hover:text-green-200 font-mono text-xs px-3 py-1.5 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
+        "border border-green-900 hover:border-green-600 text-green-400 hover:text-green-200 font-mono text-xs px-3 py-1.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
       btn.textContent = label;
       btn.title = expr;
       btn.onclick = () => {

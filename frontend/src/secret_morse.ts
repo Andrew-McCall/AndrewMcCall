@@ -146,13 +146,13 @@ Morse Code
 </h1>
 </a>
 
-<div id="stats-bar" class="hidden w-full max-w-lg mb-4 justify-between px-4 py-2 border border-yellow-600/30 rounded text-xs uppercase">
+<div id="stats-bar" class="hidden w-full max-w-lg mb-4 justify-between px-4 py-2 border border-yellow-600/30 text-xs uppercase">
 <div>Time: <span id="timer">60</span>s</div>
 <div>Score: <span id="score">0</span></div>
 <div>Best: <span id="high-score">${readHigh()}</span></div>
 </div>
 
-<div id="drill-box" class="hidden w-full max-w-lg mb-4 p-4 border border-green-500/30 rounded text-center">
+<div id="drill-box" class="hidden w-full max-w-lg mb-4 p-4 border border-green-500/30 text-center">
 <div class="text-[10px] uppercase mb-1">Send this signal:</div>
 <div id="target-display" class="text-6xl font-bold text-white mb-1">A</div>
 <div id="target-code" class="text-xs tracking-[0.5em]">.-</div>
@@ -165,7 +165,7 @@ Morse Code
 <button id="start-challenge" class="flex-1 text-xs border border-yellow-900 hover:border-yellow-600 px-2 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">60s</button>
 </div>
 
-<div class="bg-black border border-green-500/20 p-6 rounded">
+<div class="bg-black border border-green-500/20 p-6">
 
 <div id="msg"
 aria-live="polite"
@@ -181,9 +181,9 @@ class="text-4xl h-12 text-yellow-500 mt-2 font-bold tracking-widest"></div>
 
 <button id="keyer"
 aria-label="Morse keyer press and hold"
-class="w-full h-44 border border-green-500/20 hover:border-green-500/40 rounded-2xl flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+class="w-full h-44 border border-green-500/20 hover:border-green-500/40 flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
 
-<div id="light" class="w-10 h-10 rounded-full bg-green-900"></div>
+<div id="light" class="w-10 h-10 bg-green-900"></div>
 
 </button>
 

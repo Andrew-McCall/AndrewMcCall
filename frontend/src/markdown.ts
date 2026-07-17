@@ -6,7 +6,7 @@ import { esc } from "./helpers";
 
 const inline = (text: string): string =>
   esc(text)
-    .replace(/`([^`]+)`/g, `<code class="bg-stone-900 text-lime-300 px-1 rounded">$1</code>`)
+    .replace(/`([^`]+)`/g, `<code class="bg-stone-900 text-lime-300 px-1">$1</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, url) => {
@@ -45,7 +45,7 @@ export function renderMarkdown(md: string): string {
     if (code) {
       if (line.startsWith("```")) {
         out.push(
-          `<pre class="bg-stone-900 border border-green-900 rounded p-3 overflow-x-auto"><code class="text-lime-300 text-sm">${esc(code.join("\n"))}</code></pre>`,
+          `<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">${esc(code.join("\n"))}</code></pre>`,
         );
         code = null;
       } else {
@@ -114,7 +114,7 @@ export function renderMarkdown(md: string): string {
 
   if (code) {
     out.push(
-      `<pre class="bg-stone-900 border border-green-900 rounded p-3 overflow-x-auto"><code class="text-lime-300 text-sm">${esc(code.join("\n"))}</code></pre>`,
+      `<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">${esc(code.join("\n"))}</code></pre>`,
     );
   }
   flushParagraph();

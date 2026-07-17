@@ -99,7 +99,7 @@ export default (app: HTMLElement) => {
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-4">
     <div class="flex flex-wrap gap-2 items-center">
       <select id="pretty-lang"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         <option value="auto">Auto-detect</option>
         <option value="json">JSON</option>
         <option value="xml">XML</option>
@@ -108,21 +108,21 @@ export default (app: HTMLElement) => {
         <option value="babel">JS</option>
       </select>
       <button id="pretty-format"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Format
       </button>
       <button id="pretty-copy"
-        class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Copy
       </button>
       <button id="pretty-clear"
-        class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Clear
       </button>
       <span id="pretty-status" class="text-sm font-mono text-green-800"></span>
     </div>
 
-    <div class="flex w-full h-56 bg-stone-900 border border-green-900 focus-within:border-green-600 rounded overflow-hidden">
+    <div class="flex w-full h-56 bg-stone-900 border border-green-900 focus-within:border-green-600 overflow-hidden">
       <div id="pretty-gutter"
         class="select-none text-right text-green-800 font-mono text-sm leading-normal py-3 pl-3 pr-2 overflow-hidden whitespace-pre">1</div>
       <textarea id="pretty-input" spellcheck="false" placeholder="Paste JSON, XML, HTML, CSS or JS… (Ctrl/Cmd+Enter to format)"
@@ -130,7 +130,7 @@ export default (app: HTMLElement) => {
     </div>
 
     <pre id="pretty-output"
-      class="w-full min-h-56 bg-stone-900 border border-green-900 rounded px-3 py-3 text-green-300 font-mono text-sm whitespace-pre-wrap wrap-break-word overflow-x-auto"></pre>
+      class="w-full min-h-56 bg-stone-900 border border-green-900 px-3 py-3 text-green-300 font-mono text-sm whitespace-pre-wrap wrap-break-word overflow-x-auto"></pre>
 
     <details id="pretty-stats" class="text-green-700 text-sm">
       <summary class="cursor-pointer hover:text-green-500 select-none">Stats</summary>

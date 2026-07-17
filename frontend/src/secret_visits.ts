@@ -220,48 +220,48 @@ export default (app: HTMLElement) => {
     <div id="vs-content" class="hidden flex-col gap-6">
       <div class="flex items-center justify-end gap-2 text-sm">
         <label for="vs-route" class="text-green-700">Page</label>
-        <select id="vs-route" class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-2 py-1 text-green-300 font-mono max-w-[70%]">
+        <select id="vs-route" class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-2 py-1 text-green-300 font-mono max-w-[70%]">
           <option value="">All pages</option>
         </select>
       </div>
 
       <div class="grid grid-cols-3 gap-4">
-        <div class="bg-stone-900 border border-green-900 rounded-lg px-4 py-5 text-center">
+        <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-total">0</span></div>
           <div class="text-sm text-green-800 mt-1">Total visits</div>
         </div>
-        <div class="bg-stone-900 border border-green-900 rounded-lg px-4 py-5 text-center">
+        <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-unique">0</span></div>
           <div class="text-sm text-green-800 mt-1">Unique visitors</div>
         </div>
-        <div class="bg-stone-900 border border-red-900 rounded-lg px-4 py-5 text-center" title="Asset fetches and bot/scanner probes at paths that aren't a real page — excluded from every count on this page">
+        <div class="bg-stone-900 border border-red-900 px-4 py-5 text-center" title="Asset fetches and bot/scanner probes at paths that aren't a real page — excluded from every count on this page">
           <div class="text-3xl md:text-4xl font-bold font-mono text-red-400"><span id="vs-junk">0</span></div>
           <div class="text-sm text-red-800 mt-1">Junk / bot hits</div>
         </div>
       </div>
 
-      <div class="bg-stone-900 border border-green-900 rounded-lg p-4">
+      <div class="bg-stone-900 border border-green-900 p-4">
         <h2 class="text-green-400 font-mono text-sm mb-2">Visits per day &middot; last 30 days</h2>
         <div id="vs-per-day"></div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-stone-900 border border-green-900 rounded-lg p-4">
+        <div class="bg-stone-900 border border-green-900 p-4">
           <h2 class="text-green-400 font-mono text-sm mb-2">By source</h2>
           <div id="vs-by-kind"></div>
         </div>
-        <div class="bg-stone-900 border border-green-900 rounded-lg p-4">
+        <div class="bg-stone-900 border border-green-900 p-4">
           <h2 class="text-green-400 font-mono text-sm mb-2">By hour of day</h2>
           <div id="vs-by-hour"></div>
         </div>
       </div>
 
-      <div class="bg-stone-900 border border-green-900 rounded-lg p-4">
+      <div class="bg-stone-900 border border-green-900 p-4">
         <h2 class="text-green-400 font-mono text-sm mb-2">Top pages &middot; click to filter</h2>
         <div id="vs-by-route"></div>
       </div>
 
-      <div id="vs-junk-panel" class="hidden bg-stone-900 border border-red-900 rounded-lg p-4">
+      <div id="vs-junk-panel" class="hidden bg-stone-900 border border-red-900 p-4">
         <h2 class="text-red-400 font-mono text-sm mb-2">Top junk paths &middot; asset fetches &amp; bot/scanner probes</h2>
         <div id="vs-by-junk-route"></div>
       </div>

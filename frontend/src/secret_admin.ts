@@ -63,7 +63,7 @@ export default async (app: HTMLElement, me: Me) => {
       <a href="/secret/admin/projects" class="hover:text-green-400">projects</a>
       <a href="/secret/admin/profile" class="hover:text-green-400">profile</a>
       <span>signed in as <span class="text-green-400">${esc(me.name)}</span></span>
-      <button id="logout" class="hover:text-green-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
+      <button id="logout" class="hover:text-green-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">log out</button>
     </div>
   </div>
 
@@ -71,16 +71,16 @@ export default async (app: HTMLElement, me: Me) => {
     <h2 class="text-green-600 font-mono text-sm uppercase tracking-widest">Create user</h2>
     <form id="create-form" class="flex flex-col sm:flex-row gap-2">
       <input id="new-name" type="text" placeholder="name" spellcheck="false" autocomplete="off"
-        class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+        class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
       <input id="new-pin" type="text" inputmode="numeric" placeholder="pin" autocomplete="off"
-        class="w-32 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+        class="w-32 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
       <select id="new-role"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         <option value="standard">standard</option>
         <option value="admin">admin</option>
       </select>
       <button id="create-submit" type="submit"
-        class="bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-5 py-2 rounded cursor-pointer transition-colors">
+        class="bg-transparent border border-green-500 hover:bg-green-500/10 active:bg-green-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors">
         Create
       </button>
     </form>
@@ -106,7 +106,7 @@ export default async (app: HTMLElement, me: Me) => {
 
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-3">
     <h2 class="text-green-600 font-mono text-sm uppercase tracking-widest">Your two-factor auth</h2>
-    <div id="totp-panel" class="bg-stone-900 border border-green-900 rounded px-4 py-4 text-sm"></div>
+    <div id="totp-panel" class="bg-stone-900 border border-green-900 px-4 py-4 text-sm"></div>
   </div>
 </div>`;
 
@@ -131,7 +131,7 @@ export default async (app: HTMLElement, me: Me) => {
         const del = document.createElement("button");
         del.textContent = "delete";
         del.className =
-          "text-red-500 hover:text-red-400 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
+          "text-red-500 hover:text-red-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
         del.onclick = () => deleteUser(user);
         actionCell.appendChild(del);
       }
@@ -208,14 +208,14 @@ export default async (app: HTMLElement, me: Me) => {
         <p class="text-green-400 mb-3">Two-factor authentication is <span class="text-green-300 font-bold">on</span>.</p>
         <div class="flex gap-2">
           <input id="disable-code" type="text" placeholder="current or recovery code" autocomplete="off"
-            class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
-          <button id="disable-btn" class="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Disable</button>
+            class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+          <button id="disable-btn" class="bg-transparent border border-red-500 hover:bg-red-500/10 text-red-400 px-4 py-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Disable</button>
         </div>`;
       totpPanel.querySelector<HTMLButtonElement>("#disable-btn")!.onclick = disableTotp;
     } else {
       totpPanel.innerHTML = `
         <p class="text-green-700 mb-3">Two-factor authentication is off.</p>
-        <button id="setup-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Enable 2FA</button>`;
+        <button id="setup-btn" class="bg-transparent border border-green-500 hover:bg-green-500/10 text-green-400 px-4 py-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Enable 2FA</button>`;
       totpPanel.querySelector<HTMLButtonElement>("#setup-btn")!.onclick = startTotpSetup;
     }
   };
@@ -232,8 +232,8 @@ export default async (app: HTMLElement, me: Me) => {
         <a href="${esc(otpauth_uri)}" class="text-green-600 hover:text-green-400 text-xs break-all block mb-3">${esc(otpauth_uri)}</a>
         <div class="flex gap-2">
           <input id="enable-code" type="text" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code"
-            class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
-          <button id="enable-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Confirm</button>
+            class="flex-1 bg-stone-950 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+          <button id="enable-btn" class="bg-transparent border border-green-500 hover:bg-green-500/10 text-green-400 px-4 py-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Confirm</button>
         </div>`;
       const codeEl = totpPanel.querySelector<HTMLInputElement>("#enable-code")!;
       totpPanel.querySelector<HTMLButtonElement>("#enable-btn")!.onclick = () =>
@@ -255,7 +255,7 @@ export default async (app: HTMLElement, me: Me) => {
         <div class="grid grid-cols-2 gap-1 font-mono text-green-300 mb-3">
           ${(recovery_codes as string[]).map((c) => `<code>${esc(c)}</code>`).join("")}
         </div>
-        <button id="totp-done" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Done</button>`;
+        <button id="totp-done" class="bg-transparent border border-green-500 hover:bg-green-500/10 text-green-400 px-4 py-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">Done</button>`;
       totpPanel.querySelector<HTMLButtonElement>("#totp-done")!.onclick = renderTotpPanel;
     } catch {
       alert("Network error.");
