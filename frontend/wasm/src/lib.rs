@@ -92,7 +92,7 @@ const MARGIN_FRAC: usize = 20;
 /// quadratically to ~0 at the band's inner line. Beats even 3x interior
 /// decay right at the edge but loses to it midway in, so the erosion
 /// frontier never settles there — it keeps wiggling inside the band.
-const MARGIN_HEAL: u8 = 12;
+const MARGIN_HEAL: u8 = 16;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
