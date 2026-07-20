@@ -266,7 +266,7 @@ export default (app: HTMLElement) => {
   </div>
 
   <div id="vim-host"
-    class="w-full max-w-3xl mt-6 bg-stone-900 border border-green-900 focus-within:border-green-600 rounded overflow-hidden">
+    class="w-full max-w-3xl mt-6 bg-stone-900 border border-green-900 focus-within:border-green-600 overflow-hidden">
     <div id="vim-loading" class="px-4 py-16 text-center text-green-800 font-mono text-sm">
       Loading editor…
     </div>
@@ -500,10 +500,18 @@ export default (app: HTMLElement) => {
       if (mode === "challenge") loadChallenge();
     })
     .catch((err) => {
-      const loading = host.querySelector("#vim-loading");
-      if (loading)
-        loading.textContent =
-          "Failed to load the editor from the CDN: " +
-          (err instanceof Error ? err.message : String(err));
+      // Without this, a single transient CDN hiccup poisons the cached promise
+      // forever — every future visit would replay the same failure with no way
+      // to retry short of a full page reload.
+      editorPromise = null;
+      if (!document.body.contains(host)) return;
+      host.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.className = "px-4 py-16 text-center text-red-400 font-mono text-sm";
+      msg.textContent =
+        "Failed to load the editor from the CDN: " +
+        (err instanceof Error ? err.message : String(err)) +
+        " — leave and come back to retry.";
+      host.appendChild(msg);
     });
 };

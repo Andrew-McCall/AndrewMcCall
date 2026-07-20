@@ -42,6 +42,10 @@ const ISSUER: &str = "AndrewMcCall";
 /// How many one-time recovery codes are generated when a user enrols TOTP.
 const RECOVERY_CODE_COUNT: usize = 10;
 
+/// How many distinct failed PINs an IP may submit within the trailing 24h
+/// before `login` starts rejecting it with [`ApiError::TooManyRequests`].
+const LOGIN_ATTEMPT_LIMIT: i64 = 4;
+
 /// Unambiguous alphabet for recovery codes — no `0/O`, `1/I/L` confusions.
 const RECOVERY_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -356,24 +360,113 @@ struct AuthRow {
     role: UserRole,
 }
 
+/// Whether `client_ip` has submitted [`LOGIN_ATTEMPT_LIMIT`] or more distinct
+/// wrong PINs (by hash) within the trailing 24h, per `login_attempts`.
+async fn is_ip_banned(pool: &sqlx::PgPool, client_ip: &str) -> Result<bool, ApiError> {
+    let distinct_failed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT pin_hash) FROM login_attempts \
+         WHERE client_ip = $1 AND NOT success AND created_at > now() - interval '24 hours'",
+    )
+    .bind(client_ip)
+    .fetch_one(pool)
+    .await
+    .map_err(|err| {
+        tracing::error!(error = %err, "failed to check login ban");
+        ApiError::Internal
+    })?;
+
+    Ok(distinct_failed >= LOGIN_ATTEMPT_LIMIT)
+}
+
+/// Records a single login attempt in `login_attempts`, deduplicating the user
+/// agent, on a detached task. Mirrors `record_auth`.
+fn record_login_attempt(
+    config: &ApiConfig,
+    client_ip: String,
+    user_agent: String,
+    pin_hash: String,
+    success: bool,
+    user_id: Option<Uuid>,
+) {
+    let pool = config.db.pool();
+    let pk = Uuid::new_v4();
+    let timestamp = Utc::now();
+
+    tracing::info!(
+        target: "login_attempt",
+        pk = %pk,
+        timestamp = %timestamp.to_rfc3339(),
+        success,
+        client_ip = %client_ip,
+        user_agent = %user_agent,
+        "login_attempt",
+    );
+
+    smol::spawn(async move {
+        let result = sqlx::query(
+            "WITH ua AS ( \
+                 INSERT INTO user_agents (user_agent) VALUES ($6) \
+                 ON CONFLICT (user_agent) DO UPDATE SET user_agent = EXCLUDED.user_agent \
+                 RETURNING id \
+             ) \
+             INSERT INTO login_attempts (id, created_at, client_ip, pin_hash, success, user_id, user_agent_id) \
+             SELECT $1, $2, $3, $4, $5, $7, ua.id FROM ua",
+        )
+        .bind(pk)
+        .bind(timestamp)
+        .bind(client_ip)
+        .bind(pin_hash)
+        .bind(success)
+        .bind(user_agent)
+        .bind(user_id)
+        .execute(&pool)
+        .await;
+
+        if let Err(err) = result {
+            tracing::error!(error = %err, %pk, "failed to persist login_attempts");
+        }
+    })
+    .detach();
+}
+
 /// `POST /auth/login` — body `{pin, totp?, recovery?}`, optional `?cookie=true`.
 /// Verifies the PIN, enforces TOTP (code or recovery code) when enrolled, mints
 /// a token, and returns `{token, user}` (also setting a cookie in cookie mode).
 /// Returns `401 {totp_required:true}` when a second factor is needed but not
-/// supplied/valid.
+/// supplied/valid. Every attempt is recorded in `login_attempts`; an IP with
+/// too many distinct failed PINs in the trailing 24h is rejected with `429`
+/// before its PIN is even checked (see [`is_ip_banned`]).
 pub async fn login(
     req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
     config: &ApiConfig,
 ) -> hyper::Response<Body> {
     let cookie_mode = wants_cookie(&req);
+
+    let client_ip = resolve_client_ip(config.ip_source, &req, peer)
+        .map(|ip| ip.0)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let user_agent = req
+        .headers()
+        .get(USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let pool = config.db.pool();
+    match is_ip_banned(&pool, &client_ip).await {
+        Ok(true) => return ResponseBuilder::from(ApiError::TooManyRequests).into(),
+        Ok(false) => {}
+        Err(err) => return ResponseBuilder::from(err).into(),
+    }
 
     let body: LoginRequest =
         match response::read_json(req, r#"expected a JSON body like {"pin": "1234"}"#).await {
             Ok(body) => body,
             Err(err) => return ResponseBuilder::from(err).into(),
         };
+    let pin_hash = sha256_hex(&body.pin);
 
-    let pool = config.db.pool();
     // PIN-only login: there's no name to key on, and PINs are per-user-salted
     // argon2 hashes we can't query by, so load every user and find the one whose
     // stored hash the PIN verifies against. Fine at this site's tiny user count;
@@ -392,6 +485,7 @@ pub async fn login(
 
     // Same generic error whether no user matched or the pin was wrong.
     let Some(user) = users.into_iter().find(|u| verify_pin(&u.pin, &body.pin)) else {
+        record_login_attempt(config, client_ip, user_agent, pin_hash, false, None);
         return ResponseBuilder::from(ApiError::Unauthorized).into();
     };
 
@@ -407,6 +501,7 @@ pub async fn login(
             _ => false,
         };
         if !totp_ok && !recovery_ok {
+            record_login_attempt(config, client_ip, user_agent, pin_hash, false, Some(user.id));
             return ResponseBuilder::new(StatusCode::UNAUTHORIZED)
                 .json(&TotpChallenge {
                     error: "a TOTP or recovery code is required",
@@ -415,6 +510,8 @@ pub async fn login(
                 .into();
         }
     }
+
+    record_login_attempt(config, client_ip, user_agent, pin_hash, true, Some(user.id));
 
     let token = generate_token();
     let expires_at: Option<DateTime<Utc>> = config

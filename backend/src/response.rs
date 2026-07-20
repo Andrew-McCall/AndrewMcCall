@@ -19,6 +19,8 @@ pub enum ApiError {
     Forbidden,
     #[error("method not allowed")]
     MethodNotAllowed,
+    #[error("too many failed attempts, try again later")]
+    TooManyRequests,
     #[error("not found: {0}")]
     NotFound(String),
     #[error("internal server error")]
@@ -34,6 +36,7 @@ impl ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            ApiError::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,

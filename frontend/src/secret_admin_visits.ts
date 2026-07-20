@@ -95,8 +95,8 @@ export default async (app: HTMLElement) => {
     <div class="flex items-center justify-between text-sm text-green-700">
       <span id="vz-range">—</span>
       <div class="flex items-center gap-2">
-        <button id="vz-prev" class="px-3 py-1 border border-green-900 rounded hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">prev</button>
-        <button id="vz-next" class="px-3 py-1 border border-green-900 rounded hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">next</button>
+        <button id="vz-prev" class="px-3 py-1 border border-green-900 hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">prev</button>
+        <button id="vz-next" class="px-3 py-1 border border-green-900 hover:border-green-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">next</button>
       </div>
     </div>
   </div>
@@ -116,9 +116,9 @@ export default async (app: HTMLElement) => {
       const active = kind === value;
       const btn = document.createElement("button");
       btn.textContent = label;
-      btn.className = `rounded-full px-3 py-1 border cursor-pointer transition-colors ${
+      btn.className = `px-3 py-1 border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950 ${
         active
-          ? "bg-green-700 border-green-700 text-white"
+          ? "bg-green-500/10 border-green-500 text-green-300"
           : "border-green-900 text-green-400 hover:bg-green-900/40 hover:text-green-200"
       }`;
       btn.onclick = () => {
@@ -191,7 +191,14 @@ export default async (app: HTMLElement) => {
   };
 
   // --- fetch + pagination --------------------------------------------------
+  // Guards against a slow fetch landing after a newer one. The prev/next
+  // buttons disable themselves during a fetch, but the kind-filter chips and
+  // route-filter links don't — clicking through them quickly can fire
+  // overlapping requests whose responses may resolve out of order.
+  let requestId = 0;
+
   const load = async () => {
+    const id = ++requestId;
     rangeEl.textContent = "Loading…";
     prevBtn.disabled = true;
     nextBtn.disabled = true;
@@ -203,12 +210,14 @@ export default async (app: HTMLElement) => {
       if (kind) params.set("kind", kind);
       if (route) params.set("route", route);
       const res = await api(`/admin/visits?${params}`);
+      if (id !== requestId) return; // a newer load superseded this one
       if (!res.ok) {
         rowsEl.innerHTML = `<tr><td colspan="5" class="py-4 text-red-400">${await errorText(res)}</td></tr>`;
         rangeEl.textContent = "—";
         return;
       }
       const page: VisitsPage = await res.json();
+      if (id !== requestId) return;
       // Guard against navigating away mid-fetch — the router clears the DOM.
       if (!document.body.contains(rowsEl)) return;
 
@@ -219,6 +228,7 @@ export default async (app: HTMLElement) => {
       prevBtn.disabled = page.offset <= 0;
       nextBtn.disabled = last >= page.total;
     } catch {
+      if (id !== requestId) return;
       if (document.body.contains(rowsEl)) {
         rowsEl.innerHTML = `<tr><td colspan="5" class="py-4 text-red-400">Network error — is the API up?</td></tr>`;
         rangeEl.textContent = "—";

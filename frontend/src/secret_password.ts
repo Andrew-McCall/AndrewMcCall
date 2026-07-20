@@ -38,10 +38,10 @@ export default (app: HTMLElement) => {
   <div class="w-full max-w-xl mt-8 flex flex-col gap-4">
     <div class="flex flex-col sm:flex-row gap-2">
       <input id="pw-template" type="text" spellcheck="false" autocomplete="off"
-        class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-green-300 placeholder-green-900 font-mono"
+        class="flex-1 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-3 text-green-300 placeholder-green-900 font-mono"
         placeholder="{W}-{W}-{n4}" />
       <button id="pw-generate"
-        class="bg-green-700 hover:bg-green-600 active:bg-green-800 text-white font-bold px-6 py-3 rounded cursor-pointer transition-colors">
+        class="bg-transparent border border-green-500 hover:bg-green-500/10 active:bg-green-500/20 text-green-400 font-bold px-6 py-3 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Generate
       </button>
     </div>
@@ -49,7 +49,7 @@ export default (app: HTMLElement) => {
     <div id="pw-presets" class="flex flex-wrap gap-2"></div>
 
     <button id="pw-output" title="Click to copy"
-      class="w-full min-h-18 bg-stone-900 border border-green-900 rounded px-4 py-4 text-center text-xl md:text-2xl font-mono whitespace-nowrap overflow-x-auto cursor-pointer hover:border-green-600 transition-colors text-green-300 select-text">
+      class="w-full min-h-18 bg-stone-900 border border-green-900 px-4 py-4 text-center text-xl md:text-2xl font-mono whitespace-nowrap overflow-x-auto cursor-pointer hover:border-green-600 transition-colors text-green-300 select-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
       <span class="text-green-800 italic text-base">Press Generate…</span>
     </button>
 
@@ -70,8 +70,13 @@ export default (app: HTMLElement) => {
   const tokens = app.querySelector<HTMLDivElement>("#pw-tokens")!;
 
   for (const [token, meaning] of TOKENS) {
-    const row = document.createElement("div");
-    row.className = "flex items-baseline gap-3 cursor-pointer";
+    // A real <button>, not a clickable <div> — the latter is unreachable by
+    // keyboard (no tabindex/role/keydown), which would leave this whole list
+    // invisible to anyone not using a mouse.
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className =
+      "flex items-baseline gap-3 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
     row.title = "Click to copy";
     row.innerHTML = `<code class="text-green-400 whitespace-nowrap shrink-0 w-28">${token}</code><span class="text-green-800">${meaning}</span>`;
     row.onclick = () => navigator.clipboard.writeText(token).catch(() => {});
@@ -199,7 +204,7 @@ export default (app: HTMLElement) => {
       chip.textContent = preset.label;
       chip.title = `${preset.hint} — ${preset.template}`;
       chip.className =
-        "text-sm border border-green-900 text-green-400 hover:bg-green-900/40 hover:text-green-200 rounded-full px-3 py-1 cursor-pointer transition-colors";
+        "text-sm border border-green-900 text-green-400 hover:bg-green-900/40 hover:text-green-200 px-3 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
       chip.onclick = () => generate({ type: preset.label });
       presets.appendChild(chip);
     }

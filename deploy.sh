@@ -210,8 +210,10 @@ if $DRY_RUN; then
     exit 0
 fi
 
-# Fast-forward the working tree to the target commit.
-git merge --ff-only "origin/$BRANCH" || die "fast-forward failed (local commits or dirty tree?)"
+# Fast-forward the working tree to the target commit. Discard build-artifact
+# churn first (e.g. a rebuilt canvas.wasm) so it can never wedge the cron loop.
+git checkout -- . || die "git checkout failed"
+git merge --ff-only "origin/$BRANCH" || die "fast-forward failed (local commits?)"
 
 # ---------------------------------------------------------------------------
 # Per-service logic, split into build (safe, off to the side) and swap (the

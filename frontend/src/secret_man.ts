@@ -123,7 +123,7 @@ const formatProse = (raw: string) =>
   escapeHtml(raw)
     .replace(
       /`([^`]+)`/g,
-      '<code class="text-lime-300 bg-black/40 rounded px-1">$1</code>',
+      '<code class="text-lime-300 bg-black/40 px-1">$1</code>',
     )
     .replace(
       /&lt;(https?:\/\/[^&\s]+)&gt;/g,
@@ -170,7 +170,7 @@ const renderMarkdown = (markdown: string): string => {
   const examplesHtml = examples
     .map(
       (ex) => `
-    <div class="border border-green-900/60 rounded overflow-hidden">
+    <div class="border border-green-900/60 overflow-hidden">
       <div class="px-3 py-2 text-green-400 text-sm">${formatProse(ex.text)}</div>
       <pre class="bg-black/40 px-3 py-2 text-sm overflow-x-auto text-green-200 font-mono border-t border-green-900/60"><code>${formatCommand(ex.command)}</code></pre>
     </div>`,
@@ -205,10 +205,10 @@ export default (app: HTMLElement) => {
       <input id="man-input" type="text" spellcheck="false" autocapitalize="off"
         list="man-commands" autocomplete="off"
         placeholder="Command name, e.g. tar  (Enter to look up)"
-        class="flex-1 min-w-[12rem] bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+        class="flex-1 min-w-[12rem] bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
       <datalist id="man-commands"></datalist>
       <select id="man-platform"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         <option value="auto">Auto</option>
         <option value="common">common</option>
         <option value="linux">linux</option>
@@ -219,7 +219,7 @@ export default (app: HTMLElement) => {
         <option value="sunos">sunos</option>
       </select>
       <button id="man-lookup"
-        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors">
+        class="border border-green-900 hover:border-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Look up
       </button>
       <span id="man-status" class="text-sm font-mono text-green-800"></span>
@@ -228,12 +228,12 @@ export default (app: HTMLElement) => {
     <div class="flex flex-wrap gap-2">
       ${POPULAR.map(
         (cmd) =>
-          `<button data-cmd="${cmd}" class="man-chip border border-green-900 hover:border-green-600 text-green-400 font-mono text-sm px-3 py-1 rounded cursor-pointer transition-colors">${cmd}</button>`,
+          `<button data-cmd="${cmd}" class="man-chip border border-green-900 hover:border-green-600 text-green-400 font-mono text-sm px-3 py-1 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">${cmd}</button>`,
       ).join("")}
     </div>
 
     <div id="man-output"
-      class="w-full min-h-56 bg-stone-900 border border-green-900 rounded px-4 py-4 font-mono"></div>
+      class="w-full min-h-56 bg-stone-900 border border-green-900 px-4 py-4 font-mono"></div>
   </div>
 </div>
 `;

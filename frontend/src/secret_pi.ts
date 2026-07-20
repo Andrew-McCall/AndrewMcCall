@@ -49,7 +49,7 @@ export default (app: HTMLElement) => {
     <p id="pi-progress" class="w-full text-center font-mono text-green-300 break-all min-h-8 leading-8">3.</p>
 
     <button id="pi-hint" title="Click to reveal the next digit"
-      class="font-mono text-3xl text-green-400 h-12 w-12 flex items-center justify-center rounded border border-green-900 hover:border-green-600 cursor-pointer transition-colors select-none">
+      class="font-mono text-3xl text-green-400 h-12 w-12 flex items-center justify-center border border-green-900 hover:border-green-600 cursor-pointer transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
       <span class="opacity-0">0</span>
     </button>
     <p class="text-green-800 text-sm -mt-2">next digit</p>
@@ -79,7 +79,7 @@ export default (app: HTMLElement) => {
   // Shared keypad styling, applied here so the markup above stays readable.
   app.querySelectorAll<HTMLButtonElement>(".pi-pad").forEach((b) => {
     b.className =
-      "pi-pad bg-green-800 hover:bg-green-700 active:bg-green-900 text-white text-xl py-3 rounded cursor-pointer transition-colors" +
+      "pi-pad bg-transparent border border-green-500 hover:bg-green-500/10 active:bg-green-500/20 text-green-400 text-xl py-3 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950" +
       (b.classList.contains("col-span-3") ? " col-span-3" : "");
   });
 
@@ -109,7 +109,12 @@ export default (app: HTMLElement) => {
     renderHint();
   };
 
+  // Blocks input while the wrong-answer flash is showing, so a burst of keys
+  // typed during the 700ms pause can't stack up multiple overlapping resets.
+  let locked = false;
+
   const handleInput = (key: string) => {
+    if (locked) return;
     if (key === PI[index]) {
       score++;
       index++;
@@ -130,11 +135,13 @@ export default (app: HTMLElement) => {
       renderHint();
     } else {
       // Flash the wrong entry red instead of a jarring alert, then reset.
+      locked = true;
       progressEl.classList.add("text-red-500");
       progressEl.textContent = `✗ expected ${PI[index]}`;
       setTimeout(() => {
         progressEl.classList.remove("text-red-500");
         reset();
+        locked = false;
       }, 700);
     }
   };

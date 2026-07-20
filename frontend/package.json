@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "deploy": "git pull && npm i && npm run build && rm -rf /var/www/andrewmccall/dist/* && mv -f dist /var/www/andrewmccall",
-    "build:wasm": "cargo build --release --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown && cp wasm/target/wasm32-unknown-unknown/release/canvas_wasm.wasm public/canvas.wasm || echo 'build:wasm skipped (no rust wasm toolchain); using committed public/canvas.wasm'",
-    "build": "npm run build:wasm && tsc && vite build",
+    "build:wasm": "cargo build --release --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown && cp wasm/target/wasm32-unknown-unknown/release/canvas_wasm.wasm dist/canvas.wasm || echo 'build:wasm skipped (no rust wasm toolchain); using committed public/canvas.wasm'",
+    "build": "tsc && vite build && npm run build:wasm",
     "preview": "vite preview"
   },
   "devDependencies": {

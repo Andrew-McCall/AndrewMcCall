@@ -39,7 +39,8 @@ type Scheme =
 // Derive a palette from a base chroma colour using classic colour-theory
 // relationships, all expressed as hue rotations / lightness steps in HSL.
 const buildPalette = (chroma: any, base: any): Record<Scheme, () => any[]> => {
-  const rot = (deg: number) => base.set("hsl.h", `+${((deg % 360) + 360) % 360}`);
+  const rot = (deg: number) =>
+    base.set("hsl.h", `+${((deg % 360) + 360) % 360}`);
   const light = (l: number) => base.set("hsl.l", Math.max(0, Math.min(1, l)));
   return {
     complementary: () => [base, rot(180)],
@@ -85,24 +86,24 @@ export default (app: HTMLElement) => {
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-6">
     <div class="flex flex-wrap items-center gap-3">
       <input id="col-native" type="color" value="#3cb371"
-        class="w-16 h-16 shrink-0 bg-transparent border border-green-900 rounded cursor-pointer" />
+        class="w-16 h-16 shrink-0 bg-transparent border border-green-900 cursor-pointer" />
       <input id="col-input" type="text" spellcheck="false" placeholder="#3cb371, rgb(…), hsl(…), teal…"
-        class="flex-1 min-w-48 bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-3 text-green-300 placeholder-green-900 font-mono" />
+        class="flex-1 min-w-48 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-3 text-green-300 placeholder-green-900 font-mono" />
       <span id="col-error" class="text-red-500 font-mono text-sm"></span>
     </div>
 
     <div class="flex flex-wrap items-stretch gap-3">
-      <div id="col-preview" class="flex-1 min-w-40 min-h-28 rounded border border-green-900 flex items-center justify-center font-mono text-sm"></div>
+      <div id="col-preview" class="flex-1 min-w-40 min-h-28 border border-green-900 flex items-center justify-center font-mono text-sm"></div>
       <div class="flex flex-col gap-2 font-mono text-sm">
-        <button data-fmt="hex" class="col-chip border border-green-900 hover:border-green-600 rounded px-3 py-2 text-left text-green-300 cursor-pointer transition-colors"></button>
-        <button data-fmt="rgb" class="col-chip border border-green-900 hover:border-green-600 rounded px-3 py-2 text-left text-green-300 cursor-pointer transition-colors"></button>
-        <button data-fmt="hsl" class="col-chip border border-green-900 hover:border-green-600 rounded px-3 py-2 text-left text-green-300 cursor-pointer transition-colors"></button>
+        <button data-fmt="hex" class="col-chip border border-green-900 hover:border-green-600 px-3 py-2 text-left text-green-300 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"></button>
+        <button data-fmt="rgb" class="col-chip border border-green-900 hover:border-green-600 px-3 py-2 text-left text-green-300 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"></button>
+        <button data-fmt="hsl" class="col-chip border border-green-900 hover:border-green-600 px-3 py-2 text-left text-green-300 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"></button>
       </div>
     </div>
 
     <div class="flex flex-wrap gap-2 items-center">
       <select id="col-scheme"
-        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none rounded px-3 py-2 text-green-300 font-mono">
+        class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
         <option value="complementary">Complementary</option>
         <option value="analogous">Analogous</option>
         <option value="triadic">Triadic</option>
@@ -110,7 +111,7 @@ export default (app: HTMLElement) => {
         <option value="monochromatic">Monochromatic</option>
         <option value="shades">Tints &amp; Shades</option>
       </select>
-      <button id="col-random" class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 rounded cursor-pointer transition-colors">
+      <button id="col-random" class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Random
       </button>
       <span id="col-status" class="text-sm font-mono text-green-800"></span>
@@ -129,7 +130,9 @@ export default (app: HTMLElement) => {
   const randomBtn = app.querySelector("#col-random") as HTMLButtonElement;
   const statusEl = app.querySelector("#col-status") as HTMLElement;
   const paletteEl = app.querySelector("#col-palette") as HTMLElement;
-  const chips = Array.from(app.querySelectorAll<HTMLButtonElement>(".col-chip"));
+  const chips = Array.from(
+    app.querySelectorAll<HTMLButtonElement>(".col-chip"),
+  );
 
   let chroma: any = null;
   let current: any = null; // a chroma colour, once the library has loaded
@@ -140,8 +143,13 @@ export default (app: HTMLElement) => {
   };
 
   const copy = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setStatus(`Copied ${text}`);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(`Copied ${text}`);
+    } catch {
+      setStatus("Clipboard blocked");
+    }
   };
 
   const formatFor = (fmt: string, c: any) =>
@@ -154,13 +162,15 @@ export default (app: HTMLElement) => {
       .map((c: any) => {
         const hex = c.hex();
         return `<button data-hex="${hex}" title="Click to copy"
-          class="col-swatch h-24 rounded border border-green-900/60 hover:border-green-500 flex items-end justify-center pb-2 font-mono text-xs cursor-pointer transition-colors"
+          class="col-swatch h-24 border border-green-900/60 hover:border-green-500 flex items-end justify-center pb-2 font-mono text-xs cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950"
           style="background:${hex};color:${contrastText(chroma, c)}">${hex}</button>`;
       })
       .join("");
-    paletteEl.querySelectorAll<HTMLButtonElement>(".col-swatch").forEach((el) => {
-      el.addEventListener("click", () => copy(el.dataset.hex!));
-    });
+    paletteEl
+      .querySelectorAll<HTMLButtonElement>(".col-swatch")
+      .forEach((el) => {
+        el.addEventListener("click", () => copy(el.dataset.hex!));
+      });
   };
 
   const render = () => {
@@ -169,7 +179,9 @@ export default (app: HTMLElement) => {
     preview.style.background = current.css();
     preview.style.color = contrastText(chroma, current);
     preview.textContent = current.hex();
-    chips.forEach((chip) => (chip.textContent = formatFor(chip.dataset.fmt!, current)));
+    chips.forEach(
+      (chip) => (chip.textContent = formatFor(chip.dataset.fmt!, current)),
+    );
     renderPalette();
   };
 
@@ -205,7 +217,9 @@ export default (app: HTMLElement) => {
     if (chroma) setColour(chroma.random());
   });
 
-  chips.forEach((chip) => chip.addEventListener("click", () => copy(chip.textContent!)));
+  chips.forEach((chip) =>
+    chip.addEventListener("click", () => copy(chip.textContent!)),
+  );
 
   // chroma powers everything, so hold interaction until it has loaded.
   loadChroma()
@@ -214,6 +228,11 @@ export default (app: HTMLElement) => {
       setColour(chroma("#3cb371"));
     })
     .catch(() => {
-      errorEl.textContent = "failed to load colour library";
+      // Without resetting this, one failed fetch leaves `chroma` null and the
+      // whole page permanently inert — reset it so leaving and coming back
+      // retries instead of replaying the same cached failure forever.
+      chromaPromise = null;
+      errorEl.textContent =
+        "failed to load colour library — leave and come back to retry";
     });
 };
