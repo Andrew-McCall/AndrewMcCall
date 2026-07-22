@@ -66,7 +66,7 @@ static mut TILE_A: [u8; MAX_CELLS] = [0; MAX_CELLS];
 static mut PERMA: [u8; MAX_CELLS] = [0; MAX_CELLS];
 
 /// Seconds the stamped name stays frozen before evolution begins.
-const HOLD: f32 = 2.5;
+const HOLD: f32 = 2;
 /// Meteors start spawning just before the hold ends, so the first streak
 /// visually ignites the name.
 const SPAWN_START: f32 = 2.0;
@@ -77,7 +77,7 @@ const MAX_METROIDS: usize = 4;
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 = 5;
+const DECAY: u8 4;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
