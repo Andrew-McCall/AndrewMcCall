@@ -4,19 +4,6 @@ body {
     @apply bg-stone-950 font-mono min-h-screen;
 }
 
-/* Green-on-black duotone (Tailwind's filter chain applies sepia last, so the
-   green tint needs a hand-rolled filter). Hover restores the real image. */
-.duotone-green {
-    filter: grayscale(1) sepia(1) hue-rotate(55deg) saturate(3) brightness(0.9)
-        contrast(1.1);
-    transition: filter 0.3s;
-}
-
-.duotone-green:hover,
-.duotone-green.duotone-hover {
-    filter: none;
-}
-
 /* CDN-loaded CodeMirror 5 + Vim editor (see secret_vim.ts). Styled to match
    the secret area's stone/green terminal look. */
 .vim-cm .CodeMirror {

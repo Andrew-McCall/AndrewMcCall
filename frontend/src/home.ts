@@ -3,6 +3,7 @@
 // scrolling; the profile, GitHub activity and pinned projects follow.
 
 import secret_canvas from "./secret_canvas";
+import { initProfilePhoto } from "./profile_photo";
 import { api, esc, fmtDate } from "./helpers";
 import { renderMarkdown } from "./markdown";
 
@@ -46,8 +47,8 @@ const renderHome = (root: HTMLElement, home: Home) => {
     <div class="flex flex-col sm:flex-row gap-6 items-start">
       ${
         profile.profile_image_url
-          ? `<img src="${esc(profile.profile_image_url)}" alt="Andrew McCall"
-               class="w-28 h-28 border border-green-900 object-cover duotone-green" />`
+          ? `<canvas class="profile-photo w-28 h-28 shrink-0" aria-label="Andrew McCall"
+               data-src="${esc(profile.profile_image_url)}"></canvas>`
           : ""
       }
       <div class="flex-1 flex flex-col gap-3 text-stone-300">
@@ -126,9 +127,14 @@ const renderHome = (root: HTMLElement, home: Home) => {
     ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
     ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}`;
 
-  for (const row of root.querySelectorAll<HTMLTableRowElement>("tr[data-url]")) {
+  for (const row of root.querySelectorAll<HTMLTableRowElement>(
+    "tr[data-url]",
+  )) {
     row.onclick = () => window.open(row.dataset.url, "_blank", "noopener");
   }
+
+  const photo = root.querySelector<HTMLCanvasElement>("canvas.profile-photo");
+  if (photo) initProfilePhoto(photo, photo.dataset.src!);
 };
 
 export default async (app: HTMLElement) => {

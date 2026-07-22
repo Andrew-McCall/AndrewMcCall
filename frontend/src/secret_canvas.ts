@@ -106,7 +106,11 @@ export default () => {
     const px = Math.floor(x);
     const py = Math.floor(y);
     if (px < 0 || py < 0 || px >= w || py >= h) return 255;
-    const pixels = new Uint8ClampedArray(game.memory.buffer, framePtr, w * h * 4);
+    const pixels = new Uint8ClampedArray(
+      game.memory.buffer,
+      framePtr,
+      w * h * 4,
+    );
     return pixels[(py * w + px) * 4 + 3];
   };
 
@@ -128,19 +132,25 @@ export default () => {
     return false;
   };
 
-  // The overlay eats CSS :hover, so mirror it for the duotone profile image
-  // when the pointer rests on see-through ground above it.
+  // The overlay eats CSS :hover, so forward the pointer position to the profile
+  // photo when the cursor rests on see-through ground above it; it uses the
+  // distance from its centre to drive the green tint and pixelation.
   let hovered: Element | null = null;
   const syncHover = (ev: { clientX: number; clientY: number } | null) => {
-    const img =
+    const el =
       ev && !stroke && alphaAt(ev) < CLICK_THROUGH_ALPHA
-        ? (elementBeneath(ev)?.closest(".duotone-green") ?? null)
+        ? (elementBeneath(ev)?.closest(".profile-photo") ?? null)
         : null;
-    if (img !== hovered) {
-      hovered?.classList.remove("duotone-hover");
-      img?.classList.add("duotone-hover");
-      hovered = img;
+    if (el !== hovered) {
+      hovered?.dispatchEvent(new CustomEvent("profilehover", { detail: null }));
+      hovered = el;
     }
+    if (el && ev)
+      el.dispatchEvent(
+        new CustomEvent("profilehover", {
+          detail: { x: ev.clientX, y: ev.clientY },
+        }),
+      );
   };
 
   overlay.addEventListener("contextmenu", (ev) => ev.preventDefault());

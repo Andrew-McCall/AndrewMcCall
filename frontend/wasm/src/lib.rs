@@ -347,6 +347,7 @@ fn step_life(cur: &[u8], next: &mut [u8], gw: usize, gh: usize) {
 /// `r` cells at each step of a DDA walk — the interpolation that keeps fast
 /// drags solid instead of dotted. Births start at age 1 (already-live cells
 /// keep their age); kills clear outright.
+#[allow(clippy::too_many_arguments)] // geometry primitive: each arg is distinct
 fn paint_line(
     cells: &mut [u8],
     gw: usize,
@@ -726,6 +727,7 @@ impl Sim {
 
 // --- Framebuffer helpers ----------------------------------------------------
 
+#[allow(clippy::too_many_arguments)] // geometry primitive: each arg is distinct
 fn fill_rect(
     fb: &mut [u8],
     w: usize,
@@ -857,7 +859,9 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     // Fixed-timestep generations (capped so a background-tab stall can't
     // spiral). During the hold the name stays frozen but still ages, ramping
     // its colour from bright lime down to deep green before evolution begins.
-    sim.step_acc += dt;
+    // Backlog past the per-frame cap is dropped rather than banked, so a long
+    // stall resumes at real time instead of fast-forwarding the missed frames.
+    sim.step_acc = (sim.step_acc + dt).min(STEP_DT * 4.0);
     let mut steps = 0;
     while sim.step_acc >= STEP_DT && steps < 4 {
         sim.step_acc -= STEP_DT;
