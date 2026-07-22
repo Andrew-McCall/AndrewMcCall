@@ -35,6 +35,13 @@ const MAX_H = 1440;
 const DRAW_RADIUS = 1;
 const ERASE_RADIUS = 2;
 
+// A soft glow layer sits under the crisp pixels: the framebuffer downsampled
+// 3x (a 3x3 pixelisation) then CSS-blurred, so live cells bleed a halo behind
+// the sharp board and eroded edges feather into the page beneath.
+const BLUR_SCALE = 3;
+const BLUR_PX = 5;
+const BLUR_ALPHA = 0.6;
+
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
 
@@ -64,11 +71,20 @@ export default () => {
   overlay.style.cssText =
     "position:fixed;inset:0;z-index:50;background:#0c0a09;overflow:hidden";
 
+  // Under-layer: a low-res copy of the framebuffer, blurred, showing through
+  // wherever the crisp layer above has any alpha.
+  const blur = document.createElement("canvas");
+  blur.style.cssText =
+    `position:absolute;inset:0;width:100%;height:100%;display:block;` +
+    `image-rendering:pixelated;pointer-events:none;` +
+    `filter:blur(${BLUR_PX}px);opacity:${BLUR_ALPHA}`;
+  overlay.appendChild(blur);
+
   const canvas = document.createElement("canvas");
   // pan-y keeps vertical touch swipes scrolling the page beneath; horizontal
   // strokes still draw.
   canvas.style.cssText =
-    "width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
+    "position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
   let game: GameWasm | null = null;
@@ -229,10 +245,12 @@ export default () => {
   document.body.appendChild(overlay);
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  const bctx = blur.getContext("2d");
+  if (!ctx || !bctx) {
     overlay.remove();
     return;
   }
+  bctx.imageSmoothingEnabled = true; // average each 3x3 block on downsample
 
   let running = true;
   let raf = 0;
@@ -244,6 +262,9 @@ export default () => {
     h = Math.min(canvas.clientHeight, MAX_H);
     canvas.width = w;
     canvas.height = h;
+    blur.width = Math.max(Math.ceil(w / BLUR_SCALE), 1);
+    blur.height = Math.max(Math.ceil(h / BLUR_SCALE), 1);
+    bctx.imageSmoothingEnabled = true; // reset: resizing clears the context
   };
 
   const onKey = (e: KeyboardEvent) => {
@@ -286,6 +307,10 @@ export default () => {
             w * h * 4,
           );
           ctx.putImageData(new ImageData(pixels, w, h), 0, 0);
+          // Downsample the crisp frame into the blur layer (3x3 -> 1px),
+          // carrying its alpha so eroded ground stays see-through.
+          bctx.clearRect(0, 0, blur.width, blur.height);
+          bctx.drawImage(canvas, 0, 0, blur.width, blur.height);
           if (!revealed) {
             // The canvas now covers the viewport, so drop the overlay's
             // backdrop: framebuffer transparency reveals the page beneath.

@@ -77,7 +77,7 @@ const MAX_METROIDS: usize = 4;
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 = 3;
+const DECAY: u8 = 5;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
@@ -494,8 +494,7 @@ fn hold_brush(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: b
                 continue;
             }
             let f = (r2 + 1 - d2) as u32;
-            let step =
-                ((peak as u32 * f * f) / ((r2 + 1) * (r2 + 1)) as u32).max(1) as u8;
+            let step = ((peak as u32 * f * f) / ((r2 + 1) * (r2 + 1)) as u32).max(1) as u8;
             let a = &mut tile_a[y as usize * gw + x as usize];
             *a = if heal {
                 a.saturating_add(step)
@@ -1146,10 +1145,10 @@ mod tests {
         let cells = vec![1u8; gw * gh];
         let mut tile_a = vec![255u8; gw * gh];
         decay_tiles(&cells, &mut tile_a, gw, gh);
-        // Centre has 8 live neighbours: 3x decay. Corners (3 neighbours) stay
-        // at the base rate; the quadratic ramp rounds their bonus to zero.
+        // Centre has 8 live neighbours: 3x decay. Corners (3 neighbours) take
+        // the base rate plus the smallest slice of the quadratic ramp.
         assert_eq!(255 - tile_a[4], 3 * DECAY);
-        assert_eq!(255 - tile_a[0], DECAY);
+        assert_eq!(255 - tile_a[0], DECAY + 1);
         // Side cells (5 neighbours) land between the two.
         assert!(tile_a[0] > tile_a[1] && tile_a[1] > tile_a[4]);
     }
