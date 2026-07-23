@@ -41,6 +41,7 @@ const groups: MenuGroup[] = [
       { href: "/secret/countries", label: "Countries Quiz" },
       { href: "/secret/pi", label: "PI Tester" },
       { href: "/secret/morse", label: "Morse Code" },
+      { href: "/secret/languages", label: "100 Languages" },
     ],
   },
   {
