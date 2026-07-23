@@ -277,9 +277,6 @@ export default () => {
   overlay.addEventListener(
     "wheel",
     (ev) => {
-      // Over see-through ground, let the wheel scroll the page beneath instead
-      // of fading the board.
-      if (alphaAt(ev) < CLICK_THROUGH_ALPHA) return;
       ev.preventDefault();
       const pageH = Math.max(window.innerHeight, 1);
       const px =
@@ -288,6 +285,12 @@ export default () => {
           : ev.deltaMode === 1
             ? ev.deltaY * 40
             : ev.deltaY;
+      // Over see-through ground, scroll the page beneath; over the solid board,
+      // fade it. The overlay swallows the native wheel-scroll, so drive it here.
+      if (alphaAt(ev) < CLICK_THROUGH_ALPHA) {
+        window.scrollBy(0, px);
+        return;
+      }
       fadeAcc += (-px / pageH) * (px < 0 ? 12 : 6);
       const d = Math.trunc(fadeAcc);
       if (d !== 0) {
