@@ -139,11 +139,35 @@ const renderHome = (root: HTMLElement, home: Home) => {
   if (photo) initProfilePhoto(photo, photo.dataset.src!);
 };
 
+// After this long on the front page, a large button surfaces at the very bottom
+// as an overt route into the secret menu (the click-counter easter egg aside).
+const SECRET_BTN_DELAY_MS = 180_000;
+
 export default async (app: HTMLElement) => {
   app.innerHTML = `
     <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
 
   secret_canvas();
+
+  // Large secret-menu button at the very bottom, revealed after the delay. It
+  // sits above the fixed board (z-60) so it's directly clickable once reached.
+  const secretBtn = document.createElement("button");
+  secretBtn.textContent = "▚ enter the secret menu ▞";
+  secretBtn.className =
+    "relative z-[60] block w-full max-w-3xl mx-auto mb-24 px-8 py-8 " +
+    "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
+    "border-2 border-green-600 bg-stone-900 cursor-pointer " +
+    "transition-colors hover:bg-stone-800 hover:border-lime-300";
+  secretBtn.style.cssText +=
+    "opacity:0;pointer-events:none;" +
+    "transition:opacity 1s,background-color .15s,border-color .15s";
+  secretBtn.addEventListener("click", () => window.navigate("/secret"));
+  app.appendChild(secretBtn);
+  setTimeout(() => {
+    if (!secretBtn.isConnected) return; // left the front page before it fired
+    secretBtn.style.opacity = "1";
+    secretBtn.style.pointerEvents = "auto";
+  }, SECRET_BTN_DELAY_MS);
 
   const content = app.querySelector<HTMLElement>("#home-content")!;
   try {
