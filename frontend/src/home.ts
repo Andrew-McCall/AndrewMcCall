@@ -48,7 +48,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
       ${
         profile.profile_image_url
           ? `<div class="shrink-0 border-2 border-green-600 w-44 h-44">
-               <canvas class="profile-photo w-full h-full" rounded-full aria-label="Andrew McCall"
+               <canvas class="profile-photo w-full h-full" aria-label="Andrew McCall"
                  data-src="${esc(profile.profile_image_url)}"></canvas>
              </div>`
           : ""
