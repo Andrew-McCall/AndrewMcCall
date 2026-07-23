@@ -66,8 +66,19 @@ export function renderMarkdown(md: string): string {
       flushList();
       const level = heading[1].length;
       const sizes = ["text-2xl", "text-xl", "text-lg"];
+      // Slugified id so headings are deep-linkable; a hover-revealed anchor
+      // exposes the link without cluttering the prose.
+      const id = esc(
+        heading[2]
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, ""),
+      );
       out.push(
-        `<h${level + 1} class="${sizes[level - 1]} font-bold text-green-400 mt-4">${inline(heading[2])}</h${level + 1}>`,
+        `<h${level + 1} id="${id}" class="group ${sizes[level - 1]} font-bold text-green-400 mt-4 scroll-mt-20">` +
+          `<a href="#${id}" class="no-underline">${inline(heading[2])}` +
+          `<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a>` +
+          `</h${level + 1}>`,
       );
       continue;
     }

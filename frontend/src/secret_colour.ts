@@ -87,6 +87,8 @@ export default (app: HTMLElement) => {
     <div class="flex flex-wrap items-center gap-3">
       <input id="col-native" type="color" value="#3cb371"
         class="w-16 h-16 shrink-0 bg-transparent border border-green-900 cursor-pointer" />
+      <button id="col-eyedrop" title="Pick a colour from anywhere on screen" aria-label="Eyedropper"
+        class="hidden w-16 h-16 shrink-0 border border-green-900 hover:border-green-600 text-green-300 text-2xl cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">◎</button>
       <input id="col-input" type="text" spellcheck="false" placeholder="#3cb371, rgb(…), hsl(…), teal…"
         class="flex-1 min-w-48 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-3 text-green-300 placeholder-green-900 font-mono" />
       <span id="col-error" class="text-red-500 font-mono text-sm"></span>
@@ -101,6 +103,8 @@ export default (app: HTMLElement) => {
       </div>
     </div>
 
+    <div id="col-a11y" class="font-mono text-xs text-green-800 flex flex-wrap gap-x-6 gap-y-1"></div>
+
     <div class="flex flex-wrap gap-2 items-center">
       <select id="col-scheme"
         class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
@@ -114,6 +118,9 @@ export default (app: HTMLElement) => {
       <button id="col-random" class="border border-green-900 hover:border-green-600 text-green-300 font-bold px-6 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
         Random
       </button>
+      <button id="col-copyall" class="border border-green-900 hover:border-green-600 text-green-300 px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">
+        Copy palette
+      </button>
       <span id="col-status" class="text-sm font-mono text-green-800"></span>
     </div>
 
@@ -123,11 +130,14 @@ export default (app: HTMLElement) => {
 `;
 
   const native = app.querySelector("#col-native") as HTMLInputElement;
+  const eyedropBtn = app.querySelector("#col-eyedrop") as HTMLButtonElement;
   const textInput = app.querySelector("#col-input") as HTMLInputElement;
   const errorEl = app.querySelector("#col-error") as HTMLElement;
   const preview = app.querySelector("#col-preview") as HTMLElement;
+  const a11yEl = app.querySelector("#col-a11y") as HTMLElement;
   const scheme = app.querySelector("#col-scheme") as HTMLSelectElement;
   const randomBtn = app.querySelector("#col-random") as HTMLButtonElement;
+  const copyAllBtn = app.querySelector("#col-copyall") as HTMLButtonElement;
   const statusEl = app.querySelector("#col-status") as HTMLElement;
   const paletteEl = app.querySelector("#col-palette") as HTMLElement;
   const chips = Array.from(
@@ -136,6 +146,7 @@ export default (app: HTMLElement) => {
 
   let chroma: any = null;
   let current: any = null; // a chroma colour, once the library has loaded
+  let paletteHex: string[] = []; // hexes of the palette currently on screen
 
   const setStatus = (t: string) => {
     statusEl.textContent = t;
@@ -155,9 +166,27 @@ export default (app: HTMLElement) => {
   const formatFor = (fmt: string, c: any) =>
     fmt === "hex" ? c.hex() : fmt === "rgb" ? c.css() : c.css("hsl");
 
+  // WCAG contrast against black and white text, with pass/fail badges. Tells
+  // you at a glance which text colour is legible on the current colour.
+  const renderA11y = () => {
+    if (!chroma || !current) return;
+    const badge = (ok: boolean, label: string) =>
+      `<span class="${ok ? "text-lime-400" : "text-red-500"}">${ok ? "✓" : "✗"} ${label}</span>`;
+    const row = (label: string, ratio: number) =>
+      `<span class="flex items-center gap-2">
+         <span class="text-green-600">${label}</span>
+         <span class="text-green-400">${ratio.toFixed(2)}:1</span>
+         ${badge(ratio >= 4.5, "AA")} ${badge(ratio >= 7, "AAA")}
+       </span>`;
+    a11yEl.innerHTML =
+      row("white text", chroma.contrast(current, "#ffffff")) +
+      row("black text", chroma.contrast(current, "#000000"));
+  };
+
   const renderPalette = () => {
     if (!chroma || !current) return;
     const colours = buildPalette(chroma, current)[scheme.value as Scheme]();
+    paletteHex = colours.map((c: any) => c.hex());
     paletteEl.innerHTML = colours
       .map((c: any) => {
         const hex = c.hex();
@@ -182,6 +211,7 @@ export default (app: HTMLElement) => {
     chips.forEach(
       (chip) => (chip.textContent = formatFor(chip.dataset.fmt!, current)),
     );
+    renderA11y();
     renderPalette();
   };
 
@@ -190,6 +220,9 @@ export default (app: HTMLElement) => {
     errorEl.textContent = "";
     if (syncText) textInput.value = c.hex();
     render();
+    // Reflect the colour in the URL so the page is shareable/bookmarkable,
+    // without spamming history — replace, don't push.
+    history.replaceState(null, "", `${location.pathname}#${c.hex().slice(1)}`);
   };
 
   textInput.addEventListener("input", () => {
@@ -217,15 +250,42 @@ export default (app: HTMLElement) => {
     if (chroma) setColour(chroma.random());
   });
 
+  copyAllBtn.addEventListener("click", () => copy(paletteHex.join(", ")));
+
   chips.forEach((chip) =>
     chip.addEventListener("click", () => copy(chip.textContent!)),
   );
+
+  // Native EyeDropper: pick any pixel on screen. Only some browsers have it, so
+  // the button stays hidden unless the API is present.
+  const EyeDropperCtor = (window as any).EyeDropper;
+  if (EyeDropperCtor) {
+    eyedropBtn.classList.remove("hidden");
+    eyedropBtn.addEventListener("click", async () => {
+      if (!chroma) return;
+      try {
+        const { sRGBHex } = await new EyeDropperCtor().open();
+        setColour(chroma(sRGBHex));
+      } catch {
+        // The user dismissed the picker — nothing to do.
+      }
+    });
+  }
+
+  // A #hex in the URL wins over the default, so shared links restore the colour.
+  const fromHash = decodeURIComponent(location.hash.slice(1)).trim();
 
   // chroma powers everything, so hold interaction until it has loaded.
   loadChroma()
     .then((lib) => {
       chroma = lib;
-      setColour(chroma("#3cb371"));
+      const initial =
+        fromHash && chroma.valid(fromHash)
+          ? fromHash
+          : fromHash && chroma.valid(`#${fromHash}`)
+            ? `#${fromHash}`
+            : "#3cb371";
+      setColour(chroma(initial));
     })
     .catch(() => {
       // Without resetting this, one failed fetch leaves `chroma` null and the
