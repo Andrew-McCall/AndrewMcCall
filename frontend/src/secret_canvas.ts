@@ -99,7 +99,7 @@ export default () => {
   // Absolutely positioned (not fixed), so they scroll with the page.
   const controls = document.createElement("div");
   controls.style.cssText =
-    "position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;" +
+    "position:absolute;left:50%;top:20px;transform:translateX(-50%);z-index:40;" +
     "display:flex;gap:10px";
   const mkBtn = (label: string) => {
     const b = document.createElement("button");

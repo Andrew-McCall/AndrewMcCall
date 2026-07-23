@@ -116,6 +116,8 @@ const renderHome = (root: HTMLElement, home: Home) => {
     .join("");
 
   root.innerHTML = `
+    ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
+    ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
     ${
       posts.length > 0
         ? section(
@@ -125,8 +127,6 @@ const renderHome = (root: HTMLElement, home: Home) => {
           )
         : ""
     }
-    ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
-    ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
     ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}`;
 
   for (const row of root.querySelectorAll<HTMLTableRowElement>(
@@ -141,7 +141,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-    <main id="home-content" class="text-green-500 pt-6 pb-16 min-h-[150vh] select-text"></main>`;
+    <main id="home-content" class="text-green-500 pt-16 pb-16 min-h-[150vh] select-text"></main>`;
 
   secret_canvas();
 
