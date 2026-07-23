@@ -28,6 +28,7 @@ interface GameWasm {
   fade: (d: number) => void;
   set_decay: (pct: number) => void;
   static_fill: () => void;
+  clear: () => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -112,11 +113,13 @@ export default () => {
       "color:#4ade80;background:rgba(12,10,9,.6);border:1px solid #14532d;cursor:pointer";
     return b;
   };
+  const clearBtn = mkBtn("○ clear");
   const resetBtn = mkBtn("↺ reset");
   const staticBtn = mkBtn("▓ static");
-  controls.append(resetBtn, staticBtn);
+  controls.append(clearBtn, resetBtn, staticBtn);
   document.body.appendChild(controls);
 
+  clearBtn.addEventListener("click", () => game?.clear?.());
   resetBtn.addEventListener("click", () => game?.reset?.());
   staticBtn.addEventListener("click", () => game?.static_fill?.());
 

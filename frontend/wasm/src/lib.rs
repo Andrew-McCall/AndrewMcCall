@@ -13,6 +13,7 @@
 //!   * `fade(d)`                -> shift every tile's alpha by d (scroll wheel)
 //!   * `set_decay(pct)`         -> scale the natural per-generation erosion (100 = normal)
 //!   * `static_fill()`          -> reseed the board with random static at half erosion
+//!   * `clear()`                -> clear the board to fully transparent
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -859,6 +860,19 @@ pub extern "C" fn static_fill() {
     sim.t = HOLD; // past the name-hold, so the noise evolves immediately
     sim.step_acc = 0.0;
     sim.decay_pct = 50; // half the transparency loss from here on
+}
+
+/// Clear the board to fully transparent, revealing the whole page beneath at
+/// once. Dead tiles keep this alpha, so it stays clear except where the margin
+/// heals its edge band back.
+#[no_mangle]
+pub extern "C" fn clear() {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    if !sim.ready {
+        return;
+    }
+    let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
+    tile_a[..sim.gw * sim.gh].fill(0);
 }
 
 /// Stroke between two framebuffer-pixel points, so JS can join successive
