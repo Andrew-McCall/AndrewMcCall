@@ -27,7 +27,7 @@ interface GameWasm {
   hold: (x: number, y: number, mode: number) => void;
   fade: (d: number) => void;
   set_decay: (pct: number) => void;
-  set_static: (on: number) => void;
+  static_fill: () => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -44,9 +44,9 @@ const BLUR_SCALE = 3;
 const BLUR_PX = 5;
 const BLUR_ALPHA = 0.6;
 
-// The "static" toggle snows bright-lime noise straight onto the board grid,
-// drawn in wasm and locked to the cells. It's render-only: the simulation
-// keeps running underneath exactly as normal.
+// The "static" button is a reset whose seed is noise: it re-covers the board
+// fully opaque, fills the grid with random static, and runs Life on from there
+// at half the erosion rate (see static_fill in wasm).
 
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
@@ -93,14 +93,13 @@ export default () => {
     "position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
-  let staticOn = false;
-
   // Controls revealed *beneath* the board (lower z-index), clicked through the
   // eroded ground by the same forwarding as any other link. Reset re-covers the
-  // page with a fresh board; static toggles the noise veil + halved erosion.
+  // page with the name; static re-covers it with random noise at half erosion.
+  // Absolutely positioned (not fixed), so they scroll with the page.
   const controls = document.createElement("div");
   controls.style.cssText =
-    "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;" +
+    "position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;" +
     "display:flex;gap:10px";
   const mkBtn = (label: string) => {
     const b = document.createElement("button");
@@ -116,12 +115,7 @@ export default () => {
   document.body.appendChild(controls);
 
   resetBtn.addEventListener("click", () => game?.reset?.());
-  staticBtn.addEventListener("click", () => {
-    staticOn = !staticOn;
-    game?.set_static?.(staticOn ? 1 : 0);
-    staticBtn.style.borderColor = staticOn ? "#4ade80" : "#14532d";
-    staticBtn.style.color = staticOn ? "#bef264" : "#4ade80";
-  });
+  staticBtn.addEventListener("click", () => game?.static_fill?.());
 
   // First-visit hint: the front page lives *beneath* this board, so a newcomer
   // needs telling how to reveal it. It sits under the canvas (lower z-index), so
@@ -152,6 +146,9 @@ export default () => {
   let downX = 0;
   let downY = 0;
   let dragged = false;
+  // Set while dragging the beneath-canvas scrollbar through eroded ground.
+  let scrollDrag: { id: number; startY: number; startScroll: number } | null =
+    null;
 
   const toFb = (ev: { clientX: number; clientY: number }) => ({
     x: (ev.clientX * canvas.width) / Math.max(canvas.clientWidth, 1),
@@ -202,9 +199,12 @@ export default () => {
       ev && !stroke && alphaAt(ev) < CLICK_THROUGH_ALPHA
         ? elementBeneath(ev)
         : null;
-    overlay.style.cursor = beneath?.closest("a, button, [data-url]")
-      ? "pointer"
-      : "";
+    overlay.style.cursor =
+      beneath && scrollbar.contains(beneath)
+        ? "grab"
+        : beneath?.closest("a, button, [data-url]")
+          ? "pointer"
+          : "";
     const el = beneath?.closest(".profile-photo") ?? null;
     if (el !== hovered) {
       hovered?.dispatchEvent(new CustomEvent("profilehover", { detail: null }));
@@ -223,6 +223,21 @@ export default () => {
   overlay.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0 && ev.button !== 2) return;
     dismissHint();
+    // A left press on see-through ground over the beneath-canvas scrollbar
+    // grabs it to scroll, rather than eroding.
+    if (ev.button === 0 && alphaAt(ev) < CLICK_THROUGH_ALPHA) {
+      const el = elementBeneath(ev);
+      if (el && scrollbar.contains(el)) {
+        scrollDrag = {
+          id: ev.pointerId,
+          startY: ev.clientY,
+          startScroll: document.documentElement.scrollTop,
+        };
+        dragged = true; // suppress the trailing click (secret counter / forward)
+        overlay.setPointerCapture(ev.pointerId);
+        return;
+      }
+    }
     const { x, y } = toFb(ev);
     stroke = { id: ev.pointerId, alive: ev.button === 0 ? 1 : 0, x, y };
     downX = ev.clientX;
@@ -241,6 +256,15 @@ export default () => {
   });
 
   overlay.addEventListener("pointermove", (ev) => {
+    if (scrollDrag && ev.pointerId === scrollDrag.id) {
+      const track = scrollbar.clientHeight;
+      const maxThumb = track - thumb.offsetHeight;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const scrolled =
+        maxThumb > 0 ? ((ev.clientY - scrollDrag.startY) / maxThumb) * maxScroll : 0;
+      window.scrollTo(0, scrollDrag.startScroll + scrolled);
+      return;
+    }
     syncHover(ev);
     if (!stroke || ev.pointerId !== stroke.id) return;
     if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 4) dragged = true;
@@ -262,6 +286,10 @@ export default () => {
   });
 
   const endStroke = (ev: PointerEvent) => {
+    if (scrollDrag && ev.pointerId === scrollDrag.id) {
+      scrollDrag = null;
+      return;
+    }
     if (stroke && ev.pointerId === stroke.id) {
       stroke = null;
       game?.hold?.(0, 0, 0);
@@ -318,16 +346,51 @@ export default () => {
     secret_counter -= 1;
   });
 
-  // The wheel is repurposed for fading, so the scrollbar is how the page beneath
-  // is scrolled. Show it, themed to the terminal palette.
-  const scrollbarStyle = document.createElement("style");
-  scrollbarStyle.textContent =
-    "html{scrollbar-width:thin;scrollbar-color:#166534 #0c0a09}" +
-    "html::-webkit-scrollbar{width:10px}" +
-    "html::-webkit-scrollbar-track{background:#0c0a09}" +
-    "html::-webkit-scrollbar-thumb{background:#166534;border:2px solid #0c0a09}" +
-    "html::-webkit-scrollbar-thumb:hover{background:#22c55e}";
-  document.head.appendChild(scrollbarStyle);
+  // The OS scrollbar paints on top of the canvas at the very edge, where the
+  // board's outer band always heals shut — so hide it and draw our own. This
+  // one is a green-bordered rectangle, square corners, sitting *beneath* the
+  // overlay (like the reset/static buttons): the opaque board covers it and it
+  // shows through only where the ground erodes. It hides when nothing overflows.
+  const scrollbarHide = document.createElement("style");
+  scrollbarHide.textContent =
+    "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}";
+  document.head.appendChild(scrollbarHide);
+
+  // 6vmin inset ≈ just inside the board's self-healing outer band (~5% of the
+  // shorter side), so the whole bar sits on ground that actually erodes.
+  const scrollbar = document.createElement("div");
+  scrollbar.style.cssText =
+    "position:fixed;right:6vmin;top:6vmin;bottom:6vmin;width:12px;z-index:40;" +
+    "border:1px solid #22c55e;background:rgba(12,10,9,.35);display:none";
+  const thumb = document.createElement("div");
+  thumb.style.cssText =
+    "position:absolute;left:0;right:0;top:0;background:#16a34a;" +
+    "border:1px solid #22c55e;box-sizing:border-box";
+  scrollbar.appendChild(thumb);
+  document.body.appendChild(scrollbar);
+
+  const MIN_THUMB = 24;
+  const updateScrollbar = () => {
+    const doc = document.documentElement;
+    const viewH = window.innerHeight;
+    const scrollH = doc.scrollHeight;
+    if (scrollH <= viewH + 1) {
+      scrollbar.style.display = "none";
+      return;
+    }
+    scrollbar.style.display = "block";
+    const track = scrollbar.clientHeight;
+    const thumbH = Math.max((viewH / scrollH) * track, MIN_THUMB);
+    const maxScroll = scrollH - viewH;
+    const maxThumb = track - thumbH;
+    thumb.style.height = `${thumbH}px`;
+    thumb.style.top = `${maxScroll > 0 ? (doc.scrollTop / maxScroll) * maxThumb : 0}px`;
+  };
+
+  const onScroll = () => updateScrollbar();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  const scrollbarRO = new ResizeObserver(updateScrollbar);
+  scrollbarRO.observe(document.body);
 
   document.body.appendChild(overlay);
 
@@ -365,7 +428,10 @@ export default () => {
     cancelAnimationFrame(raf);
     window.removeEventListener("resize", resize);
     window.removeEventListener("keydown", onKey);
-    scrollbarStyle.remove();
+    window.removeEventListener("scroll", onScroll);
+    scrollbarRO.disconnect();
+    scrollbarHide.remove();
+    scrollbar.remove();
     hint?.remove();
     controls.remove();
     overlay.remove();

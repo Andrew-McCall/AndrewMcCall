@@ -12,7 +12,7 @@
 //!   * `hold(x,y,mode)`         -> mouse-hold point; 1 heals alpha, 2 erodes, 0 clears
 //!   * `fade(d)`                -> shift every tile's alpha by d (scroll wheel)
 //!   * `set_decay(pct)`         -> scale the natural per-generation erosion (100 = normal)
-//!   * `set_static(on)`         -> toggle render-only "static" snow on the board
+//!   * `static_fill()`          -> reseed the board with random static at half erosion
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -99,10 +99,10 @@ const MARGIN_HEAL: u8 = 16;
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
 
-/// "Static" snow density: while the toggle is on, roughly 1 cell in this many
-/// lights up bright lime each rendered frame, flickering like TV static
-/// straight on the board grid.
-const STATIC_FILL: u32 = 12;
+/// "Static" fill density: when the static button reseeds the board with noise,
+/// a cell is born where `rand() % 16` lands under this — roughly 40% of the
+/// grid, a dense field that reads as static before Life thins it out.
+const STATIC_FILL: u32 = 6;
 
 /// Cell colour by age: newborns flash bright lime; long-lived stable patterns
 /// settle into a deep green that sits quietly against the background.
@@ -555,11 +555,8 @@ struct Sim {
     /// 0 = none, 1 = right button (heal), 2 = left button (erode).
     hold_mode: u32,
     /// Natural erosion rate as a percent of normal (100 = default). The static
-    /// toggle drops it to 50 to halve how fast live cells eat their alpha.
+    /// reseed drops it to 50 to halve how fast live cells eat their alpha.
     decay_pct: u32,
-    /// While set, bright-lime snow flickers over the board each rendered frame.
-    /// Render-only: it never touches the cell grid or the simulation.
-    static_on: bool,
 }
 
 static mut SIM: Sim = Sim {
@@ -580,7 +577,6 @@ static mut SIM: Sim = Sim {
     hold_y: 0.0,
     hold_mode: 0,
     decay_pct: 100,
-    static_on: false,
 };
 
 impl Sim {
@@ -781,10 +777,13 @@ pub extern "C" fn frame_ptr() -> *mut u8 {
     addr_of_mut!(FRAME).cast()
 }
 
-/// Restart the simulation. The next `tick` re-lays-out for its viewport.
+/// Restart the simulation. The next `tick` re-lays-out for its viewport. Also
+/// clears any half-rate erosion left by a static reseed.
 #[no_mangle]
 pub extern "C" fn reset() {
-    unsafe { (*addr_of_mut!(SIM)).ready = false }
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    sim.ready = false;
+    sim.decay_pct = 100;
 }
 
 /// Seed the PRNG (meteor timing/angles, trail scatter). Zero is remapped so
@@ -839,12 +838,27 @@ pub extern "C" fn set_decay(pct: u32) {
     sim.decay_pct = pct.clamp(1, 400);
 }
 
-/// Toggle the "static" snow (`on != 0`). Render-only green flicker on the
-/// board; it leaves the simulation untouched.
+/// "Static" reseed: re-cover the board fully opaque, fill the grid with random
+/// static (no name), skip the name-hold so Life runs at once, and halve the
+/// erosion rate — a reset whose seed is noise instead of the name.
 #[no_mangle]
-pub extern "C" fn set_static(on: u32) {
+pub extern "C" fn static_fill() {
     let sim = unsafe { &mut *addr_of_mut!(SIM) };
-    sim.static_on = on != 0;
+    if !sim.ready {
+        return;
+    }
+    let cells: &mut [u8] = unsafe { &mut *addr_of_mut!(CELLS) };
+    let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
+    let perma: &mut [u8] = unsafe { &mut *addr_of_mut!(PERMA) };
+    let n = sim.gw * sim.gh;
+    for c in cells[..n].iter_mut() {
+        *c = (sim.rand() % 16 < STATIC_FILL) as u8;
+    }
+    tile_a[..n].fill(255); // reset the screen to full opacity
+    perma[..n].fill(0);
+    sim.t = HOLD; // past the name-hold, so the noise evolves immediately
+    sim.step_acc = 0.0;
+    sim.decay_pct = 50; // half the transparency loss from here on
 }
 
 /// Stroke between two framebuffer-pixel points, so JS can join successive
@@ -994,27 +1008,6 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             let y = oy + (cy * pitch) as i32 + 1;
             let c = if age > 0 { cell_colour(age) } else { BG };
             fill_rect(fb, width, height, x, y, cell_px, cell_px, c, a);
-        }
-    }
-
-    // "Static" toggle: sparse bright-lime snow, reseeded every rendered frame
-    // and locked to the cell grid, drawn straight onto the board rather than as
-    // a blended full-screen veil. Render-only — the cell grid is untouched, and
-    // snow fades with the ground so eroded tiles stay see-through.
-    if sim.static_on {
-        for cy in 0..gh {
-            for cx in 0..gw {
-                if sim.rand() % STATIC_FILL != 0 {
-                    continue;
-                }
-                let a = tile_a[cy * gw + cx];
-                if a == 0 {
-                    continue;
-                }
-                let x = ox + (cx * pitch) as i32 + 1;
-                let y = oy + (cy * pitch) as i32 + 1;
-                fill_rect(fb, width, height, x, y, cell_px, cell_px, cell_colour(1), a);
-            }
         }
     }
 }
