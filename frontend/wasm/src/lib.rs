@@ -12,6 +12,7 @@
 //!   * `hold(x,y,mode)`         -> mouse-hold point; 1 heals alpha, 2 erodes, 0 clears
 //!   * `fade(d)`                -> shift every tile's alpha by d (scroll wheel)
 //!   * `set_decay(pct)`         -> scale the natural per-generation erosion (100 = normal)
+//!   * `set_static(on)`         -> toggle render-only "static" snow on the board
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -97,6 +98,11 @@ const MARGIN_HEAL: u8 = 16;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
+
+/// "Static" snow density: while the toggle is on, roughly 1 cell in this many
+/// lights up bright lime each rendered frame, flickering like TV static
+/// straight on the board grid.
+const STATIC_FILL: u32 = 12;
 
 /// Cell colour by age: newborns flash bright lime; long-lived stable patterns
 /// settle into a deep green that sits quietly against the background.
@@ -551,6 +557,9 @@ struct Sim {
     /// Natural erosion rate as a percent of normal (100 = default). The static
     /// toggle drops it to 50 to halve how fast live cells eat their alpha.
     decay_pct: u32,
+    /// While set, bright-lime snow flickers over the board each rendered frame.
+    /// Render-only: it never touches the cell grid or the simulation.
+    static_on: bool,
 }
 
 static mut SIM: Sim = Sim {
@@ -571,6 +580,7 @@ static mut SIM: Sim = Sim {
     hold_y: 0.0,
     hold_mode: 0,
     decay_pct: 100,
+    static_on: false,
 };
 
 impl Sim {
@@ -829,6 +839,14 @@ pub extern "C" fn set_decay(pct: u32) {
     sim.decay_pct = pct.clamp(1, 400);
 }
 
+/// Toggle the "static" snow (`on != 0`). Render-only green flicker on the
+/// board; it leaves the simulation untouched.
+#[no_mangle]
+pub extern "C" fn set_static(on: u32) {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    sim.static_on = on != 0;
+}
+
 /// Stroke between two framebuffer-pixel points, so JS can join successive
 /// pointer events into one continuous line. `alive != 0` births cells under
 /// the stroke; `0` kills them. `radius` is the brush half-width in cells
@@ -976,6 +994,27 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             let y = oy + (cy * pitch) as i32 + 1;
             let c = if age > 0 { cell_colour(age) } else { BG };
             fill_rect(fb, width, height, x, y, cell_px, cell_px, c, a);
+        }
+    }
+
+    // "Static" toggle: sparse bright-lime snow, reseeded every rendered frame
+    // and locked to the cell grid, drawn straight onto the board rather than as
+    // a blended full-screen veil. Render-only — the cell grid is untouched, and
+    // snow fades with the ground so eroded tiles stay see-through.
+    if sim.static_on {
+        for cy in 0..gh {
+            for cx in 0..gw {
+                if sim.rand() % STATIC_FILL != 0 {
+                    continue;
+                }
+                let a = tile_a[cy * gw + cx];
+                if a == 0 {
+                    continue;
+                }
+                let x = ox + (cx * pitch) as i32 + 1;
+                let y = oy + (cy * pitch) as i32 + 1;
+                fill_rect(fb, width, height, x, y, cell_px, cell_px, cell_colour(1), a);
+            }
         }
     }
 }

@@ -27,6 +27,7 @@ interface GameWasm {
   hold: (x: number, y: number, mode: number) => void;
   fade: (d: number) => void;
   set_decay: (pct: number) => void;
+  set_static: (on: number) => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -43,12 +44,9 @@ const BLUR_SCALE = 3;
 const BLUR_PX = 5;
 const BLUR_ALPHA = 0.6;
 
-// The "static" toggle veils the board in chunky green noise, rendered at 1/3
-// res and scaled up pixelated, screen-blended so it reads as a glow over the
-// live cells. While it's on, natural erosion runs at STATIC_DECAY_PCT.
-const STATIC_SCALE = 3;
-const STATIC_ALPHA = 0.4;
-const STATIC_DECAY_PCT = 50;
+// The "static" toggle snows bright-lime noise straight onto the board grid,
+// drawn in wasm and locked to the cells. It's render-only: the simulation
+// keeps running underneath exactly as normal.
 
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
@@ -95,13 +93,6 @@ export default () => {
     "position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
-  // Static veil, above the crisp board. Hidden until the static button is on.
-  const stat = document.createElement("canvas");
-  stat.style.cssText =
-    `position:absolute;inset:0;width:100%;height:100%;display:none;` +
-    `image-rendering:pixelated;pointer-events:none;` +
-    `opacity:${STATIC_ALPHA};mix-blend-mode:screen`;
-  overlay.appendChild(stat);
   let staticOn = false;
 
   // Controls revealed *beneath* the board (lower z-index), clicked through the
@@ -127,8 +118,7 @@ export default () => {
   resetBtn.addEventListener("click", () => game?.reset?.());
   staticBtn.addEventListener("click", () => {
     staticOn = !staticOn;
-    stat.style.display = staticOn ? "block" : "none";
-    game?.set_decay?.(staticOn ? STATIC_DECAY_PCT : 100);
+    game?.set_static?.(staticOn ? 1 : 0);
     staticBtn.style.borderColor = staticOn ? "#4ade80" : "#14532d";
     staticBtn.style.color = staticOn ? "#bef264" : "#4ade80";
   });
@@ -340,8 +330,7 @@ export default () => {
 
   const ctx = canvas.getContext("2d");
   const bctx = blur.getContext("2d");
-  const sctx = stat.getContext("2d");
-  if (!ctx || !bctx || !sctx) {
+  if (!ctx || !bctx) {
     overlay.remove();
     controls.remove();
     return;
@@ -352,8 +341,6 @@ export default () => {
   let raf = 0;
   let w = 0;
   let h = 0;
-  // Reused each frame the static veil is on, so a 60fps redraw allocates nothing.
-  let noise: ImageData | null = null;
 
   const resize = () => {
     w = Math.min(canvas.clientWidth, MAX_W);
@@ -363,9 +350,6 @@ export default () => {
     blur.width = Math.max(Math.ceil(w / BLUR_SCALE), 1);
     blur.height = Math.max(Math.ceil(h / BLUR_SCALE), 1);
     bctx.imageSmoothingEnabled = true; // reset: resizing clears the context
-    stat.width = Math.max(Math.ceil(w / STATIC_SCALE), 1);
-    stat.height = Math.max(Math.ceil(h / STATIC_SCALE), 1);
-    noise = sctx.createImageData(stat.width, stat.height);
   };
 
   const onKey = (e: KeyboardEvent) => {
@@ -414,18 +398,6 @@ export default () => {
           // carrying its alpha so eroded ground stays see-through.
           bctx.clearRect(0, 0, blur.width, blur.height);
           bctx.drawImage(canvas, 0, 0, blur.width, blur.height);
-          if (staticOn && noise) {
-            // Fresh green-tinted noise every frame — chunky once scaled up.
-            const d = noise.data;
-            for (let i = 0; i < d.length; i += 4) {
-              const v = (Math.random() * 255) | 0;
-              d[i] = v >> 2; // low red
-              d[i + 1] = v; // bright green
-              d[i + 2] = v >> 2; // low blue
-              d[i + 3] = 255;
-            }
-            sctx.putImageData(noise, 0, 0);
-          }
           if (!revealed) {
             // The canvas now covers the viewport, so drop the overlay's
             // backdrop: framebuffer transparency reveals the page beneath.
