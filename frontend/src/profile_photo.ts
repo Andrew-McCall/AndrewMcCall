@@ -11,7 +11,7 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const CSS = 112; // matches the old w-28 h-28 footprint
+  const CSS = 176; // matches the w-44 frame
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const N = Math.round(CSS * dpr);
   const r = N / 2;
