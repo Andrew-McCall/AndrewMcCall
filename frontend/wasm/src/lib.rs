@@ -72,12 +72,12 @@ const HOLD: f32 = 2;
 const SPAWN_START: f32 = 2.0;
 /// Automaton generations per second.
 const STEP_DT: f32 = 1.0 / 12.0;
-const MAX_METROIDS: usize = 4;
+const MAX_METROIDS: usize = 5;
 
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 4;
+const DECAY: u8 3;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
