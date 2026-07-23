@@ -93,7 +93,11 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
     const cy = rect.top + rect.height / 2;
     const dist = Math.hypot(h.x - cx, h.y - cy);
     canvas.style.opacity = "1";
-    render(Math.min(1, dist / (rect.width / 2)));
+    // The inner 5% of the radius is a "perfect zone": fully sharp, true colour.
+    // Beyond it, green/pixelation ramps from 0 at the zone edge to 1 at the rim.
+    const PERFECT = 0.05;
+    const t = dist / (rect.width / 2); // 0 at centre, 1 at rim
+    render(t <= PERFECT ? 0 : Math.min(1, (t - PERFECT) / (1 - PERFECT)));
   };
 
   canvas.addEventListener("profilehover", (e) =>
