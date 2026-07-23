@@ -21,7 +21,15 @@ const INDEX_URL =
 
 // Platforms to search, in order, when the user picks "Auto". `common` holds
 // the cross-platform pages and covers the vast majority of commands.
-const PLATFORMS = ["common", "linux", "osx", "windows", "android", "freebsd", "sunos"];
+const PLATFORMS = [
+  "common",
+  "linux",
+  "osx",
+  "windows",
+  "android",
+  "freebsd",
+  "sunos",
+];
 
 // command name -> platforms it has a page on, built lazily from INDEX_URL.
 let commandIndex: Map<string, string[]> | null = null;
@@ -56,8 +64,26 @@ const loadIndex = (): Promise<Map<string, string[]>> => {
 
 // A handful of popular unix commands offered as one-click chips.
 const POPULAR = [
-  "ls", "cd", "grep", "find", "tar", "curl", "ssh", "git", "awk", "sed",
-  "chmod", "chown", "ps", "kill", "df", "du", "cat", "less", "rsync", "cron",
+  "ls",
+  "cd",
+  "grep",
+  "find",
+  "tar",
+  "curl",
+  "ssh",
+  "git",
+  "awk",
+  "sed",
+  "chmod",
+  "chown",
+  "ps",
+  "kill",
+  "df",
+  "du",
+  "cat",
+  "less",
+  "rsync",
+  "cron",
 ];
 
 // Cache fetched raw Markdown so re-looking-up a command is instant.
@@ -65,12 +91,17 @@ const cache = new Map<string, string>();
 
 // Fetch a command's page for a specific platform. Resolves to the raw
 // Markdown, or null on a 404 (command not documented for that platform).
-const fetchPage = async (platform: string, command: string): Promise<string | null> => {
+const fetchPage = async (
+  platform: string,
+  command: string,
+): Promise<string | null> => {
   const key = `${platform}/${command}`;
   const cached = cache.get(key);
   if (cached !== undefined) return cached === "" ? null : cached;
 
-  const res = await fetch(`${CDN_BASE}/${platform}/${encodeURIComponent(command)}.md`);
+  const res = await fetch(
+    `${CDN_BASE}/${platform}/${encodeURIComponent(command)}.md`,
+  );
   if (res.status === 404) {
     cache.set(key, ""); // remember the miss so we don't refetch it
     return null;
@@ -129,7 +160,10 @@ const formatProse = (raw: string) =>
       /&lt;(https?:\/\/[^&\s]+)&gt;/g,
       '<a href="$1" target="_blank" rel="noopener" class="text-lime-400 hover:underline break-all">$1</a>',
     )
-    .replace(/\[([^\]]+)\]/g, '<span class="text-green-300 font-bold">$1</span>');
+    .replace(
+      /\[([^\]]+)\]/g,
+      '<span class="text-green-300 font-bold">$1</span>',
+    );
 
 // Format an example's command line. `{{placeholders}}` are the bits the user
 // swaps out, so we set them apart from the literal command text.
@@ -205,7 +239,7 @@ export default (app: HTMLElement) => {
       <input id="man-input" type="text" spellcheck="false" autocapitalize="off"
         list="man-commands" autocomplete="off"
         placeholder="Command name, e.g. tar  (Enter to look up)"
-        class="flex-1 min-w-[12rem] bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
+        class="flex-1 min-w-48 bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono" />
       <datalist id="man-commands"></datalist>
       <select id="man-platform"
         class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 font-mono">
@@ -240,7 +274,9 @@ export default (app: HTMLElement) => {
 
   const input = app.querySelector("#man-input") as HTMLInputElement;
   const datalist = app.querySelector("#man-commands") as HTMLDataListElement;
-  const platformSelect = app.querySelector("#man-platform") as HTMLSelectElement;
+  const platformSelect = app.querySelector(
+    "#man-platform",
+  ) as HTMLSelectElement;
   const lookupBtn = app.querySelector("#man-lookup") as HTMLButtonElement;
   const statusEl = app.querySelector("#man-status") as HTMLElement;
   const output = app.querySelector("#man-output") as HTMLElement;
@@ -313,6 +349,7 @@ export default (app: HTMLElement) => {
       })
       .catch(() => {});
   };
-  if (document.readyState === "complete") window.setTimeout(populateAutocomplete, 0);
+  if (document.readyState === "complete")
+    window.setTimeout(populateAutocomplete, 0);
   else window.addEventListener("load", populateAutocomplete, { once: true });
 };
