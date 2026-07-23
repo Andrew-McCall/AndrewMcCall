@@ -141,7 +141,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-    <main id="home-content" class="text-green-500 pt-16 pb-16 min-h-[150vh] select-text"></main>`;
+    <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
 
   secret_canvas();
 

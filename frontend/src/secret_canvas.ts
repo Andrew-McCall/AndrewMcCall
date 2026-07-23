@@ -97,9 +97,12 @@ export default () => {
   // eroded ground by the same forwarding as any other link. Reset re-covers the
   // page with the name; static re-covers it with random noise at half erosion.
   // Absolutely positioned (not fixed), so they scroll with the page.
+  // top:8vmin keeps the buttons clear of the board's self-healing top band
+  // (~5% of the shorter side), which is always opaque — sat inside it, they'd
+  // never be uncovered by erosion.
   const controls = document.createElement("div");
   controls.style.cssText =
-    "position:absolute;left:50%;top:20px;transform:translateX(-50%);z-index:40;" +
+    "position:absolute;left:50%;top:8vmin;transform:translateX(-50%);z-index:40;" +
     "display:flex;gap:10px";
   const mkBtn = (label: string) => {
     const b = document.createElement("button");
