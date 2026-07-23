@@ -287,6 +287,9 @@ export default () => {
   overlay.addEventListener(
     "wheel",
     (ev) => {
+      // Over see-through ground, let the wheel scroll the page beneath instead
+      // of fading the board.
+      if (alphaAt(ev) < CLICK_THROUGH_ALPHA) return;
       ev.preventDefault();
       const pageH = Math.max(window.innerHeight, 1);
       const px =
@@ -322,11 +325,16 @@ export default () => {
     secret_counter -= 1;
   });
 
-  // Scroll is repurposed for fading while the game is up, so hide the bar.
-  const scrollbarHide = document.createElement("style");
-  scrollbarHide.textContent =
-    "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}";
-  document.head.appendChild(scrollbarHide);
+  // The wheel is repurposed for fading, so the scrollbar is how the page beneath
+  // is scrolled. Show it, themed to the terminal palette.
+  const scrollbarStyle = document.createElement("style");
+  scrollbarStyle.textContent =
+    "html{scrollbar-width:thin;scrollbar-color:#166534 #0c0a09}" +
+    "html::-webkit-scrollbar{width:10px}" +
+    "html::-webkit-scrollbar-track{background:#0c0a09}" +
+    "html::-webkit-scrollbar-thumb{background:#166534;border:2px solid #0c0a09}" +
+    "html::-webkit-scrollbar-thumb:hover{background:#22c55e}";
+  document.head.appendChild(scrollbarStyle);
 
   document.body.appendChild(overlay);
 
@@ -370,7 +378,7 @@ export default () => {
     cancelAnimationFrame(raf);
     window.removeEventListener("resize", resize);
     window.removeEventListener("keydown", onKey);
-    scrollbarHide.remove();
+    scrollbarStyle.remove();
     hint?.remove();
     controls.remove();
     overlay.remove();
