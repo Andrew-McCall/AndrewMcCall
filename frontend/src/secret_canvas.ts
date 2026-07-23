@@ -87,6 +87,30 @@ export default () => {
     "position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
+  // First-visit hint: the front page lives *beneath* this board, so a newcomer
+  // needs telling how to reveal it. It fades in, then gets out of the way on the
+  // first interaction and stays gone for the rest of the session.
+  let hint: HTMLDivElement | null = null;
+  if (!sessionStorage.getItem("home-hint-seen")) {
+    hint = document.createElement("div");
+    hint.textContent = "drag to erode · scroll to fade · a page hides beneath";
+    hint.style.cssText =
+      "position:absolute;left:50%;bottom:24px;transform:translateX(-50%);" +
+      "padding:6px 12px;font:12px ui-monospace,monospace;letter-spacing:.08em;" +
+      "color:#4ade80;background:rgba(12,10,9,.55);border:1px solid #14532d;" +
+      "white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .6s ease";
+    overlay.appendChild(hint);
+    requestAnimationFrame(() => hint && (hint.style.opacity = "0.85"));
+  }
+  const dismissHint = () => {
+    if (!hint) return;
+    sessionStorage.setItem("home-hint-seen", "1");
+    const el = hint;
+    hint = null;
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 600);
+  };
+
   let game: GameWasm | null = null;
   let framePtr = 0;
   let stroke: { id: number; alive: number; x: number; y: number } | null = null;
@@ -134,13 +158,19 @@ export default () => {
 
   // The overlay eats CSS :hover, so forward the pointer position to the profile
   // photo when the cursor rests on see-through ground above it; it uses the
-  // distance from its centre to drive the green tint and pixelation.
+  // distance from its centre to drive the green tint and pixelation. The same
+  // pass gives the overlay a pointer cursor over any revealed link, so eroded
+  // ground feels clickable the way the page beneath would.
   let hovered: Element | null = null;
   const syncHover = (ev: { clientX: number; clientY: number } | null) => {
-    const el =
+    const beneath =
       ev && !stroke && alphaAt(ev) < CLICK_THROUGH_ALPHA
-        ? (elementBeneath(ev)?.closest(".profile-photo") ?? null)
+        ? elementBeneath(ev)
         : null;
+    overlay.style.cursor = beneath?.closest("a, button, [data-url]")
+      ? "pointer"
+      : "";
+    const el = beneath?.closest(".profile-photo") ?? null;
     if (el !== hovered) {
       hovered?.dispatchEvent(new CustomEvent("profilehover", { detail: null }));
       hovered = el;
@@ -157,6 +187,7 @@ export default () => {
 
   overlay.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0 && ev.button !== 2) return;
+    dismissHint();
     const { x, y } = toFb(ev);
     stroke = { id: ev.pointerId, alive: ev.button === 0 ? 1 : 0, x, y };
     downX = ev.clientX;
@@ -212,6 +243,7 @@ export default () => {
     "wheel",
     (ev) => {
       ev.preventDefault();
+      dismissHint();
       const pageH = Math.max(window.innerHeight, 1);
       const px =
         ev.deltaMode === 2

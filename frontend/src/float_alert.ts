@@ -15,17 +15,20 @@ export function float_alert(x: number, y: number, text: string): void {
         'fixed',
         'z-[9999]',
         'text-sm',
+        'font-mono',
         'px-2', 'py-1',
-        'shadow',
-        'text-white',
-        'select-none'
+        'border',
+        'border-green-800',
+        'text-green-400',
+        'select-none',
+        'whitespace-nowrap'
     );
 
     box.style.left = `${x + OFFSET_X}px`;
     box.style.top = `${y}px`;
     box.style.opacity = '0';
     box.style.transform = `translateY(-${OFFSET_Y}px)`;
-    box.style.backgroundColor = 'rgba(0,0,0,0.6)';
+    box.style.backgroundColor = 'rgba(12,10,9,0.75)';
     box.textContent = text;
     box.setAttribute('role', 'status');
     box.setAttribute('aria-live', 'polite');

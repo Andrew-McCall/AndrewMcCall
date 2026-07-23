@@ -61,7 +61,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const commitRows = commits
     .map(
       (c) => `
-      <tr class="border-b border-green-900/40 hover:bg-stone-900/60 cursor-pointer" data-url="${esc(c.url)}">
+      <tr class="border-b border-green-900/40 hover:bg-stone-800 cursor-pointer transition-colors" data-url="${esc(c.url)}">
         <td class="py-2 pr-4 text-green-700 whitespace-nowrap">${esc(c.repo.split("/")[1] ?? c.repo)}</td>
         <td class="py-2 pr-4 text-green-300">${esc(c.message.split("\n")[0].slice(0, 80))}</td>
         <td class="py-2 text-green-700 whitespace-nowrap">${fmtDate(c.committed_at)}</td>
@@ -72,7 +72,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
     ${
       profile.github_url
         ? `<a href="${esc(profile.github_url)}" target="_blank" rel="noopener"
-             class="text-green-500 hover:text-green-400 underline">${esc(profile.github_url.replace(/^https?:\/\//, ""))}</a>`
+             class="text-green-500 hover:text-green-400 underline cursor-pointer">${esc(profile.github_url.replace(/^https?:\/\//, ""))}</a>`
         : ""
     }
     ${
@@ -91,12 +91,12 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const projectCards = projects
     .map(
       (p) => `
-      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2">
+      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 transition-colors hover:border-green-600">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
         <div class="flex gap-4 text-sm">
-          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline">visit</a>` : ""}
-          ${p.repo ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline">source</a>` : ""}
+          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline cursor-pointer">visit ↗</a>` : ""}
+          ${p.repo ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline cursor-pointer">source ↗</a>` : ""}
         </div>
       </div>`,
     )
@@ -105,9 +105,9 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const postCards = posts
     .map(
       (p) => `
-      <a href="/posts/${esc(p.slug)}" class="block border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
+      <a href="/posts/${esc(p.slug)}" class="group block border border-green-900 bg-stone-900 p-5 cursor-pointer transition-colors hover:border-green-500 hover:bg-stone-800">
         <div class="flex items-baseline justify-between gap-4">
-          <h3 class="text-lg font-bold text-lime-300">${esc(p.title)}</h3>
+          <h3 class="text-lg font-bold text-lime-300 transition-colors group-hover:text-lime-200">${esc(p.title)}</h3>
           <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
         </div>
         <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
@@ -121,7 +121,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
         ? section(
             "Posts",
             `<div class="flex flex-col gap-4">${postCards}</div>
-             <a href="/posts" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm">all posts →</a>`,
+             <a href="/posts" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm cursor-pointer">all posts →</a>`,
           )
         : ""
     }
