@@ -11,6 +11,7 @@
 //!   * `paint(x0,y0,x1,y1,a)`   -> stroke a line of births (a != 0) or kills (a == 0)
 //!   * `hold(x,y,mode)`         -> mouse-hold point; 1 heals alpha, 2 erodes, 0 clears
 //!   * `fade(d)`                -> shift every tile's alpha by d (scroll wheel)
+//!   * `set_decay(pct)`         -> scale the natural per-generation erosion (100 = normal)
 //!
 //! JS calls `frame_ptr` once, then `tick` every animation frame, and blits the
 //! buffer to a `<canvas>` with `putImageData`.
@@ -409,7 +410,7 @@ fn remap_grid(buf: &mut [u8], ogw: usize, ogh: usize, gw: usize, gh: usize, fill
 /// whatever alpha they last had. Erosion scales with how buried the cell is:
 /// 1x at the colony edge up to 3x when all 8 neighbours are alive, ramped
 /// quadratically so the speed-up only kicks in well inside the frontier.
-fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize) {
+fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize, pct: u32) {
     for y in 0..gh {
         for x in 0..gw {
             let i = y * gw + x;
@@ -424,7 +425,11 @@ fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize) {
                     }
                 }
             }
-            let d = DECAY as u32 + (DECAY as u32 * 2 * n * n) / 64;
+            // Scale by `pct` (100 = normal); the static toggle passes 50 to
+            // halve erosion. Round to nearest so a halved base of 3 stays 2,
+            // not 1, and never rounds a live tile's loss down to nothing.
+            let base = DECAY as u32 + (DECAY as u32 * 2 * n * n) / 64;
+            let d = ((base * pct + 50) / 100).max(1);
             tile_a[i] = tile_a[i].saturating_sub(d as u8);
         }
     }
@@ -543,6 +548,9 @@ struct Sim {
     hold_y: f32,
     /// 0 = none, 1 = right button (heal), 2 = left button (erode).
     hold_mode: u32,
+    /// Natural erosion rate as a percent of normal (100 = default). The static
+    /// toggle drops it to 50 to halve how fast live cells eat their alpha.
+    decay_pct: u32,
 }
 
 static mut SIM: Sim = Sim {
@@ -562,6 +570,7 @@ static mut SIM: Sim = Sim {
     hold_x: 0.0,
     hold_y: 0.0,
     hold_mode: 0,
+    decay_pct: 100,
 };
 
 impl Sim {
@@ -811,6 +820,15 @@ pub extern "C" fn fade(d: i32) {
     fade_tiles(&mut tile_a[..sim.gw * sim.gh], d);
 }
 
+/// Scale the natural per-generation erosion rate, as a percent of normal
+/// (100 = default). JS passes 50 while the "static" overlay is on, so the
+/// board dissolves half as fast. Clamped to a sane range.
+#[no_mangle]
+pub extern "C" fn set_decay(pct: u32) {
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    sim.decay_pct = pct.clamp(1, 400);
+}
+
 /// Stroke between two framebuffer-pixel points, so JS can join successive
 /// pointer events into one continuous line. `alive != 0` births cells under
 /// the stroke; `0` kills them. `radius` is the brush half-width in cells
@@ -877,7 +895,7 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             cells[..n_cells].copy_from_slice(&next[..n_cells]);
             sim.ambient_births(cells, mask);
         }
-        decay_tiles(cells, tile_a, gw, gh);
+        decay_tiles(cells, tile_a, gw, gh, sim.decay_pct);
         heal_margin(tile_a, gw, gh);
         if sim.hold_mode != 0 {
             // Same floor-via-offset trick as paint_line for cursor positions
@@ -1108,14 +1126,14 @@ mod tests {
         let mut tile_a = vec![255u8; gw * gh];
         cells[4] = 1;
         for _ in 0..255 {
-            decay_tiles(&cells, &mut tile_a, gw, gh);
+            decay_tiles(&cells, &mut tile_a, gw, gh, 100);
         }
         assert_eq!(tile_a[4], 0, "live tile fully transparent after 255 gens");
         assert!(tile_a.iter().enumerate().all(|(i, &a)| i == 4 || a == 255));
         // Saturates at zero and dead tiles never recover on their own.
-        decay_tiles(&cells, &mut tile_a, gw, gh);
+        decay_tiles(&cells, &mut tile_a, gw, gh, 100);
         cells[4] = 0;
-        decay_tiles(&cells, &mut tile_a, gw, gh);
+        decay_tiles(&cells, &mut tile_a, gw, gh, 100);
         assert_eq!(tile_a[4], 0);
     }
 
@@ -1148,13 +1166,33 @@ mod tests {
         let (gw, gh) = (3, 3);
         let cells = vec![1u8; gw * gh];
         let mut tile_a = vec![255u8; gw * gh];
-        decay_tiles(&cells, &mut tile_a, gw, gh);
+        decay_tiles(&cells, &mut tile_a, gw, gh, 100);
         // Centre has 8 live neighbours: 3x decay. Corners (3 neighbours) take
-        // the base rate plus the smallest slice of the quadratic ramp.
+        // just the base rate — the quadratic ramp still rounds to zero there.
         assert_eq!(255 - tile_a[4], 3 * DECAY);
-        assert_eq!(255 - tile_a[0], DECAY + 1);
+        assert_eq!(255 - tile_a[0], DECAY);
         // Side cells (5 neighbours) land between the two.
         assert!(tile_a[0] > tile_a[1] && tile_a[1] > tile_a[4]);
+    }
+
+    #[test]
+    fn decay_rate_scales_and_never_stalls() {
+        let (gw, gh) = (3, 3);
+        let cells = vec![1u8; gw * gh]; // centre sees all 8 neighbours
+        // 100% reproduces the unscaled loss; 50% roughly halves it.
+        let mut full = vec![255u8; gw * gh];
+        decay_tiles(&cells, &mut full, gw, gh, 100);
+        assert_eq!(255 - full[4], 3 * DECAY);
+        let mut half = vec![255u8; gw * gh];
+        decay_tiles(&cells, &mut half, gw, gh, 50);
+        // Full centre loss is 9; halved and rounded to nearest gives 5, still
+        // strictly gentler than the unscaled rate.
+        assert_eq!(255 - half[4], 5);
+        assert!(255 - half[4] < 255 - full[4]);
+        // A live tile always loses at least one step, however low the percent.
+        let mut trickle = vec![255u8; gw * gh];
+        decay_tiles(&cells, &mut trickle, gw, gh, 1);
+        assert_eq!(255 - trickle[0], 1, "erosion never fully stalls on a live tile");
     }
 
     #[test]

@@ -26,6 +26,7 @@ interface GameWasm {
   ) => void;
   hold: (x: number, y: number, mode: number) => void;
   fade: (d: number) => void;
+  set_decay: (pct: number) => void;
 }
 
 // Must match MAX_W / MAX_H in wasm/src/lib.rs.
@@ -41,6 +42,13 @@ const ERASE_RADIUS = 2;
 const BLUR_SCALE = 3;
 const BLUR_PX = 5;
 const BLUR_ALPHA = 0.6;
+
+// The "static" toggle veils the board in chunky green noise, rendered at 1/3
+// res and scaled up pixelated, screen-blended so it reads as a glow over the
+// live cells. While it's on, natural erosion runs at STATIC_DECAY_PCT.
+const STATIC_SCALE = 3;
+const STATIC_ALPHA = 0.4;
+const STATIC_DECAY_PCT = 50;
 
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
@@ -87,20 +95,57 @@ export default () => {
     "position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:pan-y";
   overlay.appendChild(canvas);
 
+  // Static veil, above the crisp board. Hidden until the static button is on.
+  const stat = document.createElement("canvas");
+  stat.style.cssText =
+    `position:absolute;inset:0;width:100%;height:100%;display:none;` +
+    `image-rendering:pixelated;pointer-events:none;` +
+    `opacity:${STATIC_ALPHA};mix-blend-mode:screen`;
+  overlay.appendChild(stat);
+  let staticOn = false;
+
+  // Controls revealed *beneath* the board (lower z-index), clicked through the
+  // eroded ground by the same forwarding as any other link. Reset re-covers the
+  // page with a fresh board; static toggles the noise veil + halved erosion.
+  const controls = document.createElement("div");
+  controls.style.cssText =
+    "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;" +
+    "display:flex;gap:10px";
+  const mkBtn = (label: string) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.style.cssText =
+      "padding:6px 14px;font:12px ui-monospace,monospace;letter-spacing:.08em;" +
+      "color:#4ade80;background:rgba(12,10,9,.6);border:1px solid #14532d;cursor:pointer";
+    return b;
+  };
+  const resetBtn = mkBtn("↺ reset");
+  const staticBtn = mkBtn("▓ static");
+  controls.append(resetBtn, staticBtn);
+  document.body.appendChild(controls);
+
+  resetBtn.addEventListener("click", () => game?.reset?.());
+  staticBtn.addEventListener("click", () => {
+    staticOn = !staticOn;
+    stat.style.display = staticOn ? "block" : "none";
+    game?.set_decay?.(staticOn ? STATIC_DECAY_PCT : 100);
+    staticBtn.style.borderColor = staticOn ? "#4ade80" : "#14532d";
+    staticBtn.style.color = staticOn ? "#bef264" : "#4ade80";
+  });
+
   // First-visit hint: the front page lives *beneath* this board, so a newcomer
-  // needs telling how to reveal it. It fades in, then gets out of the way on the
-  // first interaction and stays gone for the rest of the session.
+  // needs telling how to reveal it. It sits under the canvas (lower z-index), so
+  // the eroding board uncovers it like any other page content, and it clears on
+  // the first click, staying gone for the rest of the session.
   let hint: HTMLDivElement | null = null;
   if (!sessionStorage.getItem("home-hint-seen")) {
     hint = document.createElement("div");
     hint.textContent = "drag to erode · scroll to fade · a page hides beneath";
     hint.style.cssText =
-      "position:absolute;left:50%;bottom:24px;transform:translateX(-50%);" +
-      "padding:6px 12px;font:12px ui-monospace,monospace;letter-spacing:.08em;" +
-      "color:#4ade80;background:rgba(12,10,9,.55);border:1px solid #14532d;" +
-      "white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .6s ease";
-    overlay.appendChild(hint);
-    requestAnimationFrame(() => hint && (hint.style.opacity = "0.85"));
+      "position:fixed;left:50%;bottom:56px;transform:translateX(-50%);z-index:40;" +
+      "font:12px ui-monospace,monospace;letter-spacing:.08em;color:#4ade80;" +
+      "white-space:nowrap;pointer-events:none;opacity:0.85;transition:opacity .5s ease";
+    document.body.appendChild(hint);
   }
   const dismissHint = () => {
     if (!hint) return;
@@ -108,7 +153,7 @@ export default () => {
     const el = hint;
     hint = null;
     el.style.opacity = "0";
-    setTimeout(() => el.remove(), 600);
+    setTimeout(() => el.remove(), 500);
   };
 
   let game: GameWasm | null = null;
@@ -236,14 +281,13 @@ export default () => {
   overlay.addEventListener("pointercancel", endStroke);
   overlay.addEventListener("pointerleave", () => syncHover(null));
 
-  // Wheel fades the whole board instead of scrolling: up restores 10 alpha
-  // per page of travel, down erodes 5. Fractional pages accumulate.
+  // Wheel fades the whole board instead of scrolling: up restores 12 alpha
+  // per page of travel, down erodes 6. Fractional pages accumulate.
   let fadeAcc = 0;
   overlay.addEventListener(
     "wheel",
     (ev) => {
       ev.preventDefault();
-      dismissHint();
       const pageH = Math.max(window.innerHeight, 1);
       const px =
         ev.deltaMode === 2
@@ -251,7 +295,7 @@ export default () => {
           : ev.deltaMode === 1
             ? ev.deltaY * 40
             : ev.deltaY;
-      fadeAcc += (-px / pageH) * (px < 0 ? 10 : 5);
+      fadeAcc += (-px / pageH) * (px < 0 ? 12 : 6);
       const d = Math.trunc(fadeAcc);
       if (d !== 0) {
         fadeAcc -= d;
@@ -288,8 +332,10 @@ export default () => {
 
   const ctx = canvas.getContext("2d");
   const bctx = blur.getContext("2d");
-  if (!ctx || !bctx) {
+  const sctx = stat.getContext("2d");
+  if (!ctx || !bctx || !sctx) {
     overlay.remove();
+    controls.remove();
     return;
   }
   bctx.imageSmoothingEnabled = true; // average each 3x3 block on downsample
@@ -298,6 +344,8 @@ export default () => {
   let raf = 0;
   let w = 0;
   let h = 0;
+  // Reused each frame the static veil is on, so a 60fps redraw allocates nothing.
+  let noise: ImageData | null = null;
 
   const resize = () => {
     w = Math.min(canvas.clientWidth, MAX_W);
@@ -307,6 +355,9 @@ export default () => {
     blur.width = Math.max(Math.ceil(w / BLUR_SCALE), 1);
     blur.height = Math.max(Math.ceil(h / BLUR_SCALE), 1);
     bctx.imageSmoothingEnabled = true; // reset: resizing clears the context
+    stat.width = Math.max(Math.ceil(w / STATIC_SCALE), 1);
+    stat.height = Math.max(Math.ceil(h / STATIC_SCALE), 1);
+    noise = sctx.createImageData(stat.width, stat.height);
   };
 
   const onKey = (e: KeyboardEvent) => {
@@ -320,6 +371,8 @@ export default () => {
     window.removeEventListener("resize", resize);
     window.removeEventListener("keydown", onKey);
     scrollbarHide.remove();
+    hint?.remove();
+    controls.remove();
     overlay.remove();
   };
 
@@ -353,6 +406,18 @@ export default () => {
           // carrying its alpha so eroded ground stays see-through.
           bctx.clearRect(0, 0, blur.width, blur.height);
           bctx.drawImage(canvas, 0, 0, blur.width, blur.height);
+          if (staticOn && noise) {
+            // Fresh green-tinted noise every frame — chunky once scaled up.
+            const d = noise.data;
+            for (let i = 0; i < d.length; i += 4) {
+              const v = (Math.random() * 255) | 0;
+              d[i] = v >> 2; // low red
+              d[i + 1] = v; // bright green
+              d[i + 2] = v >> 2; // low blue
+              d[i + 3] = 255;
+            }
+            sctx.putImageData(noise, 0, 0);
+          }
           if (!revealed) {
             // The canvas now covers the viewport, so drop the overlay's
             // backdrop: framebuffer transparency reveals the page beneath.

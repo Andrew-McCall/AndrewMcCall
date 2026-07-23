@@ -21,6 +21,7 @@ import secret_barcode from "./secret_barcode.ts";
 import secret_cron from "./secret_cron.ts";
 import secret_python from "./secret_python.ts";
 import secret_man from "./secret_man.ts";
+import secret_languages from "./secret_languages.ts";
 import { getMe, type Me } from "./session.ts";
 
 window.addEventListener("popstate", () => {
@@ -60,6 +61,7 @@ const routes: Record<string, Route> = {
   "/secret/barcode": { auth: "public", render: (app) => secret_barcode(app) },
   "/secret/cron": { auth: "public", render: (app) => secret_cron(app) },
   "/secret/man": { auth: "public", render: (app) => secret_man(app) },
+  "/secret/languages": { auth: "public", render: (app) => secret_languages(app) },
   "/secret/python": { auth: "public", render: (app) => secret_python(app) },
   "/secret/notes": { auth: "user", render: (app) => secret_notes(app) },
   "/secret/admin": { auth: "admin", render: (app, me) => secret_admin(app, me!) },
