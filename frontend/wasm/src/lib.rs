@@ -66,7 +66,7 @@ static mut TILE_A: [u8; MAX_CELLS] = [0; MAX_CELLS];
 static mut PERMA: [u8; MAX_CELLS] = [0; MAX_CELLS];
 
 /// Seconds the stamped name stays frozen before evolution begins.
-const HOLD: f32 = 2;
+const HOLD: f32 = 2.0;
 /// Meteors start spawning just before the hold ends, so the first streak
 /// visually ignites the name.
 const SPAWN_START: f32 = 2.0;
