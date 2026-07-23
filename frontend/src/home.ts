@@ -47,7 +47,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
     <div class="flex flex-col sm:flex-row gap-6 items-start">
       ${
         profile.profile_image_url
-          ? `<canvas class="profile-photo w-28 h-28 shrink-0" aria-label="Andrew McCall"
+          ? `<canvas class="profile-photo w-44 h-44 shrink-0 border border-green-600" aria-label="Andrew McCall"
                data-src="${esc(profile.profile_image_url)}"></canvas>`
           : ""
       }
