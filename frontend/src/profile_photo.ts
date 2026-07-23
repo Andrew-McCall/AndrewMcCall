@@ -68,9 +68,10 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
         const sg = s[si + 1];
         const sb = s[si + 2];
         const lum = 0.299 * sr + 0.587 * sg + 0.114 * sb;
-        d[di] = sr * (1 - g) + lum * 0.2 * g;
-        d[di + 1] = sg * (1 - g) + lum * g;
-        d[di + 2] = sb * (1 - g) + lum * 0.2 * g;
+        const dark = 0.3; // darken the green tint toward black at the rim
+        d[di] = sr * (1 - g) + lum * 0.2 * dark * g;
+        d[di + 1] = sg * (1 - g) + lum * dark * g;
+        d[di + 2] = sb * (1 - g) + lum * 0.2 * dark * g;
         d[di + 3] = 255;
       }
     }
