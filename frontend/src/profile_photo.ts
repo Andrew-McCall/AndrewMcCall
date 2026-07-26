@@ -5,11 +5,18 @@
 // up. The image reads pure green at the rim and fades to its true colour toward
 // the centre, and pixelation tracks the green so the greenest edge is blockiest.
 
+import { isMobile } from "./mobile.ts";
+
 type Hover = { x: number; y: number } | null;
 
 export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+
+  // Mobile has no hover, so instead of hiding until pointed at, the photo rests
+  // visible and greenest, and a finger-drag across it sharpens toward the touch.
+  const mobile = isMobile();
+  if (mobile) canvas.style.touchAction = "none"; // drags drive the effect, not scroll
 
   const CSS = 176; // matches the w-44 frame
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -39,6 +46,7 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
     } catch {
       base = null; // cross-origin taint: leave the plain image, effect off
     }
+    rest(); // show the resting state on mobile once the source is cached
   };
   img.src = src;
 
@@ -83,9 +91,20 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
     ctx.stroke();
   };
 
+  // No pointer over the photo: hidden on desktop, but on mobile it stays visible
+  // at its greenest/blockiest resting state, inviting a drag to sharpen it.
+  const rest = () => {
+    if (mobile) {
+      canvas.style.opacity = "1";
+      render(1);
+    } else {
+      canvas.style.opacity = "0";
+    }
+  };
+
   const onHover = (h: Hover) => {
     if (!h) {
-      canvas.style.opacity = "0";
+      rest();
       return;
     }
     const rect = canvas.getBoundingClientRect();
@@ -106,7 +125,9 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
   // Fallback for when the canvas overlay isn't covering the page.
   const fromEvent = (e: PointerEvent) =>
     onHover({ x: e.clientX, y: e.clientY });
+  canvas.addEventListener("pointerdown", fromEvent);
   canvas.addEventListener("pointerenter", fromEvent);
   canvas.addEventListener("pointermove", fromEvent);
   canvas.addEventListener("pointerleave", () => onHover(null));
+  canvas.addEventListener("pointercancel", () => onHover(null));
 };
