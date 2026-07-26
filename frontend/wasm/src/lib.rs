@@ -132,8 +132,8 @@ const STAR_ALPHA: u8 = 200;
 /// between one another. Placement aims for roughly `STAR_TYP_PX` average
 /// spacing, so the field stays sparse well above the hard minimum.
 const STAR_WORD_PX: usize = 8;
-const STAR_MIN_PX: usize = 16;
-const STAR_TYP_PX: usize = 34;
+const STAR_MIN_PX: usize = 20;
+const STAR_TYP_PX: usize = 80;
 
 /// A star type's brightness and shape: `alpha` (never above STAR_ALPHA) and a
 /// 4x4 bitmap packed as four 4-bit rows, MSB = leftmost pixel, top row first.
@@ -418,10 +418,11 @@ fn scatter_stars(rng: &mut u32, stars: &mut [u8], mask: &[u8], gw: usize, gh: us
     // Pixel spacings rounded up to whole cells (at least one).
     let word_gap = STAR_WORD_PX.div_ceil(pitch).max(1);
     let min_gap = STAR_MIN_PX.div_ceil(pitch).max(1);
-    let typ_gap = STAR_TYP_PX.div_ceil(pitch).max(min_gap);
-    // One attempt per typical-spacing cell of area; min-gap rejection then
-    // thins the field to its spacing-limited density in this single pass.
-    let attempts = (gw * gh) / (typ_gap * typ_gap) + 1;
+    // One attempt per STAR_TYP_PX-square of screen area (computed in pixels so
+    // density is independent of pitch); min-gap rejection then thins the field
+    // to its spacing-limited density in this single pass.
+    let area_px = gw * pitch * gh * pitch;
+    let attempts = area_px / (STAR_TYP_PX * STAR_TYP_PX) + 1;
     for _ in 0..attempts {
         let x = xorshift(rng) as usize % gw;
         let y = xorshift(rng) as usize % gh;
