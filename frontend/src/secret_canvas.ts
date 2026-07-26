@@ -156,6 +156,10 @@ export default () => {
   // Set while dragging the beneath-canvas scrollbar through eroded ground.
   let scrollDrag: { id: number; startY: number; startScroll: number } | null =
     null;
+  // Set while a touch/press is driving the revealed profile photo, so the drag
+  // sharpens it instead of eroding the board (the photo's own pointer listeners
+  // never fire beneath this overlay — see profile_photo.ts).
+  let photoDrag: { id: number; el: Element } | null = null;
 
   const toFb = (ev: { clientX: number; clientY: number }) => ({
     x: (ev.clientX * canvas.width) / Math.max(canvas.clientWidth, 1),
@@ -244,6 +248,20 @@ export default () => {
         overlay.setPointerCapture(ev.pointerId);
         return;
       }
+      // A press on the revealed profile photo drives its sharpen effect rather
+      // than eroding, mirroring the scrollbar grab above.
+      const photo = el?.closest(".profile-photo");
+      if (photo) {
+        photoDrag = { id: ev.pointerId, el: photo };
+        dragged = true; // suppress the trailing click (secret counter / forward)
+        overlay.setPointerCapture(ev.pointerId);
+        photo.dispatchEvent(
+          new CustomEvent("profilehover", {
+            detail: { x: ev.clientX, y: ev.clientY },
+          }),
+        );
+        return;
+      }
     }
     const { x, y } = toFb(ev);
     stroke = { id: ev.pointerId, alive: ev.button === 0 ? 1 : 0, x, y };
@@ -272,6 +290,14 @@ export default () => {
       window.scrollTo(0, scrollDrag.startScroll + scrolled);
       return;
     }
+    if (photoDrag && ev.pointerId === photoDrag.id) {
+      photoDrag.el.dispatchEvent(
+        new CustomEvent("profilehover", {
+          detail: { x: ev.clientX, y: ev.clientY },
+        }),
+      );
+      return;
+    }
     syncHover(ev);
     if (!stroke || ev.pointerId !== stroke.id) return;
     if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 4) dragged = true;
@@ -295,6 +321,13 @@ export default () => {
   const endStroke = (ev: PointerEvent) => {
     if (scrollDrag && ev.pointerId === scrollDrag.id) {
       scrollDrag = null;
+      return;
+    }
+    if (photoDrag && ev.pointerId === photoDrag.id) {
+      photoDrag.el.dispatchEvent(
+        new CustomEvent("profilehover", { detail: null }),
+      );
+      photoDrag = null;
       return;
     }
     if (stroke && ev.pointerId === stroke.id) {
@@ -418,8 +451,21 @@ export default () => {
   let h = 0;
 
   const resize = () => {
-    w = Math.min(canvas.clientWidth, MAX_W);
-    h = Math.min(canvas.clientHeight, MAX_H);
+    const cw = Math.max(canvas.clientWidth, 1);
+    const ch = Math.max(canvas.clientHeight, 1);
+    // Render at device-pixel resolution, not CSS-pixel resolution. If the
+    // framebuffer is sized in CSS pixels the browser has to rescale it to the
+    // physical display by devicePixelRatio; on a fractional DPR (Linux/Windows
+    // fractional scaling, retina) that resamples the 1px grid lines unevenly —
+    // some land on 1 device pixel, some on 2 — which reads as moiré / a
+    // screendoor pattern. Matching the backing store to device pixels makes the
+    // canvas→display mapping 1:1, so the grid stays perfectly even. Cap the
+    // scale so the buffer never exceeds the wasm's MAX_W/MAX_H (past which
+    // `tick` bails and renders nothing).
+    const dpr = window.devicePixelRatio || 1;
+    const scale = Math.min(dpr, MAX_W / cw, MAX_H / ch);
+    w = Math.max(Math.floor(cw * scale), 1);
+    h = Math.max(Math.floor(ch * scale), 1);
     canvas.width = w;
     canvas.height = h;
     blur.width = Math.max(Math.ceil(w / BLUR_SCALE), 1);

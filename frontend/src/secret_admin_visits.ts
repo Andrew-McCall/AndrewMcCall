@@ -10,6 +10,9 @@ type Visit = {
   created_at: string;
   kind: string;
   route: string | null;
+  // How the route classifies, computed by the backend: `page`, `static` (an
+  // asset fetch), or `robot` (bot/scanner noise, incl. robots.txt).
+  class: string;
   client_ip: string;
   user_agent: string;
 };
@@ -51,6 +54,20 @@ const KIND_CLASS: Record<string, string> = {
   secret: "text-lime-300",
 };
 
+// Route classification → colour. Robot noise (probes + robots.txt) stays red,
+// as on the overview; static-asset fetches are muted green; real pages inherit
+// the default page-cell green.
+const CLASS_LABELS: Record<string, string> = {
+  page: "page",
+  static: "static",
+  robot: "robot",
+};
+const CLASS_CLASS: Record<string, string> = {
+  page: "text-green-700",
+  static: "text-green-600",
+  robot: "text-red-500",
+};
+
 const PAGE_SIZE = 100;
 
 export default async (app: HTMLElement) => {
@@ -84,6 +101,7 @@ export default async (app: HTMLElement) => {
             <th class="py-2 pr-4 whitespace-nowrap">Time</th>
             <th class="py-2 pr-4">Source</th>
             <th class="py-2 pr-4">Page</th>
+            <th class="py-2 pr-4">Class</th>
             <th class="py-2 pr-4">IP</th>
             <th class="py-2">User agent</th>
           </tr>
@@ -161,13 +179,14 @@ export default async (app: HTMLElement) => {
   const renderRows = (visits: Visit[]) => {
     rowsEl.innerHTML = "";
     if (visits.length === 0) {
-      rowsEl.innerHTML = `<tr><td colspan="5" class="py-4 text-green-800 italic">No visits match.</td></tr>`;
+      rowsEl.innerHTML = `<tr><td colspan="6" class="py-4 text-green-800 italic">No visits match.</td></tr>`;
       return;
     }
     for (const v of visits) {
       const tr = document.createElement("tr");
       tr.className = "border-b border-green-900/40 align-top";
       const kindClass = KIND_CLASS[v.kind] ?? "text-green-400";
+      const classClass = CLASS_CLASS[v.class] ?? "text-green-400";
       const routeCell = v.route
         ? `<button class="vz-route-link text-green-300 hover:text-green-100 hover:underline cursor-pointer text-left" data-route="${esc(v.route)}">${esc(v.route)}</button>`
         : `<span class="text-green-800">—</span>`;
@@ -175,6 +194,7 @@ export default async (app: HTMLElement) => {
         <td class="py-2 pr-4 whitespace-nowrap text-green-700">${fmtDate(v.created_at)}</td>
         <td class="py-2 pr-4 ${kindClass}">${esc(KIND_LABELS[v.kind] ?? v.kind)}</td>
         <td class="py-2 pr-4 break-all">${routeCell}</td>
+        <td class="py-2 pr-4 ${classClass}">${esc(CLASS_LABELS[v.class] ?? v.class)}</td>
         <td class="py-2 pr-4 whitespace-nowrap text-green-400">${esc(v.client_ip)}</td>
         <td class="py-2 text-green-800 break-all max-w-md">${esc(v.user_agent) || "—"}</td>`;
       rowsEl.appendChild(tr);
@@ -212,7 +232,7 @@ export default async (app: HTMLElement) => {
       const res = await api(`/admin/visits?${params}`);
       if (id !== requestId) return; // a newer load superseded this one
       if (!res.ok) {
-        rowsEl.innerHTML = `<tr><td colspan="5" class="py-4 text-red-400">${await errorText(res)}</td></tr>`;
+        rowsEl.innerHTML = `<tr><td colspan="6" class="py-4 text-red-400">${await errorText(res)}</td></tr>`;
         rangeEl.textContent = "—";
         return;
       }
@@ -230,7 +250,7 @@ export default async (app: HTMLElement) => {
     } catch {
       if (id !== requestId) return;
       if (document.body.contains(rowsEl)) {
-        rowsEl.innerHTML = `<tr><td colspan="5" class="py-4 text-red-400">Network error — is the API up?</td></tr>`;
+        rowsEl.innerHTML = `<tr><td colspan="6" class="py-4 text-red-400">Network error — is the API up?</td></tr>`;
         rangeEl.textContent = "—";
       }
     }

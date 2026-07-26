@@ -157,6 +157,18 @@ pub async fn published_summaries(
         .collect())
 }
 
+/// Published post slugs, newest first. A lighter query than
+/// [`published_summaries`] for the sitemap, which needs only the URL path.
+pub async fn published_slugs(pool: &sqlx::PgPool) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT slug FROM posts WHERE is_published AND NOT is_deleted \
+         ORDER BY published_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(slug,)| slug).collect())
+}
+
 /// `GET /posts` — all published posts, newest first, as summaries.
 pub async fn list_published(config: &ApiConfig) -> hyper::Response<Body> {
     match published_summaries(&config.db.pool(), 1000).await {

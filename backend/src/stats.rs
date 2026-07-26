@@ -18,64 +18,21 @@
 //! list — the nginx mirror logs a hit for every request it receives, page or
 //! not, so an unfiltered count would treat asset fetches and bot/scanner
 //! probes at nonexistent paths as real page visits. That noise is reported
-//! separately as `junk_total`/`by_junk_route` instead of being dropped
-//! silently.
+//! separately, split into `static_total`/`by_static_route` (asset fetches, by
+//! file extension) and `robot_total`/`by_robot_route` (scanner probes plus
+//! forced crawler paths like `/robots.txt`), instead of being dropped silently.
 
 use chrono::NaiveDate;
 use sonic_rs::Serialize;
-use std::sync::LazyLock;
 
 use crate::config::ApiConfig;
 use crate::response::{ApiError, Body, ResponseBuilder};
+use crate::visit_class::{named_page, page_only, robot_only, static_only};
 
 /// How many days of the per-day series to return, counting back from today
 /// (inclusive) in the caller's timezone. `generate_series` fills empty days as
 /// zero so the axis is continuous.
 const DAYS: i32 = 30;
-
-/// Every real page route the frontend router serves (the `routes` table in
-/// `frontend/src/main.ts`). Keep the two lists in sync.
-const VALID_ROUTES: &[&str] = &[
-    "/",
-    "/secret",
-    "/secret/pi",
-    "/secret/morse",
-    "/secret/canvas",
-    "/secret/password",
-    "/secret/countries",
-    "/secret/visits",
-    "/secret/prettier",
-    "/secret/vim",
-    "/secret/time",
-    "/secret/colour",
-    "/secret/barcode",
-    "/secret/cron",
-    "/secret/man",
-    "/secret/python",
-    "/secret/notes",
-    "/secret/admin",
-    "/secret/admin/visits",
-];
-
-/// A Postgres `text[]` literal of `VALID_ROUTES`. Built once at startup;
-/// interpolated straight into SQL rather than bound, since the contents are a
-/// compile-time constant, never user input.
-static VALID_ROUTES_ARRAY: LazyLock<String> = LazyLock::new(|| {
-    let quoted: Vec<String> = VALID_ROUTES.iter().map(|r| format!("'{r}'")).collect();
-    format!("ARRAY[{}]::text[]", quoted.join(","))
-});
-
-/// SQL predicate keeping only real page visits. The nginx mirror logs every
-/// static send and every request nginx receives — real pages, asset fetches
-/// (`/assets/app.js`, `/favicon.ico`), and bot/scanner probes at paths that
-/// don't exist alike — so `route` isn't trustworthy on its own. Matching it
-/// against the frontend's known route list is what actually separates a real
-/// page visit from that noise; everything else falls into `junk_total`
-/// instead. Null routes — the js/secret pings and pre-tracking visits — are
-/// kept.
-fn page_only() -> String {
-    format!("(route IS NULL OR route = ANY({}))", &*VALID_ROUTES_ARRAY)
-}
 
 #[derive(Serialize)]
 struct DayCount {
@@ -123,17 +80,25 @@ struct StatsJson {
     /// The busiest pages overall — always spans all pages, so it stays a stable
     /// menu even when the other aggregates are filtered to one `route`.
     by_route: Vec<RouteCount>,
-    /// Visits whose route isn't a known page — asset fetches and bot/scanner
-    /// probes — kept out of every count above. Always spans all pages.
-    junk_total: i64,
-    /// The most-hit junk paths, so the noise is inspectable rather than just a
+    /// Non-page routes that look like static-asset fetches (`/chip.svg`,
+    /// `/assets/bundle-523fsdg.js`, a `.css`) — real resource loads, not spam.
+    /// Kept out of every page count above. Always spans all pages.
+    static_total: i64,
+    /// The most-hit static-asset paths. Always spans all pages.
+    by_static_route: Vec<RouteCount>,
+    /// Non-page routes that are robot/scanner noise — probes at nonexistent
+    /// paths, plus crawler fetches of `/robots.txt`/`/sitemap.xml`. Kept out of
+    /// every page count above. Always spans all pages.
+    robot_total: i64,
+    /// The most-hit robot paths, so the noise is inspectable rather than just a
     /// number. Always spans all pages.
-    by_junk_route: Vec<RouteCount>,
+    by_robot_route: Vec<RouteCount>,
 }
 
 /// Handles `GET /stats`: high-level, anonymous visit aggregates as
 /// `{total, unique_visitors, route, per_day, by_kind, by_hour, by_route,
-/// junk_total, by_junk_route}`. Every breakdown is a pure `COUNT` — the
+/// static_total, by_static_route, robot_total, by_robot_route}`. Every
+/// breakdown is a pure `COUNT` — the
 /// endpoint exposes no client IPs, user agents, or rows.
 ///
 /// `query` is the raw request query string. A `tz` parameter selects the
@@ -250,9 +215,9 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
     // junk.
     let by_route: Vec<RouteCount> = match sqlx::query_as::<_, (String, i64)>(&format!(
         "SELECT route, COUNT(*) FROM visits \
-         WHERE route = ANY({}) \
+         WHERE {} \
          GROUP BY route ORDER BY COUNT(*) DESC, route LIMIT $1",
-        &*VALID_ROUTES_ARRAY
+        named_page()
     ))
     .bind(ROUTES)
     .fetch_all(&pool)
@@ -268,42 +233,44 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
         }
     };
 
-    // Everything that isn't a known page — asset fetches, and bot/scanner
-    // probes at paths that were never real pages — grouped apart so it never
-    // inflates the real visit counts above. Always spans all pages, same as
-    // `by_route`.
-    let junk_total: i64 = match sqlx::query_scalar::<_, i64>(&format!(
-        "SELECT COUNT(*) FROM visits WHERE route IS NOT NULL AND NOT (route = ANY({}))",
-        &*VALID_ROUTES_ARRAY
-    ))
-    .fetch_one(&pool)
-    .await
-    {
-        Ok(count) => count,
-        Err(err) => {
-            tracing::error!(error = %err, "failed to load junk visit total");
-            return ResponseBuilder::from(ApiError::Internal).into();
+    // Everything that isn't a known page is noise, split two ways so a genuine
+    // asset load never reads as bot spam: `static` (asset fetches, by
+    // extension) and `robot` (scanner probes plus forced crawler paths like
+    // robots.txt). Each is grouped apart so it never inflates the real visit
+    // counts above, and always spans all pages, same as `by_route`.
+    let load_bucket = |predicate: String| {
+        let pool = pool.clone();
+        async move {
+            let total = sqlx::query_scalar::<_, i64>(&format!(
+                "SELECT COUNT(*) FROM visits WHERE {predicate}"
+            ))
+            .fetch_one(&pool)
+            .await?;
+            let by_route = sqlx::query_as::<_, (String, i64)>(&format!(
+                "SELECT route, COUNT(*) FROM visits WHERE {predicate} \
+                 GROUP BY route ORDER BY COUNT(*) DESC, route LIMIT $1"
+            ))
+            .bind(ROUTES)
+            .fetch_all(&pool)
+            .await?
+            .into_iter()
+            .map(|(route, count)| RouteCount { route, count })
+            .collect::<Vec<_>>();
+            Ok::<_, sqlx::Error>((total, by_route))
         }
     };
 
-    // The most-hit junk paths, so the noise is inspectable rather than just a
-    // number.
-    let by_junk_route: Vec<RouteCount> = match sqlx::query_as::<_, (String, i64)>(&format!(
-        "SELECT route, COUNT(*) FROM visits \
-         WHERE route IS NOT NULL AND NOT (route = ANY({})) \
-         GROUP BY route ORDER BY COUNT(*) DESC, route LIMIT $1",
-        &*VALID_ROUTES_ARRAY
-    ))
-    .bind(ROUTES)
-    .fetch_all(&pool)
-    .await
-    {
-        Ok(rows) => rows
-            .into_iter()
-            .map(|(route, count)| RouteCount { route, count })
-            .collect(),
+    let (static_total, by_static_route) = match load_bucket(static_only()).await {
+        Ok(bucket) => bucket,
         Err(err) => {
-            tracing::error!(error = %err, "failed to load visits by junk route");
+            tracing::error!(error = %err, "failed to load static-asset visits");
+            return ResponseBuilder::from(ApiError::Internal).into();
+        }
+    };
+    let (robot_total, by_robot_route) = match load_bucket(robot_only()).await {
+        Ok(bucket) => bucket,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to load robot visits");
             return ResponseBuilder::from(ApiError::Internal).into();
         }
     };
@@ -325,8 +292,10 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
             .map(|(hour, count)| HourCount { hour, count })
             .collect(),
         by_route,
-        junk_total,
-        by_junk_route,
+        static_total,
+        by_static_route,
+        robot_total,
+        by_robot_route,
     };
 
     ResponseBuilder::new(hyper::StatusCode::OK)

@@ -13,6 +13,7 @@ mod posts;
 mod response;
 mod site;
 mod stats;
+mod visit_class;
 
 use config::{ApiConfig, SharedConfig};
 use database::models::VisitKind;
@@ -65,6 +66,7 @@ async fn route(
         (m, "/password") if *m == Method::POST || m.as_str() == "QUERY" => {
             password::respond(req).await
         }
+        (&Method::GET, "/sitemap.xml") => site::sitemap(&config).await,
         (&Method::GET, "/countries") => countries::list_response(&config).await,
         (&Method::GET, "/stats") => stats::stats_response(&config, req.uri().query()).await,
 

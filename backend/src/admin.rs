@@ -13,6 +13,7 @@ use crate::auth::{self, AuthUser};
 use crate::config::ApiConfig;
 use crate::database::models::UserRole;
 use crate::response::{self, ApiError, Body, ResponseBuilder};
+use crate::visit_class::classify;
 
 /// Authenticates the request and requires the `admin` role. A valid non-admin
 /// token is [`ApiError::Forbidden`]; a missing/invalid token is
@@ -214,6 +215,10 @@ struct VisitJson {
     created_at: String,
     kind: String,
     route: Option<String>,
+    /// How the route classifies: `page`, `static` (asset fetch), or `robot`
+    /// (bot/scanner noise). Lets the admin table flag robot hits red without
+    /// re-deriving the rules client-side — one source of truth in `visit_class`.
+    class: &'static str,
     client_ip: String,
     user_agent: String,
 }
@@ -224,6 +229,7 @@ impl From<VisitRow> for VisitJson {
             id: v.id.to_string(),
             created_at: v.created_at.to_rfc3339(),
             kind: v.kind,
+            class: classify(v.route.as_deref()).as_str(),
             route: v.route,
             client_ip: v.client_ip,
             user_agent: v.user_agent,

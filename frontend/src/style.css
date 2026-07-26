@@ -4,6 +4,26 @@ body {
     @apply bg-stone-950 font-mono min-h-screen;
 }
 
+/* Entrance for buttons that unlock on sign-in (see secret_index.ts). Applied
+   only to the freshly-revealed auth-gated tiles, and skipped for visitors who
+   prefer reduced motion. */
+@keyframes secret-rise {
+    from {
+        opacity: 0;
+        transform: translateY(0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .secret-rise {
+        animation: secret-rise 300ms ease-out both;
+    }
+}
+
 /* CDN-loaded CodeMirror 5 + Vim editor (see secret_vim.ts). Styled to match
    the secret area's stone/green terminal look. */
 .vim-cm .CodeMirror {

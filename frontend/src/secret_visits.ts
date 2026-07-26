@@ -6,8 +6,10 @@
 //
 // The backend already keeps asset fetches and bot/scanner probes at
 // nonexistent paths out of every count above — they're not real page visits.
-// That noise is surfaced here instead as its own `junk_total` tile and
-// `by_junk_route` chart, so it's visible without polluting the real numbers.
+// That noise is surfaced here instead, split into a green `static_total` tile
+// (asset fetches like `/chip.svg`) and a red `robot_total` tile (scanner probes
+// plus crawler paths like `/robots.txt`), so it's visible — and the genuine
+// asset loads are told apart from bots — without polluting the real numbers.
 
 // Type-only import: erased at build time, so ApexCharts stays out of the main
 // bundle. The runtime library is pulled in on demand via dynamic `import()`
@@ -30,11 +32,16 @@ type Stats = {
   by_hour: HourCount[];
   // Busiest pages overall — always all-pages, so it stays a stable picker menu.
   by_route: RouteCount[];
-  // Visits at paths that aren't a known page — asset fetches and bot/scanner
-  // probes — kept out of every count above. Always all-pages.
-  junk_total: number;
-  // The most-hit junk paths. Always all-pages.
-  by_junk_route: RouteCount[];
+  // Non-page routes that look like static-asset fetches (`/chip.svg`, a `.css`)
+  // — real resource loads, not spam. Kept out of every count above. All-pages.
+  static_total: number;
+  // The most-hit static-asset paths. Always all-pages.
+  by_static_route: RouteCount[];
+  // Non-page routes that are robot/scanner noise, including crawler fetches of
+  // `/robots.txt`/`/sitemap.xml`. Kept out of every count above. All-pages.
+  robot_total: number;
+  // The most-hit robot paths. Always all-pages.
+  by_robot_route: RouteCount[];
 };
 
 // Shared palette, sampled from the site's green identity so all three charts
@@ -157,14 +164,18 @@ const byRouteOptions = (
   states: { active: { filter: { type: "none" } } },
 });
 
-// Muted red, distinct from the green "real visit" palette — this chart is
-// noise, not signal.
-const JUNK_COLOR = "#991b1b";
+// Muted red for robot/scanner noise; a muted green for static-asset fetches,
+// which are real resource loads rather than spam.
+const ROBOT_COLOR = "#991b1b";
+const STATIC_COLOR = "#15803d";
 
-// Horizontal bars of the most-hit junk paths — asset fetches and bot/scanner
-// probes. Not clickable: these aren't real pages, so there's nothing to filter
-// the other charts to.
-const byJunkRouteOptions = (rows: RouteCount[]): ApexCharts.ApexOptions => ({
+// Horizontal bars of the most-hit non-page paths, tinted by `color` so static
+// assets (green) and robot noise (red) read apart. Not clickable: these aren't
+// real pages, so there's nothing to filter the other charts to.
+const byNoiseRouteOptions = (
+  rows: RouteCount[],
+  color: string,
+): ApexCharts.ApexOptions => ({
   ...baseOptions(),
   series: [{ name: "Hits", data: rows.map((r) => r.count) }],
   chart: {
@@ -172,7 +183,7 @@ const byJunkRouteOptions = (rows: RouteCount[]): ApexCharts.ApexOptions => ({
     type: "bar",
     height: Math.max(160, rows.length * 30),
   } as any,
-  colors: [JUNK_COLOR],
+  colors: [color],
   plotOptions: { bar: { horizontal: true, borderRadius: 2, distributed: false } },
   xaxis: {
     categories: rows.map((r) => r.route),
@@ -225,7 +236,7 @@ export default (app: HTMLElement) => {
         </select>
       </div>
 
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-total">0</span></div>
           <div class="text-sm text-green-800 mt-1">Total visits</div>
@@ -234,9 +245,13 @@ export default (app: HTMLElement) => {
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-unique">0</span></div>
           <div class="text-sm text-green-800 mt-1">Unique visitors</div>
         </div>
-        <div class="bg-stone-900 border border-red-900 px-4 py-5 text-center" title="Asset fetches and bot/scanner probes at paths that aren't a real page — excluded from every count on this page">
-          <div class="text-3xl md:text-4xl font-bold font-mono text-red-400"><span id="vs-junk">0</span></div>
-          <div class="text-sm text-red-800 mt-1">Junk / bot hits</div>
+        <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center" title="Asset fetches at paths that aren't a real page (/chip.svg, /assets/bundle-*.js, .css) — real resource loads, excluded from every count on this page">
+          <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-static">0</span></div>
+          <div class="text-sm text-green-800 mt-1">Static assets</div>
+        </div>
+        <div class="bg-stone-900 border border-red-900 px-4 py-5 text-center" title="Bot/scanner probes at paths that aren't a real page, plus crawler fetches of /robots.txt — excluded from every count on this page">
+          <div class="text-3xl md:text-4xl font-bold font-mono text-red-400"><span id="vs-robot">0</span></div>
+          <div class="text-sm text-red-800 mt-1">Robot / bot hits</div>
         </div>
       </div>
 
@@ -261,9 +276,14 @@ export default (app: HTMLElement) => {
         <div id="vs-by-route"></div>
       </div>
 
-      <div id="vs-junk-panel" class="hidden bg-stone-900 border border-red-900 p-4">
-        <h2 class="text-red-400 font-mono text-sm mb-2">Top junk paths &middot; asset fetches &amp; bot/scanner probes</h2>
-        <div id="vs-by-junk-route"></div>
+      <div id="vs-static-panel" class="hidden bg-stone-900 border border-green-900 p-4">
+        <h2 class="text-green-400 font-mono text-sm mb-2">Top static-asset paths &middot; .js / .css / .svg &amp; friends</h2>
+        <div id="vs-by-static-route"></div>
+      </div>
+
+      <div id="vs-robot-panel" class="hidden bg-stone-900 border border-red-900 p-4">
+        <h2 class="text-red-400 font-mono text-sm mb-2">Top robot paths &middot; bot/scanner probes &amp; robots.txt</h2>
+        <div id="vs-by-robot-route"></div>
       </div>
     </div>
   </div>
@@ -280,8 +300,10 @@ export default (app: HTMLElement) => {
       stats.total.toLocaleString();
     (app.querySelector("#vs-unique") as HTMLElement).textContent =
       stats.unique_visitors.toLocaleString();
-    (app.querySelector("#vs-junk") as HTMLElement).textContent =
-      stats.junk_total.toLocaleString();
+    (app.querySelector("#vs-static") as HTMLElement).textContent =
+      stats.static_total.toLocaleString();
+    (app.querySelector("#vs-robot") as HTMLElement).textContent =
+      stats.robot_total.toLocaleString();
 
     // Rebuild the picker from the (always all-pages) `by_route` menu, then
     // restore the active selection — assigning `value` never fires `change`.
@@ -315,12 +337,30 @@ export default (app: HTMLElement) => {
       }),
     );
 
-    // Only take up room when there's actually junk to show.
-    const junkPanel = app.querySelector<HTMLElement>("#vs-junk-panel")!;
-    junkPanel.classList.toggle("hidden", stats.by_junk_route.length === 0);
-    if (stats.by_junk_route.length > 0) {
-      mount("#vs-by-junk-route", byJunkRouteOptions(stats.by_junk_route));
-    }
+    // Only take up room when there's actually noise to show, and keep the
+    // static (green) and robot (red) breakdowns on their own panels.
+    const noisePanel = (
+      panelSel: string,
+      chartSel: string,
+      rows: RouteCount[],
+      color: string,
+    ) => {
+      const panel = app.querySelector<HTMLElement>(panelSel)!;
+      panel.classList.toggle("hidden", rows.length === 0);
+      if (rows.length > 0) mount(chartSel, byNoiseRouteOptions(rows, color));
+    };
+    noisePanel(
+      "#vs-static-panel",
+      "#vs-by-static-route",
+      stats.by_static_route,
+      STATIC_COLOR,
+    );
+    noisePanel(
+      "#vs-robot-panel",
+      "#vs-by-robot-route",
+      stats.by_robot_route,
+      ROBOT_COLOR,
+    );
   };
 
   // Guards against a slow fetch landing after a newer one (e.g. clicking two

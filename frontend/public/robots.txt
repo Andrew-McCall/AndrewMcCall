@@ -1,0 +1,5 @@
+# https://www.andrewmccall.uk/robots.txt
+User-agent: *
+Allow: /
+
+Sitemap: https://www.andrewmccall.uk/sitemap.xml

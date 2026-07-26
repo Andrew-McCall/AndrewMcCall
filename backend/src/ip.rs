@@ -52,11 +52,19 @@ pub fn resolve_client_ip<B>(
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string()),
         IpSource::Nginx => headers
-            .get("x-forwarded-for")
+            .get("x-real-ip")
             .and_then(|v| v.to_str().ok())
-            .and_then(|forwarded| forwarded.split(',').next())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty()),
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                headers
+                    .get("x-forwarded-for")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|forwarded| forwarded.split(',').next())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            })
+            .map(str::to_string),
         IpSource::ConnectInfo => Some(peer.ip().to_string()),
     };
 
@@ -67,7 +75,9 @@ pub fn resolve_client_ip<B>(
     // upstream header resolves to `127.0.0.1`. That's never a real client here —
     // reject it rather than record/return a bogus address.
     if ip == "127.0.0.1" || ip == "::1" {
-        return Err(ApiError::BadRequest("client IP resolved to loopback".to_string()));
+        return Err(ApiError::BadRequest(
+            "client IP resolved to loopback".to_string(),
+        ));
     }
 
     Ok(ClientIp(ip))

@@ -6,6 +6,7 @@
 use std::net::SocketAddr;
 
 use chrono::{DateTime, Utc};
+use hyper::header::{CACHE_CONTROL, HeaderValue};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -340,6 +341,47 @@ pub async fn home(
             ResponseBuilder::from(ApiError::Internal).into()
         }
     }
+}
+
+/// The canonical origin every sitemap URL is built from.
+const SITE_ORIGIN: &str = "https://www.andrewmccall.uk";
+
+/// The fixed public routes that always belong in the sitemap, independent of
+/// the database. Blog post detail pages (`/posts/{slug}`) are appended from the
+/// `posts` table at request time.
+const STATIC_PATHS: [&str; 2] = ["/", "/posts"];
+
+/// `GET /sitemap.xml` — a `urlset` of the fixed public routes plus one entry
+/// per published post, generated on request and cached for an hour at the HTTP
+/// layer (nginx / browsers / crawlers). Post slugs are lowercase `[a-z0-9-]`
+/// by construction, so they need no XML escaping.
+pub async fn sitemap(config: &ApiConfig) -> hyper::Response<Body> {
+    let slugs = match posts::published_slugs(&config.db.pool()).await {
+        Ok(slugs) => slugs,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to load slugs for sitemap");
+            return ResponseBuilder::from(ApiError::Internal).into();
+        }
+    };
+
+    let mut xml = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
+    );
+    for path in STATIC_PATHS {
+        xml.push_str(&format!("  <url><loc>{SITE_ORIGIN}{path}</loc></url>\n"));
+    }
+    for slug in &slugs {
+        xml.push_str(&format!(
+            "  <url><loc>{SITE_ORIGIN}/posts/{slug}</loc></url>\n"
+        ));
+    }
+    xml.push_str("</urlset>\n");
+
+    ResponseBuilder::new(StatusCode::OK)
+        .header(CACHE_CONTROL, HeaderValue::from_static("public, max-age=3600"))
+        .xml(xml)
+        .into()
 }
 
 // ---------------------------------------------------------------------------
