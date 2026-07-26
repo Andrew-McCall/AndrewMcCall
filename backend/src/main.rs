@@ -61,6 +61,7 @@ async fn route(
             Ok(client_ip) => ResponseBuilder::new(StatusCode::OK).text(client_ip.0).into(),
             Err(err) => ResponseBuilder::from(err).into(),
         },
+        (_, "/http") => http_dump(req, peer, &config).await,
 
         (&Method::GET, "/password/types") => password::types_response(),
         (m, "/password") if *m == Method::POST || m.as_str() == "QUERY" => {
@@ -164,6 +165,50 @@ async fn route(
             ResponseBuilder::from(ApiError::NotFound(path.to_string())).into()
         }
     }
+}
+
+/// Debug endpoint: returns a plain-text dump of the incoming request — the
+/// request line, resolved client IP, every header, and the full body. Reads the
+/// body into memory, so it's meant for inspecting small requests only.
+async fn http_dump(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &config::ApiConfig,
+) -> hyper::Response<Body> {
+    let mut out = String::new();
+
+    // Request line + version. Captured before the body is consumed below.
+    out.push_str(&format!(
+        "{} {} {:?}\n",
+        req.method(),
+        req.uri(),
+        req.version()
+    ));
+
+    // Resolved client IP, plus the raw TCP peer for comparison. On failure
+    // (e.g. loopback) show the error rather than aborting the dump.
+    match resolve_client_ip(config.ip_source, &req, peer) {
+        Ok(client_ip) => out.push_str(&format!("client ip: {}\n", client_ip.0)),
+        Err(err) => out.push_str(&format!("client ip: <unresolved: {err}>\n")),
+    }
+    out.push_str(&format!("peer: {peer}\n"));
+
+    out.push_str("\nheaders:\n");
+    for (name, value) in req.headers() {
+        out.push_str(&format!(
+            "  {}: {}\n",
+            name,
+            value.to_str().unwrap_or("<non-utf8>")
+        ));
+    }
+
+    out.push_str("\nbody:\n");
+    match response::read_body(req).await {
+        Ok(bytes) => out.push_str(&String::from_utf8_lossy(&bytes)),
+        Err(err) => out.push_str(&format!("<could not read body: {err}>")),
+    }
+
+    ResponseBuilder::new(StatusCode::OK).text(out).into()
 }
 
 #[derive(Clone, Copy)]
