@@ -79,8 +79,13 @@ pub const STATIC_ASSET_PREFIX: &str = "/assets/";
 /// `frontend/public`). Anything else at the root that merely *looks* like an
 /// asset (`/backup.js`, `/logo.jpg`) is a bot probe at a path that was never
 /// real, so it stays robot noise rather than inflating the static count.
-pub const STATIC_ASSET_FILES: &[&str] =
-    &["/canvas.wasm", "/chip.svg", "/nojs.png", "/nojs-stars.png"];
+pub const STATIC_ASSET_FILES: &[&str] = &[
+    "/canvas.wasm",
+    "/chip.svg",
+    "/nojs.png",
+    "/nojs-stars.png",
+    "/favicon.ico",
+];
 
 /// Which of the three buckets a visit's route falls into.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -274,6 +279,7 @@ mod tests {
         // Exact root public files.
         assert_eq!(classify(Some("/chip.svg")), VisitClass::Static);
         assert_eq!(classify(Some("/nojs-stars.png")), VisitClass::Static);
+        assert_eq!(classify(Some("/favicon.ico")), VisitClass::Static);
         // Hashed bundles under /assets/, case-insensitive on the extension.
         assert_eq!(
             classify(Some("/assets/index-yXm2gtty.js")),
@@ -295,7 +301,7 @@ mod tests {
         assert_eq!(classify(Some("/photo.jpg")), VisitClass::Robot);
         assert_eq!(classify(Some("/wp-content/themes/x.css")), VisitClass::Robot);
         // Not a real public file, even though it looks like one.
-        assert_eq!(classify(Some("/favicon.ico")), VisitClass::Robot);
+        assert_eq!(classify(Some("/apple-touch-icon.png")), VisitClass::Robot);
         // The prefix must be the real bundle dir, not just contain "assets".
         assert_eq!(classify(Some("/vendor/assets/app.js")), VisitClass::Robot);
     }

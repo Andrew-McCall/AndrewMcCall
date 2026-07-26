@@ -92,7 +92,10 @@ const perDayOptions = (rows: DayCount[]): ApexCharts.ApexOptions => ({
     axisBorder: { color: "#1c2a1e" },
     axisTicks: { color: "#1c2a1e" },
   },
-  yaxis: { min: 0, forceNiceScale: true },
+  // Log scale so a few very-busy days don't flatten every quieter day to the
+  // baseline. `min: 1` keeps the axis defined (log 0 is undefined) — zero-visit
+  // days from `generate_series` just sit on the floor.
+  yaxis: { logarithmic: true, min: 1, forceNiceScale: true },
 });
 
 const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => ({
@@ -330,10 +333,13 @@ export default (app: HTMLElement) => {
 
     mount("#vs-per-day", perDayOptions(stats.per_day));
     // Fold robot/scanner noise into the source breakdown as its own (red) slice
-    // so the donut accounts for every hit, not just real page visits. Only when
-    // there's noise to show, so an all-clean site keeps a tidy chart.
+    // so the donut accounts for every hit, not just real page visits — but only
+    // in the all-pages view. `robot_total` always spans every page (bot probes
+    // hit paths that were never real, so they belong to no page), so mixing it
+    // into a route-filtered donut would swamp that page's real kinds with
+    // unrelated site-wide noise. When a page is selected, show its kinds alone.
     const kindRows =
-      stats.robot_total > 0
+      currentRoute === null && stats.robot_total > 0
         ? [...stats.by_kind, { kind: "robot", count: stats.robot_total }]
         : stats.by_kind;
     mount("#vs-by-kind", byKindOptions(kindRows));
