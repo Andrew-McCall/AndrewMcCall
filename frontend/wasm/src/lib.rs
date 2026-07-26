@@ -1162,6 +1162,26 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
 
     sim.update_metroids(dt, cells);
 
+    render_frame(width, height, gw, gh, pitch, ox as usize, oy as usize, cells, tile_a, stars);
+}
+
+/// Blit the current grid, cell and star state into the RGBA framebuffer.
+/// Split out of `tick` so the offline `nojs_stars` snapshot can reuse the exact
+/// same rasteriser. Reads only geometry plus `cells`/`tile_a`/`stars`; the
+/// caller owns the simulation.
+#[allow(clippy::too_many_arguments)] // one flat call site: every arg is distinct
+fn render_frame(
+    width: usize,
+    height: usize,
+    gw: usize,
+    gh: usize,
+    pitch: usize,
+    ox: usize,
+    oy: usize,
+    cells: &[u8],
+    tile_a: &[u8],
+    stars: &[u8],
+) {
     // Render into the framebuffer as packed little-endian RGBA words. FRAME is
     // 4-aligned and its length is a multiple of 4, so the whole buffer is one
     // clean u32 run: background, grid lines and cells each store a full pixel
@@ -1179,7 +1199,6 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     // (ox + gw*pitch + 1 <= width, likewise height), so these index directly.
     let grid_px = |a: u8| u32::from_le_bytes([GRID_LINE[0], GRID_LINE[1], GRID_LINE[2], a]);
     let tile = |cx: usize, cy: usize| tile_a[cy * gw + cx];
-    let (ox, oy) = (ox as usize, oy as usize);
     for j in 0..=gh {
         let row = (oy + j * pitch) * width + ox;
         for cx in 0..gw {
@@ -1257,6 +1276,43 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             }
         }
     }
+}
+
+/// Render the static `<noscript>` backdrop: a fully-opaque, name-free star
+/// field, identical to the front page's load-time stars everywhere they land,
+/// plus extra specks filling the ground the name would otherwise keep clear.
+///
+/// Offline only (the `nojs-image.mjs` snapshot builder calls it); the live page
+/// never uses it. Seed the PRNG the same way the snapshot does beforehand so
+/// the two share an identical field. Leaves the framebuffer ready to read via
+/// `frame_ptr()`.
+#[no_mangle]
+pub extern "C" fn nojs_stars(width: usize, height: usize) {
+    if width == 0 || height == 0 || width > MAX_W || height > MAX_H {
+        return;
+    }
+    let sim = unsafe { &mut *addr_of_mut!(SIM) };
+    let cells: &mut [u8] = unsafe { &mut *addr_of_mut!(CELLS) };
+    let mask: &mut [u8] = unsafe { &mut *addr_of_mut!(TEXT_MASK) };
+    let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
+    let perma: &mut [u8] = unsafe { &mut *addr_of_mut!(PERMA) };
+    let stars: &mut [u8] = unsafe { &mut *addr_of_mut!(STARS) };
+
+    // Scatter exactly the load-time field: same seed, same name mask, so every
+    // star matches the snapshot's placement.
+    sim.init(width, height, cells, mask, tile_a, perma, stars);
+    let (gw, gh, pitch, ox, oy) = (sim.gw, sim.gh, sim.pitch, sim.ox, sim.oy);
+    let n = gw * gh;
+    // Top up the ground the name kept clear. A second pass with an empty mask
+    // only adds stars — it never moves one already placed — so the field stays
+    // identical wherever the snapshot has stars and merely gains specks under
+    // where the letters were.
+    mask[..n].fill(0);
+    scatter_stars(&mut sim.rng, stars, mask, gw, gh, pitch);
+    // No name and no erosion: a clean, wholly opaque field.
+    cells[..n].fill(0);
+    tile_a[..n].fill(255);
+    render_frame(width, height, gw, gh, pitch, ox, oy, cells, tile_a, stars);
 }
 
 // --- Tests (host target only) ------------------------------------------------

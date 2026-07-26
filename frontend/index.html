@@ -13,19 +13,21 @@
   <div id="app"></div>
   <noscript>
     <style>
-      /* No-JS fallback: name image fades to black over 30s, leaving a slowly rotating star field */
+      /* No-JS fallback: the name snapshot fades to black over 30s, revealing the
+         same star field beneath — no name, stars carried across where the words
+         were — turning slowly (a full revolution every 20 minutes). The scale
+         keeps the rotating square covering the viewport at every angle. */
       @keyframes nojs-fade { to { opacity: 0; } }
-      @keyframes nojs-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+      @keyframes nojs-spin {
+        from { transform: scale(1.6) rotate(0); }
+        to { transform: scale(1.6) rotate(360deg); }
+      }
       .nojs { position: fixed; inset: 0; overflow: hidden; background: #0c0a09; pointer-events: none; }
       .nojs-stars {
-        position: absolute; top: 50%; left: 50%; width: 220vmax; height: 220vmax;
-        margin: -110vmax 0 0 -110vmax; transform-origin: center;
-        background-color: #0c0a09;
-        background-image:
-          radial-gradient(circle at 30% 40%, rgba(160, 210, 110, 0.55) 0.5px, transparent 1.5px),
-          radial-gradient(circle, rgba(90, 140, 70, 0.35) 0.5px, transparent 1.5px);
-        background-size: 93px 93px, 22px 22px;
-        animation: nojs-spin 600s linear infinite;
+        position: absolute; inset: 0; display: block; width: 100%; height: 100%; margin: 0;
+        object-fit: cover; object-position: center; transform-origin: center;
+        user-select: none; -webkit-user-drag: none;
+        animation: nojs-spin 1200s linear infinite;
       }
       .nojs-img {
         position: absolute; inset: 0; display: block; width: 100%; height: 100%; margin: 0;
@@ -35,7 +37,7 @@
       }
     </style>
     <div class="nojs">
-      <div class="nojs-stars"></div>
+      <img class="nojs-stars" src="/nojs-stars.png" alt="" draggable="false" />
       <img class="nojs-img" src="/nojs.png" alt="Andrew David McCall" draggable="false" />
     </div>
   </noscript>

@@ -12,23 +12,34 @@ const H = 1080;
 const { instance } = await WebAssembly.instantiate(
   await readFile(`${root}/public/canvas.wasm`),
 );
-const { memory, frame_ptr, tick, reset, seed } = instance.exports;
+const { memory, frame_ptr, tick, reset, seed, nojs_stars } = instance.exports;
+
+// Convert the current RGBA framebuffer to a PNG at `${root}/public/<name>.png`.
+async function writePng(name) {
+  const fb = new Uint8Array(memory.buffer, frame_ptr(), W * H * 4);
+  const rgb = Buffer.alloc(W * H * 3);
+  for (let i = 0; i < W * H; i++) {
+    rgb[i * 3] = fb[i * 4];
+    rgb[i * 3 + 1] = fb[i * 4 + 1];
+    rgb[i * 3 + 2] = fb[i * 4 + 2];
+  }
+  const ppm = `${root}/public/${name}.ppm`;
+  await writeFile(ppm, Buffer.concat([Buffer.from(`P6\n${W} ${H}\n255\n`), rgb]));
+  execFileSync("sips", ["-s", "format", "png", ppm, "--out", `${root}/public/${name}.png`], {
+    stdio: "ignore",
+  });
+  await unlink(ppm);
+  console.log(`wrote public/${name}.png`);
+}
+
+// The snapshot: the name spelled in live cells over the star field.
 seed(1);
 reset();
 tick(W, H, 0.01);
+await writePng("nojs");
 
-const fb = new Uint8Array(memory.buffer, frame_ptr(), W * H * 4);
-const rgb = Buffer.alloc(W * H * 3);
-for (let i = 0; i < W * H; i++) {
-  rgb[i * 3] = fb[i * 4];
-  rgb[i * 3 + 1] = fb[i * 4 + 1];
-  rgb[i * 3 + 2] = fb[i * 4 + 2];
-}
-
-const ppm = `${root}/public/nojs.ppm`;
-await writeFile(ppm, Buffer.concat([Buffer.from(`P6\n${W} ${H}\n255\n`), rgb]));
-execFileSync("sips", ["-s", "format", "png", ppm, "--out", `${root}/public/nojs.png`], {
-  stdio: "ignore",
-});
-await unlink(ppm);
-console.log("wrote public/nojs.png");
+// The rotating backdrop: the same star field with no name, its stars extended
+// across where the letters were. Re-seed identically so the shared stars match.
+seed(1);
+nojs_stars(W, H);
+await writePng("nojs-stars");
