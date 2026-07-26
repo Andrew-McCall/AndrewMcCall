@@ -151,17 +151,27 @@ fn generate_totp_secret() -> String {
 // Cookies + token extraction.
 // ---------------------------------------------------------------------------
 
+/// Browsers cap a cookie's `Max-Age` at 400 days (RFC 6265bis); we use that as
+/// the lifetime for never-expiring tokens so the login persists across browser
+/// restarts instead of dying with the session.
+const MAX_COOKIE_AGE_DAYS: i64 = 400;
+
 /// Builds the `Set-Cookie` value carrying `token`, honouring the configured
-/// `Secure` flag and token TTL.
+/// `Secure` flag and token TTL. Always sets a `Max-Age` so the cookie is
+/// persistent (survives closing the browser); when tokens never expire we fall
+/// back to the browser's maximum acceptable lifetime.
 fn build_cookie(token: &str, config: &ApiConfig) -> String {
+    build_cookie_value(token, config.cookie_secure, config.token_ttl_days)
+}
+
+fn build_cookie_value(token: &str, secure: bool, token_ttl_days: Option<i64>) -> String {
     let mut cookie = format!("{COOKIE_NAME}={token}; HttpOnly; Path=/; SameSite=Strict");
-    if config.cookie_secure {
+    if secure {
         cookie.push_str("; Secure");
     }
-    if let Some(days) = config.token_ttl_days {
-        let max_age = days.max(0) * 86_400;
-        let _ = write!(cookie, "; Max-Age={max_age}");
-    }
+    let days = token_ttl_days.unwrap_or(MAX_COOKIE_AGE_DAYS).max(0);
+    let max_age = days * 86_400;
+    let _ = write!(cookie, "; Max-Age={max_age}");
     cookie
 }
 
@@ -887,6 +897,22 @@ mod tests {
         let now = totp.generate_current().unwrap();
         assert!(verify_totp(&secret, "alice", &now));
         assert!(!verify_totp(&secret, "alice", "000000"));
+    }
+
+    #[test]
+    fn cookie_is_persistent_even_when_tokens_never_expire() {
+        // No configured TTL -> fall back to the browser max so the login
+        // survives a browser restart rather than being a session cookie.
+        let cookie = build_cookie_value("tok", true, None);
+        let expected = MAX_COOKIE_AGE_DAYS * 86_400;
+        assert!(cookie.contains(&format!("Max-Age={expected}")));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("Secure"));
+
+        // A configured TTL drives the Max-Age, and Secure is omitted when off.
+        let cookie = build_cookie_value("tok", false, Some(7));
+        assert!(cookie.contains(&format!("Max-Age={}", 7 * 86_400)));
+        assert!(!cookie.contains("Secure"));
     }
 
     #[test]
