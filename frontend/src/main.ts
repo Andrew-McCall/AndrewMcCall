@@ -1,28 +1,9 @@
-import secret_index from "./secret_index.ts";
-import secret_morse, { disposeMorse } from "./secret_morse.ts";
-import secret_pi, { disposePi } from "./secret_pi.ts";
-import { hideGame } from "./secret_canvas.ts";
+// The front page and its Game-of-Life canvas are the critical path, so they stay
+// in the entry chunk. Every other page is pulled in on demand via dynamic
+// `import()` below — Vite splits each into its own chunk, so a visitor who only
+// ever sees `/` no longer downloads the admin screens and secret tools.
 import home from "./home.ts";
-import { postsList, postPage } from "./posts.ts";
-import secret_admin_posts from "./secret_admin_posts.ts";
-import secret_admin_projects from "./secret_admin_projects.ts";
-import secret_admin_profile from "./secret_admin_profile.ts";
-import secret_admin_details from "./secret_admin_details.ts";
-import secret_password from "./secret_password.ts";
-import secret_countries from "./secret_countries.ts";
-import secret_visits, { disposeVisits } from "./secret_visits.ts";
-import secret_admin from "./secret_admin.ts";
-import secret_admin_visits from "./secret_admin_visits.ts";
-import secret_notes from "./secret_notes.ts";
-import secret_prettier from "./secret_prettier.ts";
-import secret_vim from "./secret_vim.ts";
-import secret_time, { disposeTime } from "./secret_time.ts";
-import secret_colour from "./secret_colour.ts";
-import secret_barcode from "./secret_barcode.ts";
-import secret_cron from "./secret_cron.ts";
-import secret_python from "./secret_python.ts";
-import secret_man from "./secret_man.ts";
-import secret_languages from "./secret_languages.ts";
+import { hideGame } from "./secret_canvas.ts";
 import { getMe, type Me } from "./session.ts";
 
 window.addEventListener("popstate", () => {
@@ -46,31 +27,112 @@ interface Route {
   render: Handler;
 }
 
+// Lazily-loaded modules, kept so navigation teardown can reach a page's disposer
+// without force-loading a chunk the visitor never opened. Keyed by a short name.
+const loaded = new Map<string, any>();
+
+// Most pages export a default renderer taking just the app element. Wrapping the
+// dynamic import here keeps each page in its own chunk while staying terse.
+const lazy =
+  (loader: () => Promise<{ default: (app: HTMLElement) => unknown }>): Handler =>
+  (app) =>
+    loader().then((m) => {
+      m.default(app);
+    });
+
+// A lazy page that also owns a disposer the router calls on the way out. The
+// resolved module is stashed in `loaded` under `name` so teardown can find it.
+const disposable =
+  (
+    name: string,
+    loader: () => Promise<{ default: (app: HTMLElement) => unknown }>,
+  ): Handler =>
+  (app) =>
+    loader().then((m) => {
+      loaded.set(name, m);
+      m.default(app);
+    });
+
 const routes: Record<string, Route> = {
   "/": { auth: "public", render: (app) => home(app) },
-  "/posts": { auth: "public", render: (app) => postsList(app) },
-  "/secret": { auth: "public", render: (app) => secret_index(app) },
-  "/secret/pi": { auth: "public", render: (app) => secret_pi(app) },
-  "/secret/morse": { auth: "public", render: (app) => secret_morse(app) },
-  "/secret/password": { auth: "public", render: (app) => secret_password(app) },
-  "/secret/countries": { auth: "public", render: (app) => secret_countries(app) },
-  "/secret/visits": { auth: "public", render: (app) => secret_visits(app) },
-  "/secret/prettier": { auth: "public", render: (app) => secret_prettier(app) },
-  "/secret/vim": { auth: "public", render: (app) => secret_vim(app) },
-  "/secret/time": { auth: "public", render: (app) => secret_time(app) },
-  "/secret/colour": { auth: "public", render: (app) => secret_colour(app) },
-  "/secret/barcode": { auth: "public", render: (app) => secret_barcode(app) },
-  "/secret/cron": { auth: "public", render: (app) => secret_cron(app) },
-  "/secret/man": { auth: "public", render: (app) => secret_man(app) },
-  "/secret/languages": { auth: "public", render: (app) => secret_languages(app) },
-  "/secret/python": { auth: "public", render: (app) => secret_python(app) },
-  "/secret/notes": { auth: "user", render: (app) => secret_notes(app) },
-  "/secret/admin": { auth: "admin", render: (app, me) => secret_admin(app, me!) },
-  "/secret/admin/visits": { auth: "admin", render: (app) => secret_admin_visits(app) },
-  "/secret/admin/posts": { auth: "admin", render: (app) => secret_admin_posts(app) },
-  "/secret/admin/projects": { auth: "admin", render: (app) => secret_admin_projects(app) },
-  "/secret/admin/profile": { auth: "admin", render: (app) => secret_admin_profile(app) },
-  "/secret/admin/details": { auth: "admin", render: (app) => secret_admin_details(app) },
+  "/posts": {
+    auth: "public",
+    render: (app) => import("./posts.ts").then((m) => m.postsList(app)),
+  },
+  "/secret": { auth: "public", render: lazy(() => import("./secret_index.ts")) },
+  "/secret/pi": {
+    auth: "public",
+    render: disposable("pi", () => import("./secret_pi.ts")),
+  },
+  "/secret/morse": {
+    auth: "public",
+    render: disposable("morse", () => import("./secret_morse.ts")),
+  },
+  "/secret/password": {
+    auth: "public",
+    render: lazy(() => import("./secret_password.ts")),
+  },
+  "/secret/countries": {
+    auth: "public",
+    render: lazy(() => import("./secret_countries.ts")),
+  },
+  "/secret/visits": {
+    auth: "public",
+    render: disposable("visits", () => import("./secret_visits.ts")),
+  },
+  "/secret/prettier": {
+    auth: "public",
+    render: lazy(() => import("./secret_prettier.ts")),
+  },
+  "/secret/vim": { auth: "public", render: lazy(() => import("./secret_vim.ts")) },
+  "/secret/time": {
+    auth: "public",
+    render: disposable("time", () => import("./secret_time.ts")),
+  },
+  "/secret/colour": {
+    auth: "public",
+    render: lazy(() => import("./secret_colour.ts")),
+  },
+  "/secret/barcode": {
+    auth: "public",
+    render: lazy(() => import("./secret_barcode.ts")),
+  },
+  "/secret/cron": { auth: "public", render: lazy(() => import("./secret_cron.ts")) },
+  "/secret/man": { auth: "public", render: lazy(() => import("./secret_man.ts")) },
+  "/secret/languages": {
+    auth: "public",
+    render: lazy(() => import("./secret_languages.ts")),
+  },
+  "/secret/python": {
+    auth: "public",
+    render: lazy(() => import("./secret_python.ts")),
+  },
+  "/secret/notes": { auth: "user", render: lazy(() => import("./secret_notes.ts")) },
+  "/secret/admin": {
+    auth: "admin",
+    render: (app, me) =>
+      import("./secret_admin.ts").then((m) => m.default(app, me!)),
+  },
+  "/secret/admin/visits": {
+    auth: "admin",
+    render: lazy(() => import("./secret_admin_visits.ts")),
+  },
+  "/secret/admin/posts": {
+    auth: "admin",
+    render: lazy(() => import("./secret_admin_posts.ts")),
+  },
+  "/secret/admin/projects": {
+    auth: "admin",
+    render: lazy(() => import("./secret_admin_projects.ts")),
+  },
+  "/secret/admin/profile": {
+    auth: "admin",
+    render: lazy(() => import("./secret_admin_profile.ts")),
+  },
+  "/secret/admin/details": {
+    auth: "admin",
+    render: lazy(() => import("./secret_admin_details.ts")),
+  },
 };
 
 // Routes with a path parameter, matched by prefix after the exact table misses.
@@ -79,7 +141,11 @@ const prefixRoutes: {
   auth: Auth;
   render: (app: HTMLElement, param: string, me: Me | null) => void | Promise<void>;
 }[] = [
-  { prefix: "/posts/", auth: "public", render: (app, slug) => postPage(app, slug) },
+  {
+    prefix: "/posts/",
+    auth: "public",
+    render: (app, slug) => import("./posts.ts").then((m) => m.postPage(app, slug)),
+  },
 ];
 
 async function renderPage(): Promise<void> {
@@ -91,17 +157,19 @@ async function renderPage(): Promise<void> {
   if (page !== "/") {
     hideGame(); // dismiss the fullscreen Game of Life when leaving the front page
   }
+  // Teardown only touches pages that were actually loaded — `loaded.get` misses
+  // for a chunk the visitor never opened, so this never force-loads anything.
   if (page !== "/secret/visits") {
-    disposeVisits(); // tear down the ApexCharts when navigating away
+    loaded.get("visits")?.disposeVisits(); // tear down the ApexCharts
   }
   if (page !== "/secret/morse") {
-    disposeMorse(); // detach the keyer's window listeners + stop audio/timers
+    loaded.get("morse")?.disposeMorse(); // detach keyer listeners + stop audio
   }
   if (page !== "/secret/pi") {
-    disposePi(); // detach the keypad's window keydown listener
+    loaded.get("pi")?.disposePi(); // detach the keypad's window keydown listener
   }
   if (page !== "/secret/time") {
-    disposeTime(); // stop the relative-time tab's 1s ticker
+    loaded.get("time")?.disposeTime(); // stop the relative-time tab's 1s ticker
   }
 
   app.innerHTML = "";
@@ -109,7 +177,7 @@ async function renderPage(): Promise<void> {
   if (page === "/secret/login") {
     // Sign-in now lives inside the secret menu; keep the old path working.
     window.history.replaceState({}, "", "/secret");
-    return secret_index(app);
+    return void import("./secret_index.ts").then((m) => m.default(app!));
   }
 
   const route = routes[page];
@@ -147,6 +215,15 @@ async function renderPage(): Promise<void> {
 
 function navigateImpl(new_url: string): void {
   const url = String(new_url);
+  // Navigating to the page you're already on is a no-op: don't push a duplicate
+  // history entry and don't wipe + rebuild the DOM that's already correct.
+  const target = new URL(url, window.location.origin);
+  if (
+    target.pathname === window.location.pathname &&
+    target.search === window.location.search
+  ) {
+    return;
+  }
   window.history.pushState({}, '', url);
   renderPage();
 }
