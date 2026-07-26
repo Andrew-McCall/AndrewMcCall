@@ -141,10 +141,11 @@ const STAR_TYP_PX: usize = 34;
 /// scattered field reads as varied points of depth.
 fn star_kind(ty: u8) -> (u8, u16) {
     match ty {
-        1 => (120, 0x0400),        // faint single pixel
+        1 => (STAR_ALPHA, 0xFFFF), // bright filled 4x4 square
         2 => (160, 0x0660),        // small 2x2 dot
         3 => (STAR_ALPHA, 0x4E40), // 3px twinkle: a centred plus
-        _ => (STAR_ALPHA, 0xFFFF), // bright filled 4x4 square
+        4 => (STAR_ALPHA, 0xA4A0), // 3px twinkle: the plus rotated to an X
+        _ => (120, 0x0400),        // faint single pixel
     }
 }
 
@@ -431,8 +432,9 @@ fn scatter_stars(rng: &mut u32, stars: &mut [u8], mask: &[u8], gw: usize, gh: us
         // the field looks like real depth rather than a uniform stipple.
         let ty = match xorshift(rng) % 16 {
             0..=6 => 1,   // faint single pixel
-            7..=11 => 2,  // small 2x2 dot
-            12..=14 => 3, // 3px twinkle (plus)
+            7..=10 => 2,  // small 2x2 dot
+            11..=12 => 3, // 3px twinkle (plus)
+            13..=14 => 5, // 3px twinkle (X)
             _ => 4,       // bright 4x4 square
         };
         stars[y * gw + x] = ty;
@@ -1240,12 +1242,8 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
             // through it too.
             if sty > 0 {
                 let (ka, pat) = star_kind(sty);
-                let px = u32::from_le_bytes([
-                    STAR_COLOUR[0],
-                    STAR_COLOUR[1],
-                    STAR_COLOUR[2],
-                    a.min(ka),
-                ]);
+                let px =
+                    u32::from_le_bytes([STAR_COLOUR[0], STAR_COLOUR[1], STAR_COLOUR[2], a.min(ka)]);
                 let base = y0 + cx * pitch + star_off * width + star_off;
                 for sy in 0..star_box {
                     let row = base + sy * width;
@@ -1459,7 +1457,7 @@ mod tests {
     fn decay_rate_scales_and_never_stalls() {
         let (gw, gh) = (3, 3);
         let cells = vec![1u8; gw * gh]; // centre sees all 8 neighbours
-        // 100% reproduces the unscaled loss; 50% roughly halves it.
+                                        // 100% reproduces the unscaled loss; 50% roughly halves it.
         let mut full = vec![255u8; gw * gh];
         decay_tiles(&cells, &mut full, gw, gh, 100);
         assert_eq!(255 - full[4], 3 * DECAY);
@@ -1472,7 +1470,11 @@ mod tests {
         // A live tile always loses at least one step, however low the percent.
         let mut trickle = vec![255u8; gw * gh];
         decay_tiles(&cells, &mut trickle, gw, gh, 1);
-        assert_eq!(255 - trickle[0], 1, "erosion never fully stalls on a live tile");
+        assert_eq!(
+            255 - trickle[0],
+            1,
+            "erosion never fully stalls on a live tile"
+        );
     }
 
     #[test]
@@ -1556,7 +1558,10 @@ mod tests {
         }
         assert_eq!(tps, INIT_TPS - 1.0);
         assert!((steps as f32) >= SLOW_WINDOW, "dropped too early");
-        assert!(slow < SLOW_WINDOW, "leftover overload should carry, not reset");
+        assert!(
+            slow < SLOW_WINDOW,
+            "leftover overload should carry, not reset"
+        );
         // It ratchets all the way to MIN_TPS and then stops — no runaway.
         let mut tps = MIN_TPS + 1.0;
         for _ in 0..10_000 {
@@ -1584,7 +1589,10 @@ mod tests {
         }
         assert_eq!(tps, start + 1.0, "headroom wins back exactly one tick/sec");
         assert!(secs >= FAST_WINDOW, "climbed back too soon");
-        assert!(FAST_WINDOW > SLOW_WINDOW, "climb must be slower than the drop");
+        assert!(
+            FAST_WINDOW > SLOW_WINDOW,
+            "climb must be slower than the drop"
+        );
         // Headroom stops climbing once back at INIT_TPS — no overshoot.
         let sd = 1.0 / INIT_TPS;
         assert_eq!(
@@ -1641,7 +1649,7 @@ mod tests {
             }
         }
         // The field mixes types, and each renders inside a 4x4 box.
-        let mut kinds = [0u32; 5];
+        let mut kinds = [0u32; 6];
         for &(x, y) in &pts {
             let ty = stars[y * gw + x];
             kinds[ty as usize] += 1;
