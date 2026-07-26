@@ -98,21 +98,35 @@ const perDayOptions = (rows: DayCount[]): ApexCharts.ApexOptions => ({
   yaxis: { logarithmic: true, min: 1, forceNiceScale: true },
 });
 
-const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => ({
-  ...baseOptions(),
-  series: [{ name: "Visits", data: rows.map((r) => r.count) }],
-  chart: { ...baseOptions().chart, type: "bar", height: 260 } as any,
-  colors: [GREEN],
-  plotOptions: { bar: { columnWidth: "70%", borderRadius: 2 } },
-  xaxis: {
-    categories: rows.map((r) => String(r.hour).padStart(2, "0")),
-    tickAmount: 12,
-    axisBorder: { color: "#1c2a1e" },
-    axisTicks: { color: "#1c2a1e" },
-    title: { text: "Hour of day (local)", style: { color: "#4d7c56" } },
-  },
-  yaxis: { min: 0, forceNiceScale: true },
-});
+const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => {
+  const counts = rows.map((r) => r.count);
+  return {
+    ...baseOptions(),
+    // Combo chart: the bars carry the reading, with a smooth line tracing the
+    // same values behind them for a sense of the shape across the day.
+    series: [
+      { name: "Visits", type: "column", data: counts },
+      { name: "Trend", type: "line", data: counts },
+    ],
+    chart: { ...baseOptions().chart, type: "line", height: 260 } as any,
+    colors: [GREEN, "#86efac"],
+    // No stroke on the bars; a thin smooth stroke on the line.
+    stroke: { width: [0, 2], curve: "smooth" },
+    plotOptions: { bar: { columnWidth: "70%", borderRadius: 2 } },
+    markers: { size: 0 },
+    legend: { show: false },
+    // Both series hold identical data, so only surface the bar in the tooltip.
+    tooltip: { theme: "dark", shared: false, enabledOnSeries: [0] },
+    xaxis: {
+      categories: rows.map((r) => String(r.hour).padStart(2, "0")),
+      tickAmount: 12,
+      axisBorder: { color: "#1c2a1e" },
+      axisTicks: { color: "#1c2a1e" },
+      title: { text: "Hour of day (local)", style: { color: "#4d7c56" } },
+    },
+    yaxis: { min: 0, forceNiceScale: true },
+  };
+};
 
 const byKindOptions = (rows: KindCount[]): ApexCharts.ApexOptions => ({
   ...baseOptions(),
