@@ -192,7 +192,10 @@ const byRouteOptions = (
     enabled: true,
     formatter: rowCount(rows),
     offsetX: 24,
-    style: { colors: ["#4d7c56"], fontFamily: "ui-monospace, monospace" },
+    // White so the count stays legible on top of the green/red bars — the muted
+    // green blends into them. Reads fine on the dark card too, for tiny bars
+    // whose label falls off the end onto the background.
+    style: { colors: ["#ffffff"], fontFamily: "ui-monospace, monospace" },
   },
   xaxis: {
     categories: rows.map((r) => r.route),
@@ -232,7 +235,10 @@ const byNoiseRouteOptions = (
     enabled: true,
     formatter: rowCount(rows),
     offsetX: 24,
-    style: { colors: ["#4d7c56"], fontFamily: "ui-monospace, monospace" },
+    // White so the count stays legible on top of the green/red bars — the muted
+    // green blends into them. Reads fine on the dark card too, for tiny bars
+    // whose label falls off the end onto the background.
+    style: { colors: ["#ffffff"], fontFamily: "ui-monospace, monospace" },
   },
   xaxis: {
     categories: rows.map((r) => r.route),
