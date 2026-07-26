@@ -27,7 +27,7 @@ use sonic_rs::Serialize;
 
 use crate::config::ApiConfig;
 use crate::response::{ApiError, Body, ResponseBuilder};
-use crate::visit_class::{named_page, page_only, robot_only, static_only};
+use crate::visit_class::{hash_grouped, named_page, page_only, robot_only, static_only};
 
 /// How many days of the per-day series to return, counting back from today
 /// (inclusive) in the caller's timezone. `generate_series` fills empty days as
@@ -238,7 +238,12 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
     // extension) and `robot` (scanner probes plus forced crawler paths like
     // robots.txt). Each is grouped apart so it never inflates the real visit
     // counts above, and always spans all pages, same as `by_route`.
-    let load_bucket = |predicate: String| {
+    //
+    // `group` is the SQL expression the per-route breakdown groups on: plain
+    // `route` for robot noise, but a hash-collapsing rewrite for static assets
+    // so every build's `index-<hash>.js` folds into one `index-*.js` row rather
+    // than a fresh row per deploy.
+    let load_bucket = |predicate: String, group: String| {
         let pool = pool.clone();
         async move {
             let total = sqlx::query_scalar::<_, i64>(&format!(
@@ -247,8 +252,8 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
             .fetch_one(&pool)
             .await?;
             let by_route = sqlx::query_as::<_, (String, i64)>(&format!(
-                "SELECT route, COUNT(*) FROM visits WHERE {predicate} \
-                 GROUP BY route ORDER BY COUNT(*) DESC, route LIMIT $1"
+                "SELECT {group} AS route, COUNT(*) FROM visits WHERE {predicate} \
+                 GROUP BY {group} ORDER BY COUNT(*) DESC, route LIMIT $1"
             ))
             .bind(ROUTES)
             .fetch_all(&pool)
@@ -260,14 +265,15 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
         }
     };
 
-    let (static_total, by_static_route) = match load_bucket(static_only()).await {
-        Ok(bucket) => bucket,
-        Err(err) => {
-            tracing::error!(error = %err, "failed to load static-asset visits");
-            return ResponseBuilder::from(ApiError::Internal).into();
-        }
-    };
-    let (robot_total, by_robot_route) = match load_bucket(robot_only()).await {
+    let (static_total, by_static_route) =
+        match load_bucket(static_only(), hash_grouped("route")).await {
+            Ok(bucket) => bucket,
+            Err(err) => {
+                tracing::error!(error = %err, "failed to load static-asset visits");
+                return ResponseBuilder::from(ApiError::Internal).into();
+            }
+        };
+    let (robot_total, by_robot_route) = match load_bucket(robot_only(), "route".to_string()).await {
         Ok(bucket) => bucket,
         Err(err) => {
             tracing::error!(error = %err, "failed to load robot visits");

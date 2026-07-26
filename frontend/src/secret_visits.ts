@@ -51,11 +51,13 @@ const KIND_COLORS: Record<string, string> = {
   static: "#15803d",
   js: "#22c55e",
   secret: "#86efac",
+  robot: "#991b1b", // muted red — bot/scanner noise, matched to the robot tile
 };
 const KIND_LABELS: Record<string, string> = {
   static: "Static (nginx)",
   js: "JavaScript ping",
   secret: "Secret",
+  robot: "Robot / bot",
 };
 
 // Options common to every chart: dark, chromeless, green-on-stone.
@@ -239,7 +241,7 @@ export default (app: HTMLElement) => {
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-total">0</span></div>
-          <div class="text-sm text-green-800 mt-1">Total visits</div>
+          <div class="text-sm text-green-800 mt-1">Total hits</div>
         </div>
         <div class="bg-stone-900 border border-green-900 px-4 py-5 text-center">
           <div class="text-3xl md:text-4xl font-bold font-mono text-green-300"><span id="vs-unique">0</span></div>
@@ -327,7 +329,14 @@ export default (app: HTMLElement) => {
     };
 
     mount("#vs-per-day", perDayOptions(stats.per_day));
-    mount("#vs-by-kind", byKindOptions(stats.by_kind));
+    // Fold robot/scanner noise into the source breakdown as its own (red) slice
+    // so the donut accounts for every hit, not just real page visits. Only when
+    // there's noise to show, so an all-clean site keeps a tidy chart.
+    const kindRows =
+      stats.robot_total > 0
+        ? [...stats.by_kind, { kind: "robot", count: stats.robot_total }]
+        : stats.by_kind;
+    mount("#vs-by-kind", byKindOptions(kindRows));
     mount("#vs-by-hour", byHourOptions(stats.by_hour));
     mount(
       "#vs-by-route",
