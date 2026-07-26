@@ -27,6 +27,10 @@
 //! invisible, but feeding the life rule at the erosion frontier — until the
 //! ground under it is healed back.
 //!
+//! A sparse field of green background stars — varied faint specks kept 8px
+//! clear of the name and at least 16px apart — is scattered behind everything
+//! on load, and tops itself up naturally over any ground a resize exposes.
+//!
 //! The sim opens by spelling "Andrew David McCall" in live cells (Menlo Bold
 //! pre-rasterised to 16x32 bitmaps, integer-scaled to fit the viewport), holds
 //! the name for a moment, then evolves it under B3/S23. Comets fly through
@@ -72,6 +76,9 @@ static mut TILE_A: [u8; MAX_CELLS] = [0; MAX_CELLS];
 /// erode, the cell there counts as alive every generation — until the ground
 /// under it is healed, which makes it mortal again.
 static mut PERMA: [u8; MAX_CELLS] = [0; MAX_CELLS];
+/// Static background stars: 1 where a star sits, 0 elsewhere. Scattered once
+/// on init and topped up on resize; never touched by the Life step.
+static mut STARS: [u8; MAX_CELLS] = [0; MAX_CELLS];
 
 /// Seconds the stamped name stays frozen before evolution begins.
 const HOLD: f32 = 2.0;
@@ -113,6 +120,33 @@ const MARGIN_HEAL: u8 = 16;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
+
+/// Background stars scattered across empty ground at load. Drawn in the
+/// darkest green a cell ever reaches (`cell_colour`'s oldest branch) at a
+/// faint fixed alpha, so they read as a distant field behind the name rather
+/// than as live cells.
+const STAR_COLOUR: [u8; 3] = [0x15, 0x80, 0x3d]; // green-700
+const STAR_ALPHA: u8 = 200;
+/// Star field spacing, in framebuffer pixels: no star lands within
+/// `STAR_WORD_PX` of the stamped name, and stars keep at least `STAR_MIN_PX`
+/// between one another. Placement aims for roughly `STAR_TYP_PX` average
+/// spacing, so the field stays sparse well above the hard minimum.
+const STAR_WORD_PX: usize = 8;
+const STAR_MIN_PX: usize = 16;
+const STAR_TYP_PX: usize = 34;
+
+/// A star type's brightness and shape: `alpha` (never above STAR_ALPHA) and a
+/// 4x4 bitmap packed as four 4-bit rows, MSB = leftmost pixel, top row first.
+/// Types range from a lone faint pixel through a bright filled square, so the
+/// scattered field reads as varied points of depth.
+fn star_kind(ty: u8) -> (u8, u16) {
+    match ty {
+        1 => (120, 0x0400),        // faint single pixel
+        2 => (160, 0x0660),        // small 2x2 dot
+        3 => (STAR_ALPHA, 0x4E40), // 3px twinkle: a centred plus
+        _ => (STAR_ALPHA, 0xFFFF), // bright filled 4x4 square
+    }
+}
 
 /// "Static" fill density: when the static button reseeds the board with noise,
 /// a cell is born where `rand() % 16` lands under this — roughly 40% of the
@@ -335,6 +369,73 @@ fn stamp_text(cells: &mut [u8], gw: usize, gh: usize, lay: &Layout) {
             stamp_glyph(cells, gw, gh, x + i * GLYPH_W * s, y, ch, s);
         }
         y += (GLYPH_H + LINE_GAP) * s;
+    }
+}
+
+/// xorshift32 step, shared by the sim RNG and the star scatterer. Advances
+/// `state` and returns the new value; `state` must never be zero.
+#[inline]
+fn xorshift(state: &mut u32) -> u32 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    x
+}
+
+/// True if any cell within Chebyshev distance `r` of (x, y) — a (2r+1)² square
+/// clipped to the grid — is non-zero. Used to keep stars clear of the name and
+/// of each other.
+fn near(buf: &[u8], gw: usize, gh: usize, x: usize, y: usize, r: usize) -> bool {
+    let y0 = y.saturating_sub(r);
+    let y1 = (y + r).min(gh - 1);
+    let x0 = x.saturating_sub(r);
+    let x1 = (x + r).min(gw - 1);
+    for ny in y0..=y1 {
+        let row = ny * gw;
+        for nx in x0..=x1 {
+            if buf[row + nx] > 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Scatter background stars into empty ground, driving placement off `rng`.
+/// Every candidate is rejected if it lands within `STAR_WORD_PX` of the
+/// stamped name or `STAR_MIN_PX` of an existing star, so the field keeps its
+/// spacing however dense the attempts get; each survivor takes a random type
+/// (weighted toward the faint specks). Adds to whatever is already in `stars`:
+/// empty on init, the remapped survivors on resize, so freshly exposed ground
+/// fills in at the same density without disturbing the stars already placed.
+fn scatter_stars(rng: &mut u32, stars: &mut [u8], mask: &[u8], gw: usize, gh: usize, pitch: usize) {
+    if gw == 0 || gh == 0 {
+        return;
+    }
+    // Pixel spacings rounded up to whole cells (at least one).
+    let word_gap = STAR_WORD_PX.div_ceil(pitch).max(1);
+    let min_gap = STAR_MIN_PX.div_ceil(pitch).max(1);
+    let typ_gap = STAR_TYP_PX.div_ceil(pitch).max(min_gap);
+    // One attempt per typical-spacing cell of area; min-gap rejection then
+    // thins the field to its spacing-limited density in this single pass.
+    let attempts = (gw * gh) / (typ_gap * typ_gap) + 1;
+    for _ in 0..attempts {
+        let x = xorshift(rng) as usize % gw;
+        let y = xorshift(rng) as usize % gh;
+        if near(mask, gw, gh, x, y, word_gap) || near(stars, gw, gh, x, y, min_gap) {
+            continue;
+        }
+        // Weighted toward the faint specks, with the bright square rarest, so
+        // the field looks like real depth rather than a uniform stipple.
+        let ty = match xorshift(rng) % 16 {
+            0..=6 => 1,   // faint single pixel
+            7..=11 => 2,  // small 2x2 dot
+            12..=14 => 3, // 3px twinkle (plus)
+            _ => 4,       // bright 4x4 square
+        };
+        stars[y * gw + x] = ty;
     }
 }
 
@@ -694,12 +795,7 @@ static mut SIM: Sim = Sim {
 
 impl Sim {
     fn rand(&mut self) -> u32 {
-        let mut x = self.rng;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        self.rng = x;
-        x
+        xorshift(&mut self.rng)
     }
 
     fn rand_f(&mut self) -> f32 {
@@ -721,6 +817,7 @@ impl Sim {
         mask: &mut [u8],
         tile_a: &mut [u8],
         perma: &mut [u8],
+        stars: &mut [u8],
     ) {
         let lay = plan_layout(w, h);
         self.w = w;
@@ -741,6 +838,8 @@ impl Sim {
         cells.fill(0);
         let n = self.gw * self.gh;
         cells[..n].copy_from_slice(&mask[..n]);
+        stars[..n].fill(0);
+        scatter_stars(&mut self.rng, stars, mask, self.gw, self.gh, self.pitch);
         self.ready = true;
     }
 
@@ -756,6 +855,7 @@ impl Sim {
         mask: &mut [u8],
         tile_a: &mut [u8],
         perma: &mut [u8],
+        stars: &mut [u8],
     ) {
         let (ogw, ogh) = (self.gw, self.gh);
         self.w = w;
@@ -764,9 +864,18 @@ impl Sim {
         self.gh = grid_dim(h, self.pitch).min(MAX_GH);
         self.ox = (w.saturating_sub(self.gw * self.pitch + 1)) / 3;
         self.oy = (h.saturating_sub(self.gh * self.pitch + 1)) / 3;
-        for (buf, fill) in [(cells, 0u8), (mask, 0), (tile_a, 255), (perma, 0)] {
+        for (buf, fill) in [
+            (&mut *cells, 0u8),
+            (&mut *mask, 0),
+            (&mut *tile_a, 255),
+            (&mut *perma, 0),
+            (&mut *stars, 0),
+        ] {
             remap_grid(buf, ogw, ogh, self.gw, self.gh, fill);
         }
+        // Fresh ground exposed by a grow starts starless; scatter naturally
+        // fills it in at the field's density, leaving the survivors in place.
+        scatter_stars(&mut self.rng, stars, mask, self.gw, self.gh, self.pitch);
     }
 
     /// Spontaneous births, heavily biased to the cells under the name so it
@@ -991,11 +1100,12 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     let mask: &mut [u8] = unsafe { &mut *addr_of_mut!(TEXT_MASK) };
     let tile_a: &mut [u8] = unsafe { &mut *addr_of_mut!(TILE_A) };
     let perma: &mut [u8] = unsafe { &mut *addr_of_mut!(PERMA) };
+    let stars: &mut [u8] = unsafe { &mut *addr_of_mut!(STARS) };
 
     if !sim.ready {
-        sim.init(width, height, cells, mask, tile_a, perma);
+        sim.init(width, height, cells, mask, tile_a, perma, stars);
     } else if sim.w != width || sim.h != height {
-        sim.resize(width, height, cells, mask, tile_a, perma);
+        sim.resize(width, height, cells, mask, tile_a, perma, stars);
     }
     sim.t += dt;
 
@@ -1095,24 +1205,56 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
 
     // Cells: skip opaque dead ground (the background already shows there);
     // everything else fills its pitch-1 square interior, also in-bounds.
+    // A dead tile carrying a star draws instead a small centred green speck,
+    // never wider than 4px, over whatever the ground under it shows.
     let cell_px = pitch - 1;
+    // Every star pattern lives in a 4x4 box, centred in the cell (clipped on
+    // the smallest pitches where the interior is under 4px).
+    let star_box = cell_px.min(4);
+    let star_off = (cell_px - star_box) / 2;
     for cy in 0..gh {
         let y0 = (oy + cy * pitch + 1) * width + ox + 1;
         for cx in 0..gw {
             let idx = cy * gw + cx;
             let age = cells[idx];
             let a = tile_a[idx];
-            if age == 0 && a == 255 {
+            let sty = if age == 0 { stars[idx] } else { 0 };
+            if age == 0 && a == 255 && sty == 0 {
                 continue;
             }
-            let c = if age > 0 { cell_colour(age) } else { BG };
-            let px = u32::from_le_bytes([c[0], c[1], c[2], a]);
-            let mut row = y0 + cx * pitch;
-            for _ in 0..cell_px {
-                for rx in 0..cell_px {
-                    fb[row + rx] = px;
+            // Base interior: live cells and eroding ground paint the whole
+            // square; an intact star tile leaves the opaque background showing.
+            if age > 0 || a < 255 {
+                let c = if age > 0 { cell_colour(age) } else { BG };
+                let px = u32::from_le_bytes([c[0], c[1], c[2], a]);
+                let mut row = y0 + cx * pitch;
+                for _ in 0..cell_px {
+                    for rx in 0..cell_px {
+                        fb[row + rx] = px;
+                    }
+                    row += width;
                 }
-                row += width;
+            }
+            // Star speck: its type sets shape and brightness, but it never
+            // outshines the ground it sits on, so erosion reveals the page
+            // through it too.
+            if sty > 0 {
+                let (ka, pat) = star_kind(sty);
+                let px = u32::from_le_bytes([
+                    STAR_COLOUR[0],
+                    STAR_COLOUR[1],
+                    STAR_COLOUR[2],
+                    a.min(ka),
+                ]);
+                let base = y0 + cx * pitch + star_off * width + star_off;
+                for sy in 0..star_box {
+                    let row = base + sy * width;
+                    for sx in 0..star_box {
+                        if (pat >> ((3 - sy) * 4 + (3 - sx))) & 1 == 1 {
+                            fb[row + sx] = px;
+                        }
+                    }
+                }
             }
         }
     }
@@ -1456,6 +1598,67 @@ mod tests {
         let sd = 1.0 / (INIT_TPS - 1.0);
         let (_, slow, _) = ease_target_rate(INIT_TPS - 1.0, 3.0, 0.0, 0.0, sd * 0.25);
         assert_eq!(slow, 0.0, "headroom clears overload credit");
+    }
+
+    #[test]
+    fn stars_scatter_spaced_clear_of_name_and_varied() {
+        let (gw, gh, pitch) = (200usize, 120usize, 8usize);
+        let mut mask = vec![0u8; gw * gh];
+        for y in 50..70 {
+            for x in 80..120 {
+                mask[y * gw + x] = 1; // a name-shaped block in the middle
+            }
+        }
+        let mut stars = vec![0u8; gw * gh];
+        let mut rng = 0x1234_5678u32;
+        scatter_stars(&mut rng, &mut stars, &mask, gw, gh, pitch);
+
+        let pts: Vec<(usize, usize)> = (0..gh)
+            .flat_map(|y| (0..gw).map(move |x| (x, y)))
+            .filter(|&(x, y)| stars[y * gw + x] > 0)
+            .collect();
+        assert!(pts.len() > 20, "scattered too few stars: {}", pts.len());
+
+        let word_gap = STAR_WORD_PX.div_ceil(pitch).max(1);
+        for &(x, y) in &pts {
+            assert!(
+                !near(&mask, gw, gh, x, y, word_gap),
+                "star at {:?} sits within {STAR_WORD_PX}px of the name",
+                (x, y)
+            );
+        }
+        // Every pair clears the 16px minimum (Chebyshev distance × pitch).
+        for i in 0..pts.len() {
+            for j in i + 1..pts.len() {
+                let cheb = pts[i].0.abs_diff(pts[j].0).max(pts[i].1.abs_diff(pts[j].1));
+                assert!(
+                    cheb * pitch >= STAR_MIN_PX,
+                    "stars {:?} and {:?} only {}px apart",
+                    pts[i],
+                    pts[j],
+                    cheb * pitch
+                );
+            }
+        }
+        // The field mixes types, and each renders inside a 4x4 box.
+        let mut kinds = [0u32; 5];
+        for &(x, y) in &pts {
+            let ty = stars[y * gw + x];
+            kinds[ty as usize] += 1;
+            let (a, pat) = star_kind(ty);
+            assert!(a <= STAR_ALPHA && pat != 0);
+        }
+        assert!(
+            kinds[1..].iter().filter(|&&c| c > 0).count() >= 2,
+            "expected multiple star types, got {kinds:?}"
+        );
+        // A second pass (the resize top-up) only adds; it never moves a star.
+        let before = stars.clone();
+        scatter_stars(&mut rng, &mut stars, &mask, gw, gh, pitch);
+        assert!(
+            before.iter().zip(&stars).all(|(&b, &a)| b == 0 || b == a),
+            "top-up disturbed an existing star"
+        );
     }
 
     #[test]
