@@ -32,6 +32,12 @@ type Home = {
     excerpt: string;
     published_at: string | null;
   }[];
+  details: {
+    key: string;
+    label: string;
+    value: string;
+    url: string | null;
+  }[];
 };
 
 const section = (title: string, inner: string) => `
@@ -41,7 +47,26 @@ const section = (title: string, inner: string) => `
   </section>`;
 
 const renderHome = (root: HTMLElement, home: Home) => {
-  const { profile, projects, commits, posts } = home;
+  const { profile, projects, commits, posts, details } = home;
+
+  // The "Now" box: a fixed key/value table of what I'm currently up to.
+  const detailRows = details
+    .map(
+      (f) => `
+      <tr class="border-b border-green-900/40">
+        <td class="py-2 pr-6 text-green-700 whitespace-nowrap align-top">${esc(f.label)}</td>
+        <td class="py-2 text-green-300">${
+          f.url
+            ? `<a href="${esc(f.url)}" target="_blank" rel="noopener" class="text-green-400 hover:text-green-300 underline cursor-pointer">${esc(f.value)}</a>`
+            : esc(f.value)
+        }</td>
+      </tr>`,
+    )
+    .join("");
+  const now = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-left font-mono text-sm"><tbody>${detailRows}</tbody></table>
+    </div>`;
 
   const about = `
     <div class="flex flex-col sm:flex-row gap-6 items-start">
@@ -117,6 +142,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
 
   root.innerHTML = `
     ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
+    ${details.length > 0 ? section("Now", now) : ""}
     ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
     ${
       posts.length > 0

@@ -7,6 +7,7 @@ import { postsList, postPage } from "./posts.ts";
 import secret_admin_posts from "./secret_admin_posts.ts";
 import secret_admin_projects from "./secret_admin_projects.ts";
 import secret_admin_profile from "./secret_admin_profile.ts";
+import secret_admin_details from "./secret_admin_details.ts";
 import secret_password from "./secret_password.ts";
 import secret_countries from "./secret_countries.ts";
 import secret_visits, { disposeVisits } from "./secret_visits.ts";
@@ -69,6 +70,7 @@ const routes: Record<string, Route> = {
   "/secret/admin/posts": { auth: "admin", render: (app) => secret_admin_posts(app) },
   "/secret/admin/projects": { auth: "admin", render: (app) => secret_admin_projects(app) },
   "/secret/admin/profile": { auth: "admin", render: (app) => secret_admin_profile(app) },
+  "/secret/admin/details": { auth: "admin", render: (app) => secret_admin_details(app) },
 };
 
 // Routes with a path parameter, matched by prefix after the exact table misses.

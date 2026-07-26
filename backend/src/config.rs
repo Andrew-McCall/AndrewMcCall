@@ -4,6 +4,8 @@ use crate::{database::connection::DatabaseConnection, ip::IpSource};
 pub struct ApiConfig {
     pub ip_source: IpSource,
     pub db: DatabaseConnection,
+    /// When the process started, for the home-page "uptime" detail.
+    pub started_at: std::time::Instant,
     /// How long an issued auth token stays valid. `None` means tokens never
     /// expire (`user_tokens.expires_at` is left null).
     pub token_ttl_days: Option<i64>,
@@ -33,6 +35,7 @@ impl ApiConfig {
             ip_source: IpSource::from_env().unwrap_or(IpSource::ConnectInfo),
             db: DatabaseConnection::from_env()
                 .expect("failed to configure database connection from environment"),
+            started_at: std::time::Instant::now(),
             token_ttl_days: std::env::var("TOKEN_TTL_DAYS")
                 .ok()
                 .and_then(|v| v.parse().ok()),

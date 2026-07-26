@@ -46,136 +46,121 @@ async fn route(
     peer: SocketAddr,
     config: SharedConfig,
 ) -> hyper::Response<Body> {
+    let method = req.method().clone();
     let path = req.uri().path();
 
-    match path {
-        "/log/static" => logs::record_visit(&req, peer, &config, VisitKind::Static),
-        "/log/js" => logs::record_visit(&req, peer, &config, VisitKind::Js),
-        "/log/secret" => logs::record_visit(&req, peer, &config, VisitKind::Secret),
-        "/ip" => match resolve_client_ip(config.ip_source, &req, peer) {
-            Ok(client_ip) => ResponseBuilder::new(StatusCode::OK)
-                .text(client_ip.0)
-                .into(),
+    // Step 1: fixed routes, keyed on the (method, path) pair. Paths that accept
+    // any method use a `_` method pattern; method-restricted paths fall through
+    // to the 405 arm below, and unknown paths to step 2.
+    match (&method, path) {
+        (_, "/log/static") => logs::record_visit(&req, peer, &config, VisitKind::Static),
+        (_, "/log/js") => logs::record_visit(&req, peer, &config, VisitKind::Js),
+        (_, "/log/secret") => logs::record_visit(&req, peer, &config, VisitKind::Secret),
+        (_, "/ip") => match resolve_client_ip(config.ip_source, &req, peer) {
+            Ok(client_ip) => ResponseBuilder::new(StatusCode::OK).text(client_ip.0).into(),
             Err(err) => ResponseBuilder::from(err).into(),
         },
-        "/password/types" if req.method() == Method::GET => password::types_response(),
-        "/password" if req.method() == Method::POST || req.method().as_str() == "QUERY" => {
+
+        (&Method::GET, "/password/types") => password::types_response(),
+        (m, "/password") if *m == Method::POST || m.as_str() == "QUERY" => {
             password::respond(req).await
         }
-        "/password/types" | "/password" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/countries" if req.method() == Method::GET => countries::list_response(&config).await,
-        "/countries" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/stats" if req.method() == Method::GET => {
-            stats::stats_response(&config, req.uri().query()).await
-        }
-        "/stats" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/auth/login" if req.method() == Method::POST => auth::login(req, peer, &config).await,
-        "/auth/logout" if req.method() == Method::POST => auth::logout(req, peer, &config).await,
-        "/auth/me" if req.method() == Method::GET => auth::me(req, peer, &config).await,
-        "/auth/totp/setup" if req.method() == Method::POST => {
-            auth::totp_setup(req, peer, &config).await
-        }
-        "/auth/totp/enable" if req.method() == Method::POST => {
-            auth::totp_enable(req, peer, &config).await
-        }
-        "/auth/totp/disable" if req.method() == Method::POST => {
-            auth::totp_disable(req, peer, &config).await
-        }
-        "/auth/login" | "/auth/logout" | "/auth/me" | "/auth/totp/setup" | "/auth/totp/enable"
-        | "/auth/totp/disable" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/admin/users" if req.method() == Method::GET => {
-            admin::list_users(req, peer, &config).await
-        }
-        "/admin/users" if req.method() == Method::POST => {
-            admin::create_user(req, peer, &config).await
-        }
-        "/admin/users" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/admin/visits" if req.method() == Method::GET => {
-            admin::list_visits(req, peer, &config).await
-        }
-        "/admin/visits" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        _ if path.starts_with("/admin/users/") => {
-            // Own the id before moving `req` into the handler (the id borrows
-            // `path`, which borrows `req`).
-            let id = path["/admin/users/".len()..].to_string();
-            if req.method() == Method::DELETE {
-                admin::delete_user(req, peer, &config, &id).await
-            } else {
-                ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+        (&Method::GET, "/countries") => countries::list_response(&config).await,
+        (&Method::GET, "/stats") => stats::stats_response(&config, req.uri().query()).await,
+
+        (&Method::POST, "/auth/login") => auth::login(req, peer, &config).await,
+        (&Method::POST, "/auth/logout") => auth::logout(req, peer, &config).await,
+        (&Method::GET, "/auth/me") => auth::me(req, peer, &config).await,
+        (&Method::POST, "/auth/totp/setup") => auth::totp_setup(req, peer, &config).await,
+        (&Method::POST, "/auth/totp/enable") => auth::totp_enable(req, peer, &config).await,
+        (&Method::POST, "/auth/totp/disable") => auth::totp_disable(req, peer, &config).await,
+
+        (&Method::GET, "/admin/users") => admin::list_users(req, peer, &config).await,
+        (&Method::POST, "/admin/users") => admin::create_user(req, peer, &config).await,
+        (&Method::GET, "/admin/visits") => admin::list_visits(req, peer, &config).await,
+        (&Method::GET, "/admin/posts") => posts::admin_list(req, peer, &config).await,
+        (&Method::POST, "/admin/posts") => posts::create(req, peer, &config).await,
+        (&Method::GET, "/admin/projects") => site::list_projects(req, peer, &config).await,
+        (&Method::POST, "/admin/projects") => site::create_project(req, peer, &config).await,
+        (&Method::GET, "/admin/profile") => site::get_profile(req, peer, &config).await,
+        (&Method::PUT, "/admin/profile") => site::update_profile(req, peer, &config).await,
+        (&Method::GET, "/admin/details") => site::get_details(req, peer, &config).await,
+        (&Method::PUT, "/admin/details") => site::update_details(req, peer, &config).await,
+
+        (&Method::GET, "/home") => site::home(req, peer, &config).await,
+        (&Method::GET, "/posts") => posts::list_published(&config).await,
+
+        (&Method::GET, "/notes") => notes::list_notes(req, peer, &config).await,
+        (&Method::POST, "/notes") => notes::create_note(req, peer, &config).await,
+        (&Method::GET, "/tags") => notes::list_tags(req, peer, &config).await,
+        (&Method::POST, "/tags") => notes::create_tag(req, peer, &config).await,
+
+        // Known path, but the method above didn't match: 405 (not 404).
+        (
+            _,
+            "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
+            | "/auth/logout" | "/auth/me" | "/auth/totp/setup" | "/auth/totp/enable"
+            | "/auth/totp/disable" | "/admin/users" | "/admin/visits" | "/admin/posts"
+            | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home" | "/posts"
+            | "/notes" | "/tags",
+        ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+
+        // Step 2: parameterized routes. Own the id/slug before moving `req`,
+        // since it borrows `path`, which borrows `req`.
+        _ => {
+            if let Some(id) = path.strip_prefix("/admin/users/") {
+                let id = id.to_string();
+                return if method == Method::DELETE {
+                    admin::delete_user(req, peer, &config, &id).await
+                } else {
+                    ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                };
             }
-        }
-        "/home" if req.method() == Method::GET => site::home(&config).await,
-        "/home" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/posts" if req.method() == Method::GET => posts::list_published(&config).await,
-        "/posts" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/admin/posts" if req.method() == Method::GET => posts::admin_list(req, peer, &config).await,
-        "/admin/posts" if req.method() == Method::POST => posts::create(req, peer, &config).await,
-        "/admin/posts" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/admin/projects" if req.method() == Method::GET => {
-            site::list_projects(req, peer, &config).await
-        }
-        "/admin/projects" if req.method() == Method::POST => {
-            site::create_project(req, peer, &config).await
-        }
-        "/admin/projects" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/admin/profile" if req.method() == Method::GET => {
-            site::get_profile(req, peer, &config).await
-        }
-        "/admin/profile" if req.method() == Method::PUT => {
-            site::update_profile(req, peer, &config).await
-        }
-        "/admin/profile" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        _ if path.starts_with("/admin/posts/") => {
-            let id = path["/admin/posts/".len()..].to_string();
-            match *req.method() {
-                Method::PUT => posts::update(req, peer, &config, &id).await,
-                Method::DELETE => posts::delete(req, peer, &config, &id).await,
-                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            if let Some(id) = path.strip_prefix("/admin/posts/") {
+                let id = id.to_string();
+                return match method {
+                    Method::PUT => posts::update(req, peer, &config, &id).await,
+                    Method::DELETE => posts::delete(req, peer, &config, &id).await,
+                    _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+                };
             }
-        }
-        _ if path.starts_with("/admin/projects/") => {
-            let id = path["/admin/projects/".len()..].to_string();
-            match *req.method() {
-                Method::PUT => site::update_project(req, peer, &config, &id).await,
-                Method::DELETE => site::delete_project(req, peer, &config, &id).await,
-                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            if let Some(id) = path.strip_prefix("/admin/projects/") {
+                let id = id.to_string();
+                return match method {
+                    Method::PUT => site::update_project(req, peer, &config, &id).await,
+                    Method::DELETE => site::delete_project(req, peer, &config, &id).await,
+                    _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+                };
             }
-        }
-        _ if path.starts_with("/posts/") => {
-            let slug = path["/posts/".len()..].to_string();
-            if req.method() == Method::GET {
-                posts::get_by_slug(&config, &slug).await
-            } else {
-                ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+            if let Some(slug) = path.strip_prefix("/posts/") {
+                let slug = slug.to_string();
+                return if method == Method::GET {
+                    posts::get_by_slug(&config, &slug).await
+                } else {
+                    ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                };
             }
-        }
-        "/notes" if req.method() == Method::GET => notes::list_notes(req, peer, &config).await,
-        "/notes" if req.method() == Method::POST => notes::create_note(req, peer, &config).await,
-        "/notes" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        "/tags" if req.method() == Method::GET => notes::list_tags(req, peer, &config).await,
-        "/tags" if req.method() == Method::POST => notes::create_tag(req, peer, &config).await,
-        "/tags" => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-        _ if path.starts_with("/notes/") => {
-            // Own the id before moving `req` (it borrows `path`, which borrows `req`).
-            let id = path["/notes/".len()..].to_string();
-            match *req.method() {
-                Method::PUT => notes::update_note(req, peer, &config, &id).await,
-                Method::DELETE => notes::delete_note(req, peer, &config, &id).await,
-                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            if let Some(id) = path.strip_prefix("/notes/") {
+                let id = id.to_string();
+                return match method {
+                    Method::PUT => notes::update_note(req, peer, &config, &id).await,
+                    Method::DELETE => notes::delete_note(req, peer, &config, &id).await,
+                    _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+                };
             }
-        }
-        _ if path.starts_with("/tags/") => {
-            let id = path["/tags/".len()..].to_string();
-            match *req.method() {
-                Method::PUT => notes::update_tag(req, peer, &config, &id).await,
-                Method::DELETE => notes::delete_tag(req, peer, &config, &id).await,
-                _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+            if let Some(id) = path.strip_prefix("/tags/") {
+                let id = id.to_string();
+                return match method {
+                    Method::PUT => notes::update_tag(req, peer, &config, &id).await,
+                    Method::DELETE => notes::delete_tag(req, peer, &config, &id).await,
+                    _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
+                };
             }
+            if let Some(file) = path.strip_prefix("/countries/") {
+                return countries::svg_response(&method, file).await;
+            }
+            ResponseBuilder::from(ApiError::NotFound(path.to_string())).into()
         }
-        _ => match path.strip_prefix("/countries/") {
-            Some(file) => countries::svg_response(req.method(), file).await,
-            None => ResponseBuilder::from(ApiError::NotFound(path.to_string())).into(),
-        },
     }
 }
 

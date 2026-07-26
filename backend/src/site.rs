@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::admin;
 use crate::config::ApiConfig;
+use crate::ip::resolve_client_ip;
 use crate::posts;
 use crate::response::{self, ApiError, Body, ResponseBuilder};
 
@@ -19,6 +20,19 @@ const MAX_NAME_LEN: usize = 100;
 const MAX_DESCRIPTION_LEN: usize = 1_000;
 const MAX_URL_LEN: usize = 500;
 const MAX_INTRO_LEN: usize = 20_000;
+const MAX_DETAIL_VALUE_LEN: usize = 500;
+
+/// The home-page "Now" details: a fixed whitelist of `(key, label)` display rows,
+/// in display order. The value (and an optional link) behind each key is edited
+/// via the admin API and stored in `home_details`; the key set itself is fixed
+/// here. Adding a detail is a line here plus a seed row in the migration — no
+/// schema change. Keys not listed here are ignored on write and never rendered.
+const DETAILS: [(&str, &str); 4] = [
+    ("currently_reading", "Currently reading"),
+    ("currently_building", "Currently building"),
+    ("currently_learning", "Currently learning"),
+    ("based_in", "Based in"),
+];
 
 /// How many commits / posts the home aggregate carries.
 const HOME_COMMITS: i64 = 10;
@@ -145,11 +159,20 @@ struct CommitJson {
 }
 
 #[derive(Serialize)]
+struct DetailJson {
+    key: String,
+    label: String,
+    value: String,
+    url: Option<String>,
+}
+
+#[derive(Serialize)]
 struct HomeJson {
     profile: ProfileJson,
     projects: Vec<ProjectJson>,
     commits: Vec<CommitJson>,
     posts: Vec<posts::PostSummary>,
+    details: Vec<DetailJson>,
 }
 
 // ---------------------------------------------------------------------------
@@ -205,20 +228,108 @@ async fn load_commits(pool: &sqlx::PgPool, limit: i64) -> Result<Vec<CommitJson>
         .collect())
 }
 
+/// The stored `(key, value, url)` rows, unordered and unfiltered.
+async fn detail_rows(
+    pool: &sqlx::PgPool,
+) -> Result<Vec<(String, String, Option<String>)>, sqlx::Error> {
+    sqlx::query_as("SELECT key, value, url FROM home_details")
+        .fetch_all(pool)
+        .await
+}
+
+/// Joins stored rows to the `DETAILS` whitelist, in whitelist order. `include_empty`
+/// keeps rows whose value is blank — the admin editor wants a field for every
+/// key, the public home page only wants the details that are actually set.
+fn assemble_details(
+    rows: &[(String, String, Option<String>)],
+    include_empty: bool,
+) -> Vec<DetailJson> {
+    DETAILS
+        .iter()
+        .filter_map(|(key, label)| {
+            let found = rows.iter().find(|(k, _, _)| k == key);
+            let value = found.map(|(_, v, _)| v.trim().to_string()).unwrap_or_default();
+            if value.is_empty() && !include_empty {
+                return None;
+            }
+            Some(DetailJson {
+                key: (*key).to_string(),
+                label: (*label).to_string(),
+                value,
+                url: found.and_then(|(_, _, u)| u.clone()),
+            })
+        })
+        .collect()
+}
+
+/// A human-readable process uptime like `3d 4h 12m`, falling back to seconds
+/// under a minute so a freshly-restarted server still shows something.
+fn format_uptime(secs: u64) -> String {
+    let (days, hours, mins) = (secs / 86_400, (secs % 86_400) / 3_600, (secs % 3_600) / 60);
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if mins > 0 {
+        parts.push(format!("{mins}m"));
+    }
+    if parts.is_empty() {
+        parts.push(format!("{secs}s"));
+    }
+    parts.join(" ")
+}
+
+/// The always-present dynamic details, computed per request and appended after
+/// the curated ones: server uptime and the visitor's own IP. These are not stored
+/// in `home_details` and are not part of the admin-editable whitelist.
+fn dynamic_details(
+    req: &Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> Vec<DetailJson> {
+    let mut details = vec![DetailJson {
+        key: "uptime".into(),
+        label: "Uptime".into(),
+        value: format_uptime(config.started_at.elapsed().as_secs()),
+        url: None,
+    }];
+    // Skip the IP detail rather than failing the page if it can't be resolved
+    // (e.g. a missing forwarding header behind a misconfigured proxy).
+    if let Ok(ip) = resolve_client_ip(config.ip_source, req, peer) {
+        details.push(DetailJson {
+            key: "your_ip".into(),
+            label: "Your IP".into(),
+            value: ip.0,
+            url: None,
+        });
+    }
+    details
+}
+
 // ---------------------------------------------------------------------------
 // Public handler.
 // ---------------------------------------------------------------------------
 
 /// `GET /home` — everything the front page renders, in one response.
-pub async fn home(config: &ApiConfig) -> hyper::Response<Body> {
+pub async fn home(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
     let pool = config.db.pool();
 
     let result = async {
+        let mut details = assemble_details(&detail_rows(&pool).await?, false);
+        details.extend(dynamic_details(&req, peer, config));
         Ok::<_, sqlx::Error>(HomeJson {
             profile: load_profile(&pool).await?,
             projects: load_projects(&pool).await?,
             commits: load_commits(&pool, HOME_COMMITS).await?,
             posts: posts::published_summaries(&pool, HOME_POSTS).await?,
+            details,
         })
     };
 
@@ -325,6 +436,108 @@ pub async fn update_profile(
         github_url,
     };
     ResponseBuilder::new(StatusCode::OK).json(&profile).into()
+}
+
+// ---------------------------------------------------------------------------
+// Admin: home-page "Now" details.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct DetailRequest {
+    #[serde(default)]
+    key: String,
+    #[serde(default)]
+    value: String,
+    #[serde(default)]
+    url: String,
+}
+
+const DETAILS_BODY_HINT: &str =
+    r#"expected a JSON array like [{"key": "currently_reading", "value": "…", "url": "https://…"}]"#;
+
+/// `GET /admin/details` — every whitelisted detail with its current value and
+/// link, including keys that are still blank so the editor has a field for each.
+pub async fn get_details(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    if let Err(err) = admin::require_admin(&req, peer, config).await {
+        return ResponseBuilder::from(err).into();
+    }
+    match detail_rows(&config.db.pool()).await {
+        Ok(rows) => ResponseBuilder::new(StatusCode::OK)
+            .json(&assemble_details(&rows, true))
+            .into(),
+        Err(err) => {
+            tracing::error!(error = %err, "failed to load details");
+            ResponseBuilder::from(ApiError::Internal).into()
+        }
+    }
+}
+
+/// `PUT /admin/details` — upserts the values/links for whitelisted keys. Keys not
+/// in `DETAILS` are silently ignored, so the editor can post the whole set. All
+/// input is validated before any write so a bad row can't leave a partial save.
+pub async fn update_details(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    if let Err(err) = admin::require_admin(&req, peer, config).await {
+        return ResponseBuilder::from(err).into();
+    }
+
+    let body: Vec<DetailRequest> = match response::read_json(req, DETAILS_BODY_HINT).await {
+        Ok(body) => body,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let mut cleaned: Vec<(&str, String, Option<String>)> = Vec::new();
+    for detail in &body {
+        let Some(&(key, _)) = DETAILS.iter().find(|(k, _)| *k == detail.key) else {
+            continue; // not a whitelisted key
+        };
+        let value = detail.value.trim().to_string();
+        if value.chars().count() > MAX_DETAIL_VALUE_LEN {
+            return ResponseBuilder::from(ApiError::BadRequest(format!(
+                "a detail value must be at most {MAX_DETAIL_VALUE_LEN} characters"
+            )))
+            .into();
+        }
+        let url = match clean_url(&detail.url) {
+            Ok(url) => url,
+            Err(err) => return ResponseBuilder::from(err).into(),
+        };
+        cleaned.push((key, value, url));
+    }
+
+    let pool = config.db.pool();
+    for (key, value, url) in cleaned {
+        let result = sqlx::query(
+            "INSERT INTO home_details (key, value, url, updated_at) VALUES ($1, $2, $3, now()) \
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, url = EXCLUDED.url, updated_at = now()",
+        )
+        .bind(key)
+        .bind(value)
+        .bind(url)
+        .execute(&pool)
+        .await;
+        if let Err(err) = result {
+            tracing::error!(error = %err, key, "failed to save detail");
+            return ResponseBuilder::from(ApiError::Internal).into();
+        }
+    }
+
+    match detail_rows(&pool).await {
+        Ok(rows) => ResponseBuilder::new(StatusCode::OK)
+            .json(&assemble_details(&rows, true))
+            .into(),
+        Err(err) => {
+            tracing::error!(error = %err, "failed to reload details");
+            ResponseBuilder::from(ApiError::Internal).into()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -589,6 +802,48 @@ mod tests {
         assert!(clean_repo("https://gitlab.com/owner/name").is_err());
         assert!(clean_repo("bad/na me").is_err());
         assert!(clean_repo("/name").is_err());
+    }
+
+    fn row(key: &str, value: &str, url: Option<&str>) -> (String, String, Option<String>) {
+        (key.into(), value.into(), url.map(Into::into))
+    }
+
+    #[test]
+    fn assemble_details_public_drops_blank_and_keeps_whitelist_order() {
+        let rows = vec![
+            row("based_in", "  Manchester  ", None),
+            row("currently_reading", "The Pragmatic Programmer", Some("https://ex.com")),
+            row("currently_building", "   ", None), // blank -> dropped
+            row("unknown_key", "ignored", None),    // not whitelisted -> never seen
+        ];
+        let details = assemble_details(&rows, false);
+        let keys: Vec<_> = details.iter().map(|f| f.key.as_str()).collect();
+        // DETAILS order preserved; blank and unknown keys excluded.
+        assert_eq!(keys, ["currently_reading", "based_in"]);
+        // Value is trimmed.
+        assert_eq!(details[1].value, "Manchester");
+        assert_eq!(details[0].url.as_deref(), Some("https://ex.com"));
+    }
+
+    #[test]
+    fn assemble_details_admin_includes_every_whitelisted_key() {
+        let rows = vec![row("currently_reading", "A book", None)];
+        let details = assemble_details(&rows, true);
+        // One row per whitelisted key, even the ones with no stored value.
+        let keys: Vec<_> = details.iter().map(|f| f.key.as_str()).collect();
+        assert_eq!(keys, DETAILS.map(|(k, _)| k));
+        assert_eq!(details[0].value, "A book");
+        assert!(details[1].value.is_empty());
+    }
+
+    #[test]
+    fn format_uptime_is_human_readable() {
+        assert_eq!(format_uptime(0), "0s");
+        assert_eq!(format_uptime(45), "45s");
+        assert_eq!(format_uptime(90), "1m");
+        assert_eq!(format_uptime(3_600), "1h");
+        assert_eq!(format_uptime(3 * 86_400 + 4 * 3_600 + 12 * 60), "3d 4h 12m");
+        assert_eq!(format_uptime(86_400), "1d");
     }
 
     #[test]
