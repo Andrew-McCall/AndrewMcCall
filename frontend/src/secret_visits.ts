@@ -134,15 +134,23 @@ const byKindOptions = (rows: KindCount[]): ApexCharts.ApexOptions => ({
   },
 });
 
+// Log-scale a count for bar length. `+1` keeps a single-hit page visible
+// instead of collapsing log10(1)=0 to a zero-width bar, and lets zero-hit rows
+// sit flat on the baseline. Inverted below to recover the real count.
+const logScale = (n: number): number => Math.log10(n + 1);
+
 // Horizontal bars of the busiest pages. Clicking one filters every other chart
 // to that page (see `onSelect`); the height grows with the row count so labels
-// never crowd.
+// never crowd. Bars are logarithmic so a single runaway page doesn't crush
+// every quieter page to a sliver — ApexCharts ignores its own `logarithmic`
+// flag on horizontal bars, so we scale the lengths ourselves and map the axis,
+// data labels, and tooltip back to the true counts.
 const byRouteOptions = (
   rows: RouteCount[],
   onSelect: (route: string) => void,
 ): ApexCharts.ApexOptions => ({
   ...baseOptions(),
-  series: [{ name: "Visits", data: rows.map((r) => r.count) }],
+  series: [{ name: "Visits", data: rows.map((r) => logScale(r.count)) }],
   chart: {
     ...baseOptions().chart,
     type: "bar",
@@ -160,12 +168,35 @@ const byRouteOptions = (
   } as any,
   colors: [GREEN],
   plotOptions: { bar: { horizontal: true, borderRadius: 2, distributed: false } },
+  // Print the real count at the end of each bar, since the log-scaled axis
+  // makes exact lengths hard to read off.
+  dataLabels: {
+    enabled: true,
+    formatter: (_v: number, opts?: { dataPointIndex: number }) =>
+      (opts ? rows[opts.dataPointIndex]?.count.toLocaleString() : "") ?? "",
+    offsetX: 24,
+    style: { colors: ["#4d7c56"], fontFamily: "ui-monospace, monospace" },
+  },
   xaxis: {
     categories: rows.map((r) => r.route),
     axisBorder: { color: "#1c2a1e" },
     axisTicks: { color: "#1c2a1e" },
+    // Undo the log scaling so the value axis reads in real visit counts.
+    labels: {
+      formatter: (v: string) => {
+        const n = Math.round(10 ** Number(v) - 1);
+        return n <= 0 ? "0" : n.toLocaleString();
+      },
+    },
   },
   yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
+  tooltip: {
+    theme: "dark",
+    y: {
+      formatter: (_v: number, opts?: { dataPointIndex: number }) =>
+        (opts ? rows[opts.dataPointIndex]?.count.toLocaleString() : "") ?? "",
+    },
+  },
   states: { active: { filter: { type: "none" } } },
 });
 
@@ -266,7 +297,7 @@ export default (app: HTMLElement) => {
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-stone-900 border border-green-900 p-4">
+        <div id="vs-by-kind-panel" class="bg-stone-900 border border-green-900 p-4">
           <h2 class="text-green-400 font-mono text-sm mb-2">By source</h2>
           <div id="vs-by-kind"></div>
         </div>
@@ -332,17 +363,21 @@ export default (app: HTMLElement) => {
     };
 
     mount("#vs-per-day", perDayOptions(stats.per_day));
-    // Fold robot/scanner noise into the source breakdown as its own (red) slice
-    // so the donut accounts for every hit, not just real page visits — but only
-    // in the all-pages view. `robot_total` always spans every page (bot probes
-    // hit paths that were never real, so they belong to no page), so mixing it
-    // into a route-filtered donut would swamp that page's real kinds with
-    // unrelated site-wide noise. When a page is selected, show its kinds alone.
-    const kindRows =
-      currentRoute === null && stats.robot_total > 0
-        ? [...stats.by_kind, { kind: "robot", count: stats.robot_total }]
-        : stats.by_kind;
-    mount("#vs-by-kind", byKindOptions(kindRows));
+    // The source breakdown only makes sense site-wide. `robot_total` always
+    // spans every page (bot probes hit paths that were never real, so they
+    // belong to no page) and `by_kind` on a filtered page collapses to a single
+    // slice, so the donut carries no signal there — hide the whole panel when a
+    // page is selected, and fold the robot noise in as its own (red) slice in
+    // the all-pages view so the donut accounts for every hit.
+    const kindPanel = app.querySelector<HTMLElement>("#vs-by-kind-panel")!;
+    kindPanel.classList.toggle("hidden", currentRoute !== null);
+    if (currentRoute === null) {
+      const kindRows =
+        stats.robot_total > 0
+          ? [...stats.by_kind, { kind: "robot", count: stats.robot_total }]
+          : stats.by_kind;
+      mount("#vs-by-kind", byKindOptions(kindRows));
+    }
     mount("#vs-by-hour", byHourOptions(stats.by_hour));
     mount(
       "#vs-by-route",
