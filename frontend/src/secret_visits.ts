@@ -136,21 +136,39 @@ const byKindOptions = (rows: KindCount[]): ApexCharts.ApexOptions => ({
 
 // Log-scale a count for bar length. `+1` keeps a single-hit page visible
 // instead of collapsing log10(1)=0 to a zero-width bar, and lets zero-hit rows
-// sit flat on the baseline. Inverted below to recover the real count.
+// sit flat on the baseline. Inverted by `barAxisValue` to recover the count.
 const logScale = (n: number): number => Math.log10(n + 1);
+
+// The bar-length value for a count under the chosen scale. When `log` is off
+// the series carries the raw counts; ApexCharts ignores its own `logarithmic`
+// flag on horizontal bars, so log mode scales the lengths here instead.
+const barValue = (n: number, log: boolean): number => (log ? logScale(n) : n);
+
+// Recover the real count from a value-axis position, undoing `barValue`.
+const barAxisValue = (v: string, log: boolean): string => {
+  const n = log ? Math.round(10 ** Number(v) - 1) : Math.round(Number(v));
+  return n <= 0 ? "0" : n.toLocaleString();
+};
+
+// A count-per-row formatter for data labels and tooltips, reading the true
+// count out of `rows` by point index so it's correct under either scale.
+const rowCount =
+  (rows: RouteCount[]) =>
+  (_v: number, opts?: { dataPointIndex: number }): string =>
+    (opts ? rows[opts.dataPointIndex]?.count.toLocaleString() : "") ?? "";
 
 // Horizontal bars of the busiest pages. Clicking one filters every other chart
 // to that page (see `onSelect`); the height grows with the row count so labels
-// never crowd. Bars are logarithmic so a single runaway page doesn't crush
-// every quieter page to a sliver — ApexCharts ignores its own `logarithmic`
-// flag on horizontal bars, so we scale the lengths ourselves and map the axis,
-// data labels, and tooltip back to the true counts.
+// never crowd. `log` toggles a hand-rolled logarithmic scale (see `barValue`)
+// so a single runaway page doesn't crush every quieter page to a sliver; the
+// axis, data labels, and tooltip always read in real counts.
 const byRouteOptions = (
   rows: RouteCount[],
+  log: boolean,
   onSelect: (route: string) => void,
 ): ApexCharts.ApexOptions => ({
   ...baseOptions(),
-  series: [{ name: "Visits", data: rows.map((r) => logScale(r.count)) }],
+  series: [{ name: "Visits", data: rows.map((r) => barValue(r.count, log)) }],
   chart: {
     ...baseOptions().chart,
     type: "bar",
@@ -168,12 +186,11 @@ const byRouteOptions = (
   } as any,
   colors: [GREEN],
   plotOptions: { bar: { horizontal: true, borderRadius: 2, distributed: false } },
-  // Print the real count at the end of each bar, since the log-scaled axis
-  // makes exact lengths hard to read off.
+  // Print the real count at the end of each bar, since a log-scaled axis makes
+  // exact lengths hard to read off.
   dataLabels: {
     enabled: true,
-    formatter: (_v: number, opts?: { dataPointIndex: number }) =>
-      (opts ? rows[opts.dataPointIndex]?.count.toLocaleString() : "") ?? "",
+    formatter: rowCount(rows),
     offsetX: 24,
     style: { colors: ["#4d7c56"], fontFamily: "ui-monospace, monospace" },
   },
@@ -181,22 +198,10 @@ const byRouteOptions = (
     categories: rows.map((r) => r.route),
     axisBorder: { color: "#1c2a1e" },
     axisTicks: { color: "#1c2a1e" },
-    // Undo the log scaling so the value axis reads in real visit counts.
-    labels: {
-      formatter: (v: string) => {
-        const n = Math.round(10 ** Number(v) - 1);
-        return n <= 0 ? "0" : n.toLocaleString();
-      },
-    },
+    labels: { formatter: (v: string) => barAxisValue(v, log) },
   },
   yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
-  tooltip: {
-    theme: "dark",
-    y: {
-      formatter: (_v: number, opts?: { dataPointIndex: number }) =>
-        (opts ? rows[opts.dataPointIndex]?.count.toLocaleString() : "") ?? "",
-    },
-  },
+  tooltip: { theme: "dark", y: { formatter: rowCount(rows) } },
   states: { active: { filter: { type: "none" } } },
 });
 
@@ -207,13 +212,15 @@ const STATIC_COLOR = "#15803d";
 
 // Horizontal bars of the most-hit non-page paths, tinted by `color` so static
 // assets (green) and robot noise (red) read apart. Not clickable: these aren't
-// real pages, so there's nothing to filter the other charts to.
+// real pages, so there's nothing to filter the other charts to. `log` behaves
+// exactly as in `byRouteOptions`.
 const byNoiseRouteOptions = (
   rows: RouteCount[],
   color: string,
+  log: boolean,
 ): ApexCharts.ApexOptions => ({
   ...baseOptions(),
-  series: [{ name: "Hits", data: rows.map((r) => r.count) }],
+  series: [{ name: "Hits", data: rows.map((r) => barValue(r.count, log)) }],
   chart: {
     ...baseOptions().chart,
     type: "bar",
@@ -221,12 +228,20 @@ const byNoiseRouteOptions = (
   } as any,
   colors: [color],
   plotOptions: { bar: { horizontal: true, borderRadius: 2, distributed: false } },
+  dataLabels: {
+    enabled: true,
+    formatter: rowCount(rows),
+    offsetX: 24,
+    style: { colors: ["#4d7c56"], fontFamily: "ui-monospace, monospace" },
+  },
   xaxis: {
     categories: rows.map((r) => r.route),
     axisBorder: { color: "#1c2a1e" },
     axisTicks: { color: "#1c2a1e" },
+    labels: { formatter: (v: string) => barAxisValue(v, log) },
   },
   yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
+  tooltip: { theme: "dark", y: { formatter: rowCount(rows) } },
 });
 
 // Charts live at module scope so the router can dispose them when navigating
@@ -252,6 +267,10 @@ export default (app: HTMLElement) => {
   // The page the aggregates are filtered to, or null for all pages. Reset on
   // every mount so re-entering the page always starts unfiltered.
   let currentRoute: string | null = null;
+
+  // Per-card log/linear scale for the three horizontal-bar charts. Kept at mount
+  // scope so a toggle sticks across route filtering and reloads. Default log.
+  const logScales = { route: true, static: true, robot: true };
 
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
@@ -301,23 +320,26 @@ export default (app: HTMLElement) => {
           <h2 class="text-green-400 font-mono text-sm mb-2">By source</h2>
           <div id="vs-by-kind"></div>
         </div>
-        <div class="bg-stone-900 border border-green-900 p-4">
+        <div id="vs-by-hour-panel" class="bg-stone-900 border border-green-900 p-4">
           <h2 class="text-green-400 font-mono text-sm mb-2">By hour of day</h2>
           <div id="vs-by-hour"></div>
         </div>
       </div>
 
-      <div class="bg-stone-900 border border-green-900 p-4">
+      <div class="relative bg-stone-900 border border-green-900 p-4">
+        <button id="vs-by-route-log" type="button" class="absolute top-3 right-3 z-10 text-xs font-mono px-2 py-0.5 border border-green-900 text-green-600 hover:border-green-600 hover:text-green-300">log</button>
         <h2 class="text-green-400 font-mono text-sm mb-2">Top pages &middot; click to filter</h2>
         <div id="vs-by-route"></div>
       </div>
 
-      <div id="vs-static-panel" class="hidden bg-stone-900 border border-green-900 p-4">
+      <div id="vs-static-panel" class="relative hidden bg-stone-900 border border-green-900 p-4">
+        <button id="vs-by-static-route-log" type="button" class="absolute top-3 right-3 z-10 text-xs font-mono px-2 py-0.5 border border-green-900 text-green-600 hover:border-green-600 hover:text-green-300">log</button>
         <h2 class="text-green-400 font-mono text-sm mb-2">Top static-asset paths &middot; .js / .css / .svg &amp; friends</h2>
         <div id="vs-by-static-route"></div>
       </div>
 
-      <div id="vs-robot-panel" class="hidden bg-stone-900 border border-red-900 p-4">
+      <div id="vs-robot-panel" class="relative hidden bg-stone-900 border border-red-900 p-4">
+        <button id="vs-by-robot-route-log" type="button" class="absolute top-3 right-3 z-10 text-xs font-mono px-2 py-0.5 border border-red-900 text-red-600 hover:border-red-600 hover:text-red-300">log</button>
         <h2 class="text-red-400 font-mono text-sm mb-2">Top robot paths &middot; bot/scanner probes &amp; robots.txt</h2>
         <div id="vs-by-robot-route"></div>
       </div>
@@ -354,12 +376,35 @@ export default (app: HTMLElement) => {
     contentEl.classList.remove("hidden");
     contentEl.classList.add("flex");
 
-    const mount = (sel: string, options: ApexCharts.ApexOptions) => {
+    const mount = (
+      sel: string,
+      options: ApexCharts.ApexOptions,
+    ): ApexCharts | null => {
       const el = app.querySelector<HTMLElement>(sel);
-      if (!el) return;
+      if (!el) return null;
       const chart = new ApexChartsCtor(el, options);
       chart.render();
       charts.push(chart);
+      return chart;
+    };
+
+    // Wire a card's log/linear button to its chart. `build` re-derives the
+    // options for the current scale; toggling updates the chart in place and
+    // relabels the button. No-ops if the chart never mounted (empty panel).
+    const wireScale = (
+      btnSel: string,
+      chart: ApexCharts | null,
+      key: keyof typeof logScales,
+      build: () => ApexCharts.ApexOptions,
+    ) => {
+      const btn = app.querySelector<HTMLButtonElement>(btnSel);
+      if (!btn || !chart) return;
+      btn.textContent = logScales[key] ? "log" : "linear";
+      btn.onclick = () => {
+        logScales[key] = !logScales[key];
+        btn.textContent = logScales[key] ? "log" : "linear";
+        chart.updateOptions(build(), true, false);
+      };
     };
 
     mount("#vs-per-day", perDayOptions(stats.per_day));
@@ -371,6 +416,11 @@ export default (app: HTMLElement) => {
     // the all-pages view so the donut accounts for every hit.
     const kindPanel = app.querySelector<HTMLElement>("#vs-by-kind-panel")!;
     kindPanel.classList.toggle("hidden", currentRoute !== null);
+    // With the source panel gone on a filtered page, let the hour chart claim
+    // both grid columns instead of leaving a hole beside it.
+    app
+      .querySelector<HTMLElement>("#vs-by-hour-panel")!
+      .classList.toggle("md:col-span-2", currentRoute !== null);
     if (currentRoute === null) {
       const kindRows =
         stats.robot_total > 0
@@ -379,12 +429,17 @@ export default (app: HTMLElement) => {
       mount("#vs-by-kind", byKindOptions(kindRows));
     }
     mount("#vs-by-hour", byHourOptions(stats.by_hour));
-    mount(
-      "#vs-by-route",
-      byRouteOptions(stats.by_route, (route) => {
-        currentRoute = route;
-        load();
-      }),
+    const onSelect = (route: string) => {
+      currentRoute = route;
+      load();
+    };
+    const routeBuild = () =>
+      byRouteOptions(stats.by_route, logScales.route, onSelect);
+    wireScale(
+      "#vs-by-route-log",
+      mount("#vs-by-route", routeBuild()),
+      "route",
+      routeBuild,
     );
 
     // Only take up room when there's actually noise to show, and keep the
@@ -392,24 +447,32 @@ export default (app: HTMLElement) => {
     const noisePanel = (
       panelSel: string,
       chartSel: string,
+      btnSel: string,
       rows: RouteCount[],
       color: string,
+      key: "static" | "robot",
     ) => {
       const panel = app.querySelector<HTMLElement>(panelSel)!;
       panel.classList.toggle("hidden", rows.length === 0);
-      if (rows.length > 0) mount(chartSel, byNoiseRouteOptions(rows, color));
+      if (rows.length === 0) return;
+      const build = () => byNoiseRouteOptions(rows, color, logScales[key]);
+      wireScale(btnSel, mount(chartSel, build()), key, build);
     };
     noisePanel(
       "#vs-static-panel",
       "#vs-by-static-route",
+      "#vs-by-static-route-log",
       stats.by_static_route,
       STATIC_COLOR,
+      "static",
     );
     noisePanel(
       "#vs-robot-panel",
       "#vs-by-robot-route",
+      "#vs-by-robot-route-log",
       stats.by_robot_route,
       ROBOT_COLOR,
+      "robot",
     );
   };
 
