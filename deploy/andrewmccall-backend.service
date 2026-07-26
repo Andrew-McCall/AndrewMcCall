@@ -12,6 +12,11 @@ Type=simple
 WorkingDirectory=/root/AndrewMcCall/backend
 EnvironmentFile=/root/AndrewMcCall/backend/.env
 Environment=RUST_LOG=info
+# In prod the backend sits behind nginx, so resolve the client IP from the
+# X-Forwarded-For header instead of the TCP peer (which is the nginx loopback,
+# i.e. always 127.0.0.1). Dev runs the binary directly and leaves this unset,
+# defaulting to IpSource::ConnectInfo.
+Environment=IP_SOURCE=nginx
 ExecStart=/usr/local/bin/andrewmccall-backend
 Restart=always
 RestartSec=2
