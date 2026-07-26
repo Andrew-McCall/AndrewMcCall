@@ -419,10 +419,10 @@ export default (app: HTMLElement) => {
     ) => {
       const btn = app.querySelector<HTMLButtonElement>(btnSel);
       if (!btn || !chart) return;
-      btn.textContent = logScales[key] ? "log" : "linear";
+      btn.textContent = logScales[key] ? "logarithmic" : "linear";
       btn.onclick = () => {
         logScales[key] = !logScales[key];
-        btn.textContent = logScales[key] ? "log" : "linear";
+        btn.textContent = logScales[key] ? "logarithmic" : "linear";
         chart.updateOptions(build(), true, false);
       };
     };
