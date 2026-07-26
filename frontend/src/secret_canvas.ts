@@ -9,6 +9,7 @@
 // see-through pixel is forwarded to whatever link or button it revealed.
 
 import { float_alert } from "./float_alert";
+import { isMobile } from "./mobile.ts";
 
 interface GameWasm {
   memory: WebAssembly.Memory;
@@ -375,12 +376,14 @@ export default () => {
   scrollbar.appendChild(thumb);
   document.body.appendChild(scrollbar);
 
+  // Mobile has no OS scrollbar to hide and the touch drag isn't useful there,
+  // so skip our custom bar on mobile.
   const MIN_THUMB = 24;
   const updateScrollbar = () => {
     const doc = document.documentElement;
     const viewH = window.innerHeight;
     const scrollH = doc.scrollHeight;
-    if (scrollH <= viewH + 1) {
+    if (isMobile() || scrollH <= viewH + 1) {
       scrollbar.style.display = "none";
       return;
     }

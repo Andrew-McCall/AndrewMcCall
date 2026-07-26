@@ -1,5 +1,6 @@
 import { mountLogin } from "./secret_login.ts";
 import { getMe } from "./session.ts";
+import { isDesktop } from "./mobile.ts";
 
 // `auth` items are hidden until the visitor is signed in.
 type MenuItem = {
@@ -64,13 +65,10 @@ const renderItem = (item: MenuItem) =>
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950">${item.label}</a>`;
 
 const renderGroup = (group: MenuGroup, signedIn: boolean) => {
-  const isOnDesktop =
-    window.matchMedia("(any-hover: hover)").matches &&
-    window.matchMedia("(any-pointer: fine)").matches &&
-    !("ontouchstart" in window && navigator.maxTouchPoints > 0);
+  const onDesktop = isDesktop();
   const items = group.items
     .filter((item) => !item.auth || signedIn)
-    .filter((item) => !item.desktop || isOnDesktop);
+    .filter((item) => !item.desktop || onDesktop);
   if (items.length === 0) return "";
   return `
   <div class="w-full bg-stone-950/40 border border-green-900/30 p-4 sm:p-5">
