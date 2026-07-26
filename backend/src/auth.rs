@@ -46,6 +46,12 @@ const RECOVERY_CODE_COUNT: usize = 10;
 /// before `login` starts rejecting it with [`ApiError::TooManyRequests`].
 const LOGIN_ATTEMPT_LIMIT: i64 = 4;
 
+/// How many *total* failed attempts an IP may make within the trailing 24h,
+/// regardless of PIN. The distinct-PIN limit above only throttles PIN guessing;
+/// a correct PIN with wrong second factors all share one hash, so without this
+/// an attacker who knows the PIN could brute-force TOTP/recovery codes unthrottled.
+const LOGIN_FAILURE_LIMIT: i64 = 15;
+
 /// Unambiguous alphabet for recovery codes — no `0/O`, `1/I/L` confusions.
 const RECOVERY_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -80,6 +86,54 @@ pub fn verify_pin(hash: &str, pin: &str) -> bool {
 /// and recovery codes so the plaintext never touches the database.
 fn sha256_hex(input: &str) -> String {
     let digest = Sha256::digest(input.as_bytes());
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
+/// Keyed hash of a low-entropy PIN for storage in `login_attempts`. With a
+/// server-side `key` this is HMAC-SHA256, so a database-only leak can't reverse
+/// the digest back to the (4–6 digit) PIN; without one it falls back to the
+/// plain unkeyed hash. Deterministic either way, so the ban logic's
+/// `COUNT(DISTINCT pin_hash)` still works.
+fn pin_attempt_hash(pin: &str, key: Option<&str>) -> String {
+    match key {
+        Some(key) => hmac_sha256_hex(key.as_bytes(), pin.as_bytes()),
+        None => sha256_hex(pin),
+    }
+}
+
+/// HMAC-SHA256 of `msg` under `key`, lowercase hex (RFC 2104). Hand-rolled on
+/// `sha2` to avoid pulling in an extra crate for this single call site.
+fn hmac_sha256_hex(key: &[u8], msg: &[u8]) -> String {
+    const BLOCK: usize = 64; // SHA-256 block size
+    let mut block = [0u8; BLOCK];
+    // Keys longer than the block are first hashed down; shorter ones zero-pad.
+    if key.len() > BLOCK {
+        block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        block[..key.len()].copy_from_slice(key);
+    }
+
+    let mut ipad = [0u8; BLOCK];
+    let mut opad = [0u8; BLOCK];
+    for i in 0..BLOCK {
+        ipad[i] = block[i] ^ 0x36;
+        opad[i] = block[i] ^ 0x5c;
+    }
+
+    let mut inner = Sha256::new();
+    inner.update(ipad);
+    inner.update(msg);
+    let inner = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(opad);
+    outer.update(inner);
+    let digest = outer.finalize();
+
     let mut out = String::with_capacity(digest.len() * 2);
     for byte in digest {
         let _ = write!(out, "{byte:02x}");
@@ -370,11 +424,14 @@ struct AuthRow {
     role: UserRole,
 }
 
-/// Whether `client_ip` has submitted [`LOGIN_ATTEMPT_LIMIT`] or more distinct
-/// wrong PINs (by hash) within the trailing 24h, per `login_attempts`.
+/// Whether `client_ip` is currently banned: either it submitted
+/// [`LOGIN_ATTEMPT_LIMIT`] distinct wrong PINs, or [`LOGIN_FAILURE_LIMIT`] total
+/// failed attempts, within the trailing 24h (per `login_attempts`). The former
+/// throttles PIN guessing; the latter throttles second-factor guessing, which
+/// shares a single PIN hash and so slips past the distinct-PIN count.
 async fn is_ip_banned(pool: &sqlx::PgPool, client_ip: &str) -> Result<bool, ApiError> {
-    let distinct_failed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(DISTINCT pin_hash) FROM login_attempts \
+    let (distinct_failed, total_failed): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT pin_hash), COUNT(*) FROM login_attempts \
          WHERE client_ip = $1 AND NOT success AND created_at > now() - interval '24 hours'",
     )
     .bind(client_ip)
@@ -385,7 +442,7 @@ async fn is_ip_banned(pool: &sqlx::PgPool, client_ip: &str) -> Result<bool, ApiE
         ApiError::Internal
     })?;
 
-    Ok(distinct_failed >= LOGIN_ATTEMPT_LIMIT)
+    Ok(distinct_failed >= LOGIN_ATTEMPT_LIMIT || total_failed >= LOGIN_FAILURE_LIMIT)
 }
 
 /// Records a single login attempt in `login_attempts`, deduplicating the user
@@ -475,7 +532,7 @@ pub async fn login(
             Ok(body) => body,
             Err(err) => return ResponseBuilder::from(err).into(),
         };
-    let pin_hash = sha256_hex(&body.pin);
+    let pin_hash = pin_attempt_hash(&body.pin, config.pin_hash_key.as_deref());
 
     // PIN-only login: there's no name to key on, and PINs are per-user-salted
     // argon2 hashes we can't query by, so load every user and find the one whose
@@ -584,14 +641,14 @@ async fn consume_recovery_code(pool: &sqlx::PgPool, user_id: Uuid, code: &str) -
 }
 
 /// `POST /auth/logout` — deletes the presented token and clears the cookie.
+/// Deliberately unauthenticated: an expired or already-invalid session must
+/// still be able to clear its stale cookie. Deleting an unknown token hash is a
+/// harmless no-op, and the `SameSite=Strict` cookie guards against CSRF.
 pub async fn logout(
     req: Request<hyper::body::Incoming>,
-    peer: SocketAddr,
+    _peer: SocketAddr,
     config: &ApiConfig,
 ) -> hyper::Response<Body> {
-    if let Err(err) = authenticate(&req, peer, config).await {
-        return ResponseBuilder::from(err).into();
-    }
     if let Some(token) = extract_token(&req) {
         let pool = config.db.pool();
         if let Err(err) = sqlx::query("DELETE FROM user_tokens WHERE token = $1")
@@ -897,6 +954,28 @@ mod tests {
         let now = totp.generate_current().unwrap();
         assert!(verify_totp(&secret, "alice", &now));
         assert!(!verify_totp(&secret, "alice", "000000"));
+    }
+
+    #[test]
+    fn hmac_matches_rfc4231_vector() {
+        // RFC 4231, Test Case 2.
+        assert_eq!(
+            hmac_sha256_hex(b"Jefe", b"what do ya want for nothing?"),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+        );
+    }
+
+    #[test]
+    fn pin_attempt_hash_is_keyed_but_deterministic() {
+        // Unkeyed falls back to the plain digest (back-compat).
+        assert_eq!(pin_attempt_hash("1234", None), sha256_hex("1234"));
+        // A key changes the digest and is deterministic under the same key...
+        let keyed = pin_attempt_hash("1234", Some("server-secret"));
+        assert_ne!(keyed, sha256_hex("1234"));
+        assert_eq!(keyed, pin_attempt_hash("1234", Some("server-secret")));
+        // ...but distinct PINs and distinct keys both diverge.
+        assert_ne!(keyed, pin_attempt_hash("5678", Some("server-secret")));
+        assert_ne!(keyed, pin_attempt_hash("1234", Some("other-secret")));
     }
 
     #[test]

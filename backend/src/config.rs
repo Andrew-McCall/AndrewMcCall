@@ -12,6 +12,11 @@ pub struct ApiConfig {
     /// Whether to mark the session cookie `Secure` (HTTPS-only). Defaults to
     /// true; set `COOKIE_SECURE=false` for local HTTP development.
     pub cookie_secure: bool,
+    /// Server-side key (`PIN_HASH_KEY`) used to HMAC the low-entropy PIN before
+    /// it's stored in `login_attempts`. Without it a DB leak trivially reverses
+    /// the unsalted digest back to the PIN. `None` falls back to a plain hash
+    /// (unkeyed) so existing deployments keep working — set it in production.
+    pub pin_hash_key: Option<String>,
     /// The name of the bootstrap admin, created on startup if absent. Paired
     /// with `admin_pin`; both must be set for bootstrapping to happen.
     pub admin_name: Option<String>,
@@ -42,6 +47,7 @@ impl ApiConfig {
             cookie_secure: std::env::var("COOKIE_SECURE")
                 .map(|v| !v.eq_ignore_ascii_case("false") && v != "0")
                 .unwrap_or(true),
+            pin_hash_key: non_empty_env("PIN_HASH_KEY"),
             admin_name: non_empty_env("ADMIN_NAME"),
             admin_pin: non_empty_env("ADMIN_PIN"),
             github_username: non_empty_env("GITHUB_USERNAME"),
