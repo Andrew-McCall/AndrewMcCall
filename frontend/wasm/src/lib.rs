@@ -49,7 +49,12 @@ use core::ptr::addr_of_mut;
 /// skip a heap allocator entirely. JS must never pass a larger `w`/`h`.
 const MAX_W: usize = 2560;
 const MAX_H: usize = 1440;
-static mut FRAME: [u8; MAX_W * MAX_H * 4] = [0; MAX_W * MAX_H * 4];
+/// 4-byte aligned so the per-frame background clear can store a whole RGBA
+/// pixel per word (`align_to_mut::<u32>`) instead of four separate byte writes.
+#[repr(align(4))]
+#[allow(dead_code)] // read only through frame_ptr()'s raw cast
+struct Frame([u8; MAX_W * MAX_H * 4]);
+static mut FRAME: Frame = Frame([0; MAX_W * MAX_H * 4]);
 
 /// Cell grids sized for the densest pitch the layout will ever pick.
 const MIN_PITCH: usize = 3;
@@ -73,8 +78,17 @@ const HOLD: f32 = 2.0;
 /// Meteors start spawning just before the hold ends, so the first streak
 /// visually ignites the name.
 const SPAWN_START: f32 = 2.0;
-/// Automaton generations per second.
-const STEP_DT: f32 = 1.0 / 12.0;
+/// Automaton generations per second the sim aims for. `target_tps` starts here
+/// and only ratchets down when the frame can't keep up (see `MIN_TPS`); the
+/// step interval is `1.0 / target_tps`.
+const INIT_TPS: f32 = 12.0;
+/// Floor the adaptive rate never drops below — one generation per second.
+const MIN_TPS: f32 = 1.0;
+/// Seconds of sustained overload that buy one tick/sec off the target rate.
+const SLOW_WINDOW: f32 = 5.0;
+/// Seconds of sustained headroom that win one tick/sec back — deliberately far
+/// longer than SLOW_WINDOW so the rate crawls back up but drops fast.
+const FAST_WINDOW: f32 = 20.0;
 const MAX_METROIDS: usize = 5;
 
 /// Base alpha a live cell's tile loses per generation. Interior cells —
@@ -107,6 +121,7 @@ const STATIC_FILL: u32 = 6;
 
 /// Cell colour by age: newborns flash bright lime; long-lived stable patterns
 /// settle into a deep green that sits quietly against the background.
+#[inline]
 fn cell_colour(age: u8) -> [u8; 3] {
     match age {
         1 => [0xbe, 0xf2, 0x64],      // lime-300
@@ -325,28 +340,66 @@ fn stamp_text(cells: &mut [u8], gw: usize, gh: usize, lay: &Layout) {
 
 // --- Life ------------------------------------------------------------------
 
+/// Live (age > 0) neighbours of a border cell, clamped to the grid so borders
+/// stay dead (non-wrapping). Interior cells use `live_neighbours8` instead.
+#[inline]
+fn live_neighbours(buf: &[u8], gw: usize, gh: usize, x: usize, y: usize) -> u32 {
+    let x1 = (x + 1).min(gw - 1);
+    let y1 = (y + 1).min(gh - 1);
+    let mut n = 0u32;
+    for ny in y.saturating_sub(1)..=y1 {
+        let base = ny * gw;
+        for nx in x.saturating_sub(1)..=x1 {
+            if (nx != x || ny != y) && buf[base + nx] > 0 {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// The eight neighbours of an interior cell `i` (row 1..gh-1, col 1..gw-1, all
+/// in range), summed branch-free — no clamping, no centre-skip test.
+#[inline]
+fn live_neighbours8(buf: &[u8], gw: usize, i: usize) -> u32 {
+    (buf[i - gw - 1] > 0) as u32
+        + (buf[i - gw] > 0) as u32
+        + (buf[i - gw + 1] > 0) as u32
+        + (buf[i - 1] > 0) as u32
+        + (buf[i + 1] > 0) as u32
+        + (buf[i + gw - 1] > 0) as u32
+        + (buf[i + gw] > 0) as u32
+        + (buf[i + gw + 1] > 0) as u32
+}
+
+#[inline]
+fn life_rule(age: u8, n: u32) -> u8 {
+    match (age > 0, n) {
+        (true, 2) | (true, 3) => age.saturating_add(1),
+        (false, 3) => 1,
+        _ => 0,
+    }
+}
+
 /// One B3/S23 generation with dead (non-wrapping) borders. Cell values are
 /// ages: 0 dead, else generations alive (saturating) — survivors grow older,
-/// births start at 1.
+/// births start at 1. Interior rows split off their two edge columns so the
+/// long middle run takes the branch-free eight-neighbour count.
 fn step_life(cur: &[u8], next: &mut [u8], gw: usize, gh: usize) {
     for y in 0..gh {
-        for x in 0..gw {
-            let mut n = 0u32;
-            let y0 = y.saturating_sub(1);
-            let x0 = x.saturating_sub(1);
-            for ny in y0..=(y + 1).min(gh - 1) {
-                for nx in x0..=(x + 1).min(gw - 1) {
-                    if (nx != x || ny != y) && cur[ny * gw + nx] > 0 {
-                        n += 1;
-                    }
-                }
+        let row = y * gw;
+        if y == 0 || y + 1 >= gh || gw < 3 {
+            for x in 0..gw {
+                next[row + x] = life_rule(cur[row + x], live_neighbours(cur, gw, gh, x, y));
             }
-            let age = cur[y * gw + x];
-            next[y * gw + x] = match (age > 0, n) {
-                (true, 2) | (true, 3) => age.saturating_add(1),
-                (false, 3) => 1,
-                _ => 0,
-            };
+        } else {
+            next[row] = life_rule(cur[row], live_neighbours(cur, gw, gh, 0, y));
+            for x in 1..gw - 1 {
+                let i = row + x;
+                next[i] = life_rule(cur[i], live_neighbours8(cur, gw, i));
+            }
+            let x = gw - 1;
+            next[row + x] = life_rule(cur[row + x], live_neighbours(cur, gw, gh, x, y));
         }
     }
 }
@@ -419,19 +472,18 @@ fn remap_grid(buf: &mut [u8], ogw: usize, ogh: usize, gw: usize, gh: usize, fill
 /// quadratically so the speed-up only kicks in well inside the frontier.
 fn decay_tiles(cells: &[u8], tile_a: &mut [u8], gw: usize, gh: usize, pct: u32) {
     for y in 0..gh {
+        let row = y * gw;
+        let interior_row = y >= 1 && y + 1 < gh && gw >= 3;
         for x in 0..gw {
-            let i = y * gw + x;
+            let i = row + x;
             if cells[i] == 0 {
                 continue;
             }
-            let mut n = 0u32;
-            for ny in y.saturating_sub(1)..=(y + 1).min(gh - 1) {
-                for nx in x.saturating_sub(1)..=(x + 1).min(gw - 1) {
-                    if (nx != x || ny != y) && cells[ny * gw + nx] > 0 {
-                        n += 1;
-                    }
-                }
-            }
+            let n = if interior_row && x >= 1 && x + 1 < gw {
+                live_neighbours8(cells, gw, i)
+            } else {
+                live_neighbours(cells, gw, gh, x, y)
+            };
             // Scale by `pct` (100 = normal); the static toggle passes 50 to
             // halve erosion. Round to nearest so a halved base of 3 stays 2,
             // not 1, and never rounds a live tile's loss down to nothing.
@@ -478,9 +530,12 @@ fn mark_perma(tile_a: &[u8], perma: &mut [u8], gw: usize, gh: usize) {
                 continue;
             }
             let mut n = 0u32;
+            let x0 = x.saturating_sub(1);
+            let x1 = (x + 1).min(gw - 1);
             for ny in y.saturating_sub(1)..=(y + 1).min(gh - 1) {
-                for nx in x.saturating_sub(1)..=(x + 1).min(gw - 1) {
-                    if (nx != x || ny != y) && tile_a[ny * gw + nx] == 0 {
+                let nrow = ny * gw;
+                for nx in x0..=x1 {
+                    if (nx != x || ny != y) && tile_a[nrow + nx] == 0 {
                         n += 1;
                     }
                 }
@@ -516,6 +571,49 @@ fn hold_brush(tile_a: &mut [u8], gw: usize, gh: usize, cx: i32, cy: i32, heal: b
             };
         }
     }
+}
+
+/// Nudge the target generation rate to what the frame budget can sustain.
+///
+/// A frame is *overloaded* when its banked backlog (`step_acc + dt`) would
+/// overrun the 4-step-per-frame cap, meaning generations are being dropped:
+/// every `SLOW_WINDOW` seconds of that spends one tick/sec off the target,
+/// floored at `MIN_TPS`. A frame has *headroom* when its real delta is under
+/// half the step interval — plenty of idle budget: every `FAST_WINDOW` seconds
+/// of that (far longer, so the climb is very slow) wins one tick/sec back, up
+/// to `INIT_TPS`. Frames that are neither hold the rate and keep both timers.
+/// The two accumulators reset each other so intermittent lag never banks a
+/// drop while the sim is mostly comfortable, nor vice versa. Returns the
+/// updated `(target_tps, slow_acc, fast_acc)`.
+fn ease_target_rate(
+    target_tps: f32,
+    mut slow_acc: f32,
+    mut fast_acc: f32,
+    step_acc: f32,
+    dt: f32,
+) -> (f32, f32, f32) {
+    let step_dt = 1.0 / target_tps;
+    let mut tps = target_tps;
+    if step_acc + dt > step_dt * 4.0 {
+        fast_acc = 0.0;
+        if tps > MIN_TPS {
+            slow_acc += dt;
+            if slow_acc >= SLOW_WINDOW {
+                slow_acc -= SLOW_WINDOW;
+                tps = (tps - 1.0).max(MIN_TPS);
+            }
+        }
+    } else if dt < step_dt * 0.5 {
+        slow_acc = 0.0;
+        if tps < INIT_TPS {
+            fast_acc += dt;
+            if fast_acc >= FAST_WINDOW {
+                fast_acc -= FAST_WINDOW;
+                tps = (tps + 1.0).min(INIT_TPS);
+            }
+        }
+    }
+    (tps, slow_acc, fast_acc)
 }
 
 // --- Simulation state ------------------------------------------------------
@@ -558,6 +656,17 @@ struct Sim {
     /// Natural erosion rate as a percent of normal (100 = default). The static
     /// reseed drops it to 50 to halve how fast live cells eat their alpha.
     decay_pct: u32,
+    /// Target generations per second. Starts at INIT_TPS, ratchets down by 1
+    /// per SLOW_WINDOW seconds of sustained overload (never below MIN_TPS) and
+    /// climbs back up by 1 per FAST_WINDOW seconds of headroom, so the sim
+    /// settles at whatever rate the machine can actually render.
+    target_tps: f32,
+    /// Accumulated real seconds spent overloaded (dropping generations). Each
+    /// time it crosses SLOW_WINDOW it spends one tick/sec off `target_tps`.
+    slow_acc: f32,
+    /// Accumulated real seconds spent with idle frame budget. Each time it
+    /// crosses FAST_WINDOW it wins one tick/sec back on `target_tps`.
+    fast_acc: f32,
 }
 
 static mut SIM: Sim = Sim {
@@ -578,6 +687,9 @@ static mut SIM: Sim = Sim {
     hold_y: 0.0,
     hold_mode: 0,
     decay_pct: 100,
+    target_tps: INIT_TPS,
+    slow_acc: 0.0,
+    fast_acc: 0.0,
 };
 
 impl Sim {
@@ -741,36 +853,6 @@ impl Sim {
     }
 }
 
-// --- Framebuffer helpers ----------------------------------------------------
-
-#[allow(clippy::too_many_arguments)] // geometry primitive: each arg is distinct
-fn fill_rect(
-    fb: &mut [u8],
-    w: usize,
-    h: usize,
-    x: i32,
-    y: i32,
-    rw: i32,
-    rh: i32,
-    c: [u8; 3],
-    a: u8,
-) {
-    let x0 = x.max(0) as usize;
-    let y0 = y.max(0) as usize;
-    let x1 = (x + rw).clamp(0, w as i32) as usize;
-    let y1 = (y + rh).clamp(0, h as i32) as usize;
-    for yy in y0..y1 {
-        let row = yy * w;
-        for xx in x0..x1 {
-            let i = (row + xx) * 4;
-            fb[i] = c[0];
-            fb[i + 1] = c[1];
-            fb[i + 2] = c[2];
-            fb[i + 3] = a;
-        }
-    }
-}
-
 // --- Exports -----------------------------------------------------------------
 
 #[no_mangle]
@@ -925,10 +1007,16 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
     // its colour from bright lime down to deep green before evolution begins.
     // Backlog past the per-frame cap is dropped rather than banked, so a long
     // stall resumes at real time instead of fast-forwarding the missed frames.
-    sim.step_acc = (sim.step_acc + dt).min(STEP_DT * 4.0);
+    // Adapt the generation rate to the frame budget: overloaded frames ratchet
+    // it down, idle ones very slowly win it back (see `ease_target_rate`). The
+    // rate persists across resize/reset, so a slow device stays slow.
+    (sim.target_tps, sim.slow_acc, sim.fast_acc) =
+        ease_target_rate(sim.target_tps, sim.slow_acc, sim.fast_acc, sim.step_acc, dt);
+    let step_dt = 1.0 / sim.target_tps;
+    sim.step_acc = (sim.step_acc + dt).min(step_dt * 4.0);
     let mut steps = 0;
-    while sim.step_acc >= STEP_DT && steps < 4 {
-        sim.step_acc -= STEP_DT;
+    while sim.step_acc >= step_dt && steps < 4 {
+        sim.step_acc -= step_dt;
         steps += 1;
         if sim.t < HOLD {
             for c in cells[..n_cells].iter_mut() {
@@ -961,67 +1049,71 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
 
     sim.update_metroids(dt, cells);
 
-    // Render: background, 1px grid lines, cells.
+    // Render into the framebuffer as packed little-endian RGBA words. FRAME is
+    // 4-aligned and its length is a multiple of 4, so the whole buffer is one
+    // clean u32 run: background, grid lines and cells each store a full pixel
+    // per instruction instead of four separate bytes.
     let fb = unsafe { core::slice::from_raw_parts_mut(frame_ptr(), width * height * 4) };
-    for px in fb.chunks_exact_mut(4) {
-        px[0] = BG[0];
-        px[1] = BG[1];
-        px[2] = BG[2];
-        px[3] = 0xff;
-    }
+    let (pre, fb, post) = unsafe { fb.align_to_mut::<u32>() };
+    debug_assert!(pre.is_empty() && post.is_empty());
 
-    // Grid lines fade with the ground: each segment takes the max alpha of
-    // the (up to) two tiles it separates, so the grid vanishes over fully
-    // eroded neighbourhoods. Segments overlap one pixel at intersections;
-    // whichever draws last wins, which is invisible at 1px.
+    fb.fill(u32::from_le_bytes([BG[0], BG[1], BG[2], 0xff]));
+
+    // Grid lines fade with the ground: each segment takes the max alpha of the
+    // (up to) two tiles it separates, so the grid vanishes over fully eroded
+    // neighbourhoods. Segments overlap one pixel at intersections; whichever
+    // draws last wins, invisible at 1px. Every segment sits inside the buffer
+    // (ox + gw*pitch + 1 <= width, likewise height), so these index directly.
+    let grid_px = |a: u8| u32::from_le_bytes([GRID_LINE[0], GRID_LINE[1], GRID_LINE[2], a]);
     let tile = |cx: usize, cy: usize| tile_a[cy * gw + cx];
+    let (ox, oy) = (ox as usize, oy as usize);
     for j in 0..=gh {
+        let row = (oy + j * pitch) * width + ox;
         for cx in 0..gw {
             let above = if j > 0 { tile(cx, j - 1) } else { 0 };
             let below = if j < gh { tile(cx, j) } else { 0 };
-            fill_rect(
-                fb,
-                width,
-                height,
-                ox + (cx * pitch) as i32,
-                oy + (j * pitch) as i32,
-                pitch as i32 + 1,
-                1,
-                GRID_LINE,
-                above.max(below),
-            );
+            let px = grid_px(above.max(below));
+            let base = row + cx * pitch;
+            for k in 0..=pitch {
+                fb[base + k] = px;
+            }
         }
     }
     for i in 0..=gw {
+        let col = ox + i * pitch;
         for cy in 0..gh {
             let left = if i > 0 { tile(i - 1, cy) } else { 0 };
             let right = if i < gw { tile(i, cy) } else { 0 };
-            fill_rect(
-                fb,
-                width,
-                height,
-                ox + (i * pitch) as i32,
-                oy + (cy * pitch) as i32,
-                1,
-                pitch as i32 + 1,
-                GRID_LINE,
-                left.max(right),
-            );
+            let px = grid_px(left.max(right));
+            let mut idx = (oy + cy * pitch) * width + col;
+            for _ in 0..=pitch {
+                fb[idx] = px;
+                idx += width;
+            }
         }
     }
 
-    let cell_px = (pitch - 1) as i32;
+    // Cells: skip opaque dead ground (the background already shows there);
+    // everything else fills its pitch-1 square interior, also in-bounds.
+    let cell_px = pitch - 1;
     for cy in 0..gh {
+        let y0 = (oy + cy * pitch + 1) * width + ox + 1;
         for cx in 0..gw {
-            let age = cells[cy * gw + cx];
-            let a = tile_a[cy * gw + cx];
+            let idx = cy * gw + cx;
+            let age = cells[idx];
+            let a = tile_a[idx];
             if age == 0 && a == 255 {
-                continue; // opaque background already filled
+                continue;
             }
-            let x = ox + (cx * pitch) as i32 + 1;
-            let y = oy + (cy * pitch) as i32 + 1;
             let c = if age > 0 { cell_colour(age) } else { BG };
-            fill_rect(fb, width, height, x, y, cell_px, cell_px, c, a);
+            let px = u32::from_le_bytes([c[0], c[1], c[2], a]);
+            let mut row = y0 + cx * pitch;
+            for _ in 0..cell_px {
+                for rx in 0..cell_px {
+                    fb[row + rx] = px;
+                }
+                row += width;
+            }
         }
     }
 }
@@ -1295,6 +1387,75 @@ mod tests {
         let before = tile_a.clone();
         hold_brush(&mut tile_a, gw, gh, -5, -5, true);
         assert_eq!(tile_a, before);
+    }
+
+    #[test]
+    fn target_rate_eases_down_under_overload_and_crawls_back_with_headroom() {
+        let step_dt = 1.0 / INIT_TPS;
+        // A frame that is neither overloaded nor idle holds the rate and both
+        // timers (dt == step_dt: too big for headroom, too small to overload).
+        assert_eq!(
+            ease_target_rate(INIT_TPS, 0.0, 0.0, 0.0, step_dt),
+            (INIT_TPS, 0.0, 0.0)
+        );
+        // One overloaded frame (backlog past the 4-step cap) banks its dt but
+        // can't drop the rate until a full SLOW_WINDOW has accrued.
+        let big = step_dt * 5.0;
+        let (tps, slow, _) = ease_target_rate(INIT_TPS, 0.0, 0.0, 0.0, big);
+        assert_eq!(tps, INIT_TPS, "one slow frame is not enough");
+        assert_eq!(slow, big);
+        // Feed overloaded frames until SLOW_WINDOW is crossed: exactly one
+        // tick/sec comes off, and the leftover carries into the next window.
+        let (mut tps, mut slow, mut fast) = (INIT_TPS, 0.0f32, 0.0f32);
+        let mut steps = 0;
+        while tps == INIT_TPS {
+            (tps, slow, fast) = ease_target_rate(tps, slow, fast, 0.0, 1.0);
+            steps += 1;
+        }
+        assert_eq!(tps, INIT_TPS - 1.0);
+        assert!((steps as f32) >= SLOW_WINDOW, "dropped too early");
+        assert!(slow < SLOW_WINDOW, "leftover overload should carry, not reset");
+        // It ratchets all the way to MIN_TPS and then stops — no runaway.
+        let mut tps = MIN_TPS + 1.0;
+        for _ in 0..10_000 {
+            let sd = 1.0 / tps;
+            (tps, ..) = ease_target_rate(tps, SLOW_WINDOW, 0.0, 0.0, sd * 5.0);
+        }
+        assert_eq!(tps, MIN_TPS);
+        // At the floor an overloaded frame changes nothing.
+        let sd = 1.0 / MIN_TPS;
+        assert_eq!(
+            ease_target_rate(MIN_TPS, 0.0, 0.0, 0.0, sd * 9.0),
+            (MIN_TPS, 0.0, 0.0)
+        );
+
+        // Climb-back: from a lowered rate, frames with ample headroom (dt well
+        // under half the step interval) win one tick/sec back — but only after
+        // a full FAST_WINDOW, which is far longer than the SLOW_WINDOW drop.
+        let start = INIT_TPS - 3.0;
+        let (mut tps, mut slow, mut fast) = (start, 0.0f32, 0.0f32);
+        let mut secs = 0.0f32;
+        while tps == start {
+            let sd = 1.0 / tps;
+            (tps, slow, fast) = ease_target_rate(tps, slow, fast, 0.0, sd * 0.25);
+            secs += sd * 0.25;
+        }
+        assert_eq!(tps, start + 1.0, "headroom wins back exactly one tick/sec");
+        assert!(secs >= FAST_WINDOW, "climbed back too soon");
+        assert!(FAST_WINDOW > SLOW_WINDOW, "climb must be slower than the drop");
+        // Headroom stops climbing once back at INIT_TPS — no overshoot.
+        let sd = 1.0 / INIT_TPS;
+        assert_eq!(
+            ease_target_rate(INIT_TPS, 0.0, FAST_WINDOW, 0.0, sd * 0.25),
+            (INIT_TPS, 0.0, FAST_WINDOW)
+        );
+        // An overloaded frame wipes any banked headroom, and a headroom frame
+        // wipes any banked overload, so brief blips never tip the rate.
+        let (_, _, fast) = ease_target_rate(INIT_TPS - 1.0, 0.0, 3.0, 0.0, step_dt * 5.0);
+        assert_eq!(fast, 0.0, "overload clears headroom credit");
+        let sd = 1.0 / (INIT_TPS - 1.0);
+        let (_, slow, _) = ease_target_rate(INIT_TPS - 1.0, 3.0, 0.0, 0.0, sd * 0.25);
+        assert_eq!(slow, 0.0, "headroom clears overload credit");
     }
 
     #[test]
