@@ -60,6 +60,15 @@ pub fn resolve_client_ip<B>(
         IpSource::ConnectInfo => Some(peer.ip().to_string()),
     };
 
-    ip.map(ClientIp)
-        .ok_or_else(|| ApiError::NotFound("client IP".to_string()))
+    let ip = ip.ok_or_else(|| ApiError::NotFound("client IP".to_string()))?;
+
+    // A loopback result means the forwarding chain lost the real client: nginx
+    // appends its own `$remote_addr` to `X-Forwarded-For`, so a request with no
+    // upstream header resolves to `127.0.0.1`. That's never a real client here —
+    // reject it rather than record/return a bogus address.
+    if ip == "127.0.0.1" || ip == "::1" {
+        return Err(ApiError::BadRequest("client IP resolved to loopback".to_string()));
+    }
+
+    Ok(ClientIp(ip))
 }
