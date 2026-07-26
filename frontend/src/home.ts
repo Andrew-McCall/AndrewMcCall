@@ -116,7 +116,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const projectCards = projects
     .map(
       (p) => `
-      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 transition-colors hover:border-green-600">
+      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 transition-all duration-150 ease-out hover:border-green-500 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
         <div class="flex gap-4 text-sm">
@@ -130,7 +130,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
   const postCards = posts
     .map(
       (p) => `
-      <a href="/posts/${esc(p.slug)}" class="group block border border-green-900 bg-stone-900 p-5 cursor-pointer transition-colors hover:border-green-500 hover:bg-stone-800">
+      <a href="/posts/${esc(p.slug)}" class="group block border border-green-900 bg-stone-900 p-5 cursor-pointer transition-all duration-150 ease-out hover:border-green-500 hover:bg-stone-800 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
         <div class="flex items-baseline justify-between gap-4">
           <h3 class="text-lg font-bold text-lime-300 transition-colors group-hover:text-lime-200">${esc(p.title)}</h3>
           <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
@@ -178,15 +178,17 @@ export default async (app: HTMLElement) => {
   // Large secret-menu button at the very bottom, revealed after the delay. It
   // sits above the fixed board (z-60) so it's directly clickable once reached.
   const secretBtn = document.createElement("button");
-  secretBtn.textContent = "▚ enter the secret menu ▞";
+  secretBtn.textContent = ">_ enter the secret menu →";
   secretBtn.className =
     "relative z-[60] block w-full max-w-3xl mx-auto mb-24 px-8 py-8 " +
     "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
-    "border-2 border-green-600 bg-stone-900 cursor-pointer " +
-    "transition-colors hover:bg-stone-800 hover:border-lime-300";
+    "border-2 border-green-600 bg-stone-900 cursor-pointer ease-out " +
+    "hover:bg-stone-800 hover:border-green-500 hover:text-lime-200 " +
+    "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
+    "active:translate-y-0 active:shadow-none";
   secretBtn.style.cssText +=
     "opacity:0;pointer-events:none;" +
-    "transition:opacity 1s,background-color .15s,border-color .15s";
+    "transition:opacity 1s,transform .15s,box-shadow .15s,background-color .15s,border-color .15s,color .15s";
   secretBtn.addEventListener("click", () => window.navigate("/secret"));
   app.appendChild(secretBtn);
   setTimeout(() => {

@@ -58,7 +58,9 @@ async fn route(
         (_, "/log/js") => logs::record_visit(&req, peer, &config, VisitKind::Js),
         (_, "/log/secret") => logs::record_visit(&req, peer, &config, VisitKind::Secret),
         (_, "/ip") => match resolve_client_ip(config.ip_source, &req, peer) {
-            Ok(client_ip) => ResponseBuilder::new(StatusCode::OK).text(client_ip.0).into(),
+            Ok(client_ip) => ResponseBuilder::new(StatusCode::OK)
+                .text(client_ip.0)
+                .into(),
             Err(err) => ResponseBuilder::from(err).into(),
         },
         (_, "/http") => http_dump(req, peer, &config).await,
