@@ -6,6 +6,7 @@ import secret_canvas from "./secret_canvas";
 import { initProfilePhoto } from "./profile_photo";
 import { api, esc, fmtDate } from "./helpers";
 import { renderMarkdown } from "./markdown";
+import { getMe } from "./session";
 
 type Home = {
   profile: {
@@ -173,7 +174,9 @@ export default async (app: HTMLElement) => {
   app.innerHTML = `
     <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
 
-  secret_canvas();
+  // Signed-in visitors have already seen the erosion reveal, so bring the board
+  // up cleared for them — as if the "clear" button had been pressed.
+  secret_canvas(getMe().then((me) => me !== null));
 
   // Large secret-menu button at the very bottom, revealed after the delay. It
   // sits above the fixed board (z-60) so it's directly clickable once reached.

@@ -28,11 +28,12 @@ const MAX_DETAIL_VALUE_LEN: usize = 500;
 /// via the admin API and stored in `home_details`; the key set itself is fixed
 /// here. Adding a detail is a line here plus a seed row in the migration — no
 /// schema change. Keys not listed here are ignored on write and never rendered.
-const DETAILS: [(&str, &str); 4] = [
+const DETAILS: [(&str, &str); 5] = [
     ("currently_reading", "Currently reading"),
     ("currently_building", "Currently building"),
     ("currently_learning", "Currently learning"),
     ("based_in", "Based in"),
+    ("email", "Email"),
 ];
 
 /// How many commits / posts the home aggregate carries.

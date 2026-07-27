@@ -7,7 +7,7 @@
 
 use std::net::SocketAddr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -19,6 +19,9 @@ use crate::response::{self, ApiError, Body, ResponseBuilder};
 const MAX_TITLE_LEN: usize = 200;
 const MAX_BODY_LEN: usize = 100_000;
 const MAX_SLUG_LEN: usize = 100;
+const MAX_AUTHOR_LEN: usize = 200;
+const MAX_URL_LEN: usize = 500;
+const MAX_ISBN_LEN: usize = 20;
 
 /// How much raw markdown a list excerpt carries.
 const EXCERPT_LEN: usize = 280;
@@ -65,8 +68,51 @@ fn clean_slug(raw: &str, title: &str) -> Result<String, ApiError> {
 }
 
 // ---------------------------------------------------------------------------
+// Post types.
+// ---------------------------------------------------------------------------
+
+/// The kind of a post. `Article` is a plain markdown post; `BookReview` carries
+/// an extra [`BookReviewJson`] payload from the `book_reviews` side table. A new
+/// type slots in here plus, optionally, its own side table and payload struct.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum PostType {
+    #[default]
+    Article,
+    BookReview,
+}
+
+impl PostType {
+    fn as_str(self) -> &'static str {
+        match self {
+            PostType::Article => "article",
+            PostType::BookReview => "book_review",
+        }
+    }
+
+    /// Maps a stored discriminator, falling back to `Article` for unknown values
+    /// so a stray row never breaks a read.
+    fn from_db(s: &str) -> Self {
+        match s {
+            "book_review" => PostType::BookReview,
+            _ => PostType::Article,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Serialized views.
 // ---------------------------------------------------------------------------
+
+/// The `SELECT` list for a [`PostRow`]: the generic post columns plus the
+/// optional `book_reviews` side row (every `br_*` column is `NULL` for an
+/// article, and for a review only when the side row is somehow absent).
+const POST_SELECT: &str = "p.id, p.slug, p.title, p.body, p.is_published, \
+     p.published_at, p.created_at, p.updated_at, p.post_type, \
+     br.book_title AS br_book_title, br.author AS br_author, br.rating AS br_rating, \
+     br.cover_url AS br_cover_url, br.isbn AS br_isbn, br.read_date AS br_read_date, \
+     br.link AS br_link \
+     FROM posts p LEFT JOIN book_reviews br ON br.post_id = p.id";
 
 #[derive(sqlx::FromRow)]
 struct PostRow {
@@ -78,6 +124,54 @@ struct PostRow {
     published_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    post_type: String,
+    br_book_title: Option<String>,
+    br_author: Option<String>,
+    br_rating: Option<i16>,
+    br_cover_url: Option<String>,
+    br_isbn: Option<String>,
+    br_read_date: Option<NaiveDate>,
+    br_link: Option<String>,
+}
+
+/// The base post columns returned by an `INSERT`/`UPDATE ... RETURNING`, before
+/// the type-specific payload (which the writer already holds) is attached.
+#[derive(sqlx::FromRow)]
+struct BaseRow {
+    id: Uuid,
+    slug: String,
+    title: String,
+    body: String,
+    is_published: bool,
+    published_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+/// The type-specific fields of a `book_review` post.
+#[derive(Serialize)]
+struct BookReviewJson {
+    book_title: String,
+    author: String,
+    rating: Option<i16>,
+    cover_url: Option<String>,
+    isbn: Option<String>,
+    read_date: Option<String>,
+    link: Option<String>,
+}
+
+impl BookReviewJson {
+    fn from_clean(c: CleanBookReview) -> Self {
+        Self {
+            book_title: c.book_title,
+            author: c.author,
+            rating: c.rating,
+            cover_url: c.cover_url,
+            isbn: c.isbn,
+            read_date: c.read_date.map(|d| d.to_string()),
+            link: c.link,
+        }
+    }
 }
 
 /// The full JSON wire shape of a post (admin views and the public detail page).
@@ -91,10 +185,23 @@ struct PostJson {
     published_at: Option<String>,
     created_at: String,
     updated_at: String,
+    post_type: PostType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    book_review: Option<BookReviewJson>,
 }
 
 impl From<PostRow> for PostJson {
     fn from(row: PostRow) -> Self {
+        let post_type = PostType::from_db(&row.post_type);
+        let book_review = (post_type == PostType::BookReview).then(|| BookReviewJson {
+            book_title: row.br_book_title.unwrap_or_default(),
+            author: row.br_author.unwrap_or_default(),
+            rating: row.br_rating,
+            cover_url: row.br_cover_url,
+            isbn: row.br_isbn,
+            read_date: row.br_read_date.map(|d| d.to_string()),
+            link: row.br_link,
+        });
         Self {
             id: row.id.to_string(),
             slug: row.slug,
@@ -104,17 +211,54 @@ impl From<PostRow> for PostJson {
             published_at: row.published_at.map(|t| t.to_rfc3339()),
             created_at: row.created_at.to_rfc3339(),
             updated_at: row.updated_at.to_rfc3339(),
+            post_type,
+            book_review,
         }
     }
 }
 
-/// A public list entry: no body, just a raw-markdown excerpt for the card.
+/// Assembles a [`PostJson`] from a freshly written base row plus the payload the
+/// writer already validated, sparing a re-read after a write.
+fn post_json(base: BaseRow, post_type: PostType, review: Option<CleanBookReview>) -> PostJson {
+    PostJson {
+        id: base.id.to_string(),
+        slug: base.slug,
+        title: base.title,
+        body: base.body,
+        is_published: base.is_published,
+        published_at: base.published_at.map(|t| t.to_rfc3339()),
+        created_at: base.created_at.to_rfc3339(),
+        updated_at: base.updated_at.to_rfc3339(),
+        post_type,
+        book_review: review.map(BookReviewJson::from_clean),
+    }
+}
+
+/// A public list entry: no body, just a raw-markdown excerpt for the card, plus
+/// the type and a light book-review summary so cards can style reviews.
 #[derive(Serialize)]
 pub struct PostSummary {
     slug: String,
     title: String,
     excerpt: String,
     published_at: Option<String>,
+    post_type: PostType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    book_review: Option<BookReviewJson>,
+}
+
+/// The `book_reviews` columns needed for a list card (cover, author, rating).
+#[derive(sqlx::FromRow)]
+struct SummaryRow {
+    slug: String,
+    title: String,
+    body: String,
+    published_at: Option<DateTime<Utc>>,
+    post_type: String,
+    br_book_title: Option<String>,
+    br_author: Option<String>,
+    br_rating: Option<i16>,
+    br_cover_url: Option<String>,
 }
 
 /// Truncates raw markdown to at most `EXCERPT_LEN` characters on a char
