@@ -344,10 +344,9 @@ pub async fn list_published(config: &ApiConfig) -> hyper::Response<Body> {
 /// `GET /posts/{slug}` — one published post, in full. `404` for drafts,
 /// deleted posts, and unknown slugs alike.
 pub async fn get_by_slug(config: &ApiConfig, slug: &str) -> hyper::Response<Body> {
-    let row: Option<PostRow> = match sqlx::query_as(
-        "SELECT id, slug, title, body, is_published, published_at, created_at, updated_at \
-         FROM posts WHERE slug = $1 AND is_published AND NOT is_deleted",
-    )
+    let row: Option<PostRow> = match sqlx::query_as(&format!(
+        "SELECT {POST_SELECT} WHERE p.slug = $1 AND p.is_published AND NOT p.is_deleted"
+    ))
     .bind(slug)
     .fetch_optional(&config.db.pool())
     .await
@@ -381,10 +380,94 @@ struct PostRequest {
     body: String,
     #[serde(default)]
     is_published: bool,
+    #[serde(default)]
+    post_type: PostType,
+    #[serde(default)]
+    book_review: Option<BookReviewRequest>,
 }
 
-/// Validates a post payload, returning the trimmed title and clean slug.
-fn validate_post(body: &PostRequest) -> Result<(String, String), ApiError> {
+/// The `book_review` payload on a write. Absent fields default to empty/`None`.
+#[derive(Deserialize, Default)]
+struct BookReviewRequest {
+    #[serde(default)]
+    book_title: String,
+    #[serde(default)]
+    author: String,
+    #[serde(default)]
+    rating: Option<i16>,
+    #[serde(default)]
+    cover_url: Option<String>,
+    #[serde(default)]
+    isbn: Option<String>,
+    #[serde(default)]
+    read_date: Option<String>,
+    #[serde(default)]
+    link: Option<String>,
+}
+
+/// A validated, normalized book-review payload ready to persist.
+struct CleanBookReview {
+    book_title: String,
+    author: String,
+    rating: Option<i16>,
+    cover_url: Option<String>,
+    isbn: Option<String>,
+    read_date: Option<NaiveDate>,
+    link: Option<String>,
+}
+
+/// Trims an optional string, treating blank as absent and enforcing a max
+/// length.
+fn clean_opt(v: &Option<String>, max: usize, what: &str) -> Result<Option<String>, ApiError> {
+    match v.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) if s.chars().count() > max => Err(ApiError::BadRequest(format!(
+            "{what} must be at most {max} characters"
+        ))),
+        Some(s) => Ok(Some(s.to_string())),
+        None => Ok(None),
+    }
+}
+
+/// Validates a `book_review` payload: rating in `1..=5`, an `YYYY-MM-DD`
+/// read date, and bounded string fields.
+fn validate_book_review(req: &BookReviewRequest) -> Result<CleanBookReview, ApiError> {
+    let book_title = req.book_title.trim().to_string();
+    if book_title.chars().count() > MAX_TITLE_LEN {
+        return Err(ApiError::BadRequest(format!(
+            "a book title must be at most {MAX_TITLE_LEN} characters"
+        )));
+    }
+    let author = req.author.trim().to_string();
+    if author.chars().count() > MAX_AUTHOR_LEN {
+        return Err(ApiError::BadRequest(format!(
+            "an author must be at most {MAX_AUTHOR_LEN} characters"
+        )));
+    }
+    if let Some(r) = req.rating {
+        if !(1..=5).contains(&r) {
+            return Err(ApiError::BadRequest("a rating must be between 1 and 5".into()));
+        }
+    }
+    let read_date = match req.read_date.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => Some(NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {
+            ApiError::BadRequest("a read date must be in YYYY-MM-DD form".into())
+        })?),
+        None => None,
+    };
+    Ok(CleanBookReview {
+        book_title,
+        author,
+        rating: req.rating,
+        cover_url: clean_opt(&req.cover_url, MAX_URL_LEN, "a cover URL")?,
+        isbn: clean_opt(&req.isbn, MAX_ISBN_LEN, "an ISBN")?,
+        read_date,
+        link: clean_opt(&req.link, MAX_URL_LEN, "a link")?,
+    })
+}
+
+/// Validates a post payload, returning the trimmed title, clean slug, and — for
+/// a `book_review` — its validated payload (required for that type).
+fn validate_post(body: &PostRequest) -> Result<(String, String, Option<CleanBookReview>), ApiError> {
     let title = body.title.trim().to_string();
     if title.chars().count() > MAX_TITLE_LEN {
         return Err(ApiError::BadRequest(format!(
@@ -397,11 +480,62 @@ fn validate_post(body: &PostRequest) -> Result<(String, String), ApiError> {
         )));
     }
     let slug = clean_slug(&body.slug, &title)?;
-    Ok((title, slug))
+    let review = match body.post_type {
+        PostType::Article => None,
+        PostType::BookReview => {
+            let req = body.book_review.as_ref().ok_or_else(|| {
+                ApiError::BadRequest("a book_review payload is required for a book_review post".into())
+            })?;
+            Some(validate_book_review(req)?)
+        }
+    };
+    Ok((title, slug, review))
 }
 
 const POST_BODY_HINT: &str =
-    r#"expected a JSON body like {"slug": "my-post", "title": "…", "body": "…", "is_published": false}"#;
+    r#"expected a JSON body like {"slug": "my-post", "title": "…", "body": "…", "is_published": false, "post_type": "article"}"#;
+
+/// Persists a post's `book_review` side row within a write transaction: upserts
+/// it for a review, clears any stale row for an article. The base post row is
+/// stamped with `stamp` as its `updated_at`.
+async fn write_book_review(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    post_id: Uuid,
+    review: &Option<CleanBookReview>,
+    stamp: DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    match review {
+        Some(r) => {
+            sqlx::query(
+                "INSERT INTO book_reviews \
+                 (post_id, book_title, author, rating, cover_url, isbn, read_date, link, created_at, updated_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) \
+                 ON CONFLICT (post_id) DO UPDATE SET \
+                 book_title = EXCLUDED.book_title, author = EXCLUDED.author, rating = EXCLUDED.rating, \
+                 cover_url = EXCLUDED.cover_url, isbn = EXCLUDED.isbn, read_date = EXCLUDED.read_date, \
+                 link = EXCLUDED.link, updated_at = EXCLUDED.updated_at",
+            )
+            .bind(post_id)
+            .bind(&r.book_title)
+            .bind(&r.author)
+            .bind(r.rating)
+            .bind(&r.cover_url)
+            .bind(&r.isbn)
+            .bind(r.read_date)
+            .bind(&r.link)
+            .bind(stamp)
+            .execute(&mut **tx)
+            .await?;
+        }
+        None => {
+            sqlx::query("DELETE FROM book_reviews WHERE post_id = $1")
+                .bind(post_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
 
 /// `GET /admin/posts` — every live post including drafts, newest-updated first.
 pub async fn admin_list(
@@ -413,10 +547,9 @@ pub async fn admin_list(
         return ResponseBuilder::from(err).into();
     }
 
-    let rows: Vec<PostRow> = match sqlx::query_as(
-        "SELECT id, slug, title, body, is_published, published_at, created_at, updated_at \
-         FROM posts WHERE NOT is_deleted ORDER BY updated_at DESC",
-    )
+    let rows: Vec<PostRow> = match sqlx::query_as(&format!(
+        "SELECT {POST_SELECT} WHERE NOT p.is_deleted ORDER BY p.updated_at DESC"
+    ))
     .fetch_all(&config.db.pool())
     .await
     {
@@ -446,7 +579,7 @@ pub async fn create(
         Ok(body) => body,
         Err(err) => return ResponseBuilder::from(err).into(),
     };
-    let (title, slug) = match validate_post(&body) {
+    let (title, slug, review) = match validate_post(&body) {
         Ok(parts) => parts,
         Err(err) => return ResponseBuilder::from(err).into(),
     };
@@ -455,32 +588,34 @@ pub async fn create(
     let now = Utc::now();
     let published_at = body.is_published.then_some(now);
 
-    let result = sqlx::query(
-        "INSERT INTO posts (id, slug, title, body, is_published, published_at, created_at, updated_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $7)",
-    )
-    .bind(id)
-    .bind(&slug)
-    .bind(&title)
-    .bind(&body.body)
-    .bind(body.is_published)
-    .bind(published_at)
-    .bind(now)
-    .execute(&config.db.pool())
+    // The post row and its side row must land together, so both go in one tx.
+    let result = async {
+        let mut tx = config.db.pool().begin().await?;
+        let base: BaseRow = sqlx::query_as(
+            "INSERT INTO posts \
+             (id, slug, title, body, is_published, published_at, post_type, created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) \
+             RETURNING id, slug, title, body, is_published, published_at, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(&slug)
+        .bind(&title)
+        .bind(&body.body)
+        .bind(body.is_published)
+        .bind(published_at)
+        .bind(body.post_type.as_str())
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        write_book_review(&mut tx, id, &review, now).await?;
+        tx.commit().await?;
+        Ok::<_, sqlx::Error>(base)
+    }
     .await;
 
     match result {
-        Ok(_) => {
-            let post = PostJson {
-                id: id.to_string(),
-                slug,
-                title,
-                body: body.body,
-                is_published: body.is_published,
-                published_at: published_at.map(|t| t.to_rfc3339()),
-                created_at: now.to_rfc3339(),
-                updated_at: now.to_rfc3339(),
-            };
+        Ok(base) => {
+            let post = post_json(base, body.post_type, review);
             ResponseBuilder::new(StatusCode::CREATED).json(&post).into()
         }
         // 23505 is unique_violation against the live-slug index.
@@ -517,31 +652,43 @@ pub async fn update(
         Ok(body) => body,
         Err(err) => return ResponseBuilder::from(err).into(),
     };
-    let (title, slug) = match validate_post(&body) {
+    let (title, slug, review) = match validate_post(&body) {
         Ok(parts) => parts,
         Err(err) => return ResponseBuilder::from(err).into(),
     };
 
     let now = Utc::now();
-    let row: Result<Option<PostRow>, sqlx::Error> = sqlx::query_as(
-        "UPDATE posts SET slug = $1, title = $2, body = $3, is_published = $4, \
-         published_at = CASE WHEN $4 AND published_at IS NULL THEN $5 ELSE published_at END, \
-         updated_at = $5 \
-         WHERE id = $6 AND NOT is_deleted \
-         RETURNING id, slug, title, body, is_published, published_at, created_at, updated_at",
-    )
-    .bind(&slug)
-    .bind(&title)
-    .bind(&body.body)
-    .bind(body.is_published)
-    .bind(now)
-    .bind(post_id)
-    .fetch_optional(&config.db.pool())
+    // Update the post and rewrite its side row atomically. A missed `WHERE`
+    // (unknown/deleted id) yields `None` and the tx is dropped without writing.
+    let row: Result<Option<BaseRow>, sqlx::Error> = async {
+        let mut tx = config.db.pool().begin().await?;
+        let base: Option<BaseRow> = sqlx::query_as(
+            "UPDATE posts SET slug = $1, title = $2, body = $3, is_published = $4, post_type = $5, \
+             published_at = CASE WHEN $4 AND published_at IS NULL THEN $6 ELSE published_at END, \
+             updated_at = $6 \
+             WHERE id = $7 AND NOT is_deleted \
+             RETURNING id, slug, title, body, is_published, published_at, created_at, updated_at",
+        )
+        .bind(&slug)
+        .bind(&title)
+        .bind(&body.body)
+        .bind(body.is_published)
+        .bind(body.post_type.as_str())
+        .bind(now)
+        .bind(post_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if base.is_some() {
+            write_book_review(&mut tx, post_id, &review, now).await?;
+            tx.commit().await?;
+        }
+        Ok::<_, sqlx::Error>(base)
+    }
     .await;
 
     match row {
-        Ok(Some(row)) => ResponseBuilder::new(StatusCode::OK)
-            .json(&PostJson::from(row))
+        Ok(Some(base)) => ResponseBuilder::new(StatusCode::OK)
+            .json(&post_json(base, body.post_type, review))
             .into(),
         Ok(None) => ResponseBuilder::from(ApiError::NotFound(format!("/admin/posts/{id}"))).into(),
         Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("23505") => {
@@ -628,8 +775,48 @@ mod tests {
             title: "t".repeat(MAX_TITLE_LEN + 1),
             body: String::new(),
             is_published: false,
+            post_type: PostType::Article,
+            book_review: None,
         };
         assert!(validate_post(&req).is_err());
+    }
+
+    #[test]
+    fn book_review_type_requires_payload() {
+        let req = PostRequest {
+            slug: String::new(),
+            title: "The Book".into(),
+            body: String::new(),
+            is_published: false,
+            post_type: PostType::BookReview,
+            book_review: None,
+        };
+        assert!(validate_post(&req).is_err());
+    }
+
+    #[test]
+    fn validate_book_review_bounds_rating_and_date() {
+        let ok = BookReviewRequest {
+            author: "Ursula K. Le Guin".into(),
+            rating: Some(5),
+            read_date: Some("2026-01-15".into()),
+            ..Default::default()
+        };
+        let clean = validate_book_review(&ok).unwrap();
+        assert_eq!(clean.rating, Some(5));
+        assert_eq!(clean.read_date.unwrap().to_string(), "2026-01-15");
+
+        let bad_rating = BookReviewRequest {
+            rating: Some(6),
+            ..Default::default()
+        };
+        assert!(validate_book_review(&bad_rating).is_err());
+
+        let bad_date = BookReviewRequest {
+            read_date: Some("15/01/2026".into()),
+            ..Default::default()
+        };
+        assert!(validate_book_review(&bad_date).is_err());
     }
 
     #[test]

@@ -121,7 +121,23 @@ export default async (app: HTMLElement) => {
     tagFilter.value = current;
   };
 
-  const loadNotes = async () => {
+  // Placeholder rows shown while the note list is fetching, so the pane has
+  // shape instead of a blank flash. Only used on the initial load — refreshes
+  // after a save/delete keep the existing list visible.
+  const renderSkeleton = () => {
+    listEl.innerHTML = Array.from({ length: 5 })
+      .map(
+        () => `
+        <div class="px-3 py-2 border border-green-900/40 animate-pulse">
+          <div class="h-3.5 bg-green-900/40 rounded w-3/4"></div>
+          <div class="h-2.5 bg-green-900/25 rounded w-2/5 mt-2"></div>
+        </div>`,
+      )
+      .join("");
+  };
+
+  const loadNotes = async (skeleton = false) => {
+    if (skeleton) renderSkeleton();
     try {
       const res = await api("/notes");
       if (!res.ok) {
@@ -260,6 +276,21 @@ export default async (app: HTMLElement) => {
     renderChips();
   };
 
+  // Shows a "✓ saved" confirmation on the current editor's status line and
+  // fades it out after a couple of seconds. Queried fresh each time because
+  // the status span is recreated whenever the editor re-renders.
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  const flashSaved = () => {
+    const status = editorEl.querySelector<HTMLSpanElement>("#ed-status");
+    if (!status) return;
+    clearTimeout(savedTimer);
+    status.textContent = "✓ saved";
+    status.className = "text-green-400 text-sm transition-opacity duration-500";
+    savedTimer = setTimeout(() => {
+      status.classList.add("opacity-0");
+    }, 1800);
+  };
+
   const saveNote = async (status: HTMLElement, saveBtn: HTMLButtonElement) => {
     // Without this, double-clicking Save on a brand-new note fires two POSTs
     // before the first resolves and sets `selectedId` — creating two notes.
@@ -281,9 +312,10 @@ export default async (app: HTMLElement) => {
       }
       const saved: Note = await res.json();
       selectedId = saved.id;
-      status.textContent = "saved";
       await Promise.all([loadNotes(), loadTags()]);
       openNote(saved.id); // re-renders the editor, replacing this saveBtn
+      // `status` above was wiped by the re-render, so confirm on the fresh one.
+      flashSaved();
     } catch {
       status.textContent = "Network error.";
     } finally {
@@ -320,5 +352,5 @@ export default async (app: HTMLElement) => {
     window.navigate("/secret/login");
   };
 
-  await Promise.all([loadTags(), loadNotes()]);
+  await Promise.all([loadTags(), loadNotes(true)]);
 };
