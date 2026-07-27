@@ -281,10 +281,13 @@ pub async fn published_summaries(
     pool: &sqlx::PgPool,
     limit: i64,
 ) -> Result<Vec<PostSummary>, sqlx::Error> {
-    let rows: Vec<(String, String, String, Option<DateTime<Utc>>)> = sqlx::query_as(
-        "SELECT slug, title, body, published_at \
-         FROM posts WHERE is_published AND NOT is_deleted \
-         ORDER BY published_at DESC LIMIT $1",
+    let rows: Vec<SummaryRow> = sqlx::query_as(
+        "SELECT p.slug, p.title, p.body, p.published_at, p.post_type, \
+         br.book_title AS br_book_title, br.author AS br_author, \
+         br.rating AS br_rating, br.cover_url AS br_cover_url \
+         FROM posts p LEFT JOIN book_reviews br ON br.post_id = p.id \
+         WHERE p.is_published AND NOT p.is_deleted \
+         ORDER BY p.published_at DESC LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)
@@ -292,11 +295,25 @@ pub async fn published_summaries(
 
     Ok(rows
         .into_iter()
-        .map(|(slug, title, body, published_at)| PostSummary {
-            slug,
-            title,
-            excerpt: excerpt(&body),
-            published_at: published_at.map(|t| t.to_rfc3339()),
+        .map(|row| {
+            let post_type = PostType::from_db(&row.post_type);
+            let book_review = (post_type == PostType::BookReview).then(|| BookReviewJson {
+                book_title: row.br_book_title.unwrap_or_default(),
+                author: row.br_author.unwrap_or_default(),
+                rating: row.br_rating,
+                cover_url: row.br_cover_url,
+                isbn: None,
+                read_date: None,
+                link: None,
+            });
+            PostSummary {
+                slug: row.slug,
+                title: row.title,
+                excerpt: excerpt(&row.body),
+                published_at: row.published_at.map(|t| t.to_rfc3339()),
+                post_type,
+                book_review,
+            }
         })
         .collect())
 }

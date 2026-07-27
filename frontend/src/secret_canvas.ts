@@ -72,7 +72,11 @@ export function hideGame(): void {
   teardown = null;
 }
 
-export default () => {
+// `clearOnStart` resolves to true when the board should come up already
+// cleared (as if the "clear" button had been pressed) rather than covering the
+// page — used for signed-in visitors, who've seen the reveal and just want the
+// content.
+export default (clearOnStart?: Promise<boolean>) => {
   if (teardown) return;
 
   const overlay = document.createElement("div");
@@ -117,12 +121,42 @@ export default () => {
   const clearBtn = mkBtn("○ clear");
   const resetBtn = mkBtn("↺ reset");
   const staticBtn = mkBtn("▓ static");
-  controls.append(clearBtn, resetBtn, staticBtn);
+  const powerBtn = mkBtn("✕ disable");
+  controls.append(clearBtn, resetBtn, staticBtn, powerBtn);
   document.body.appendChild(controls);
 
-  clearBtn.addEventListener("click", () => game?.clear?.());
-  resetBtn.addEventListener("click", () => game?.reset?.());
-  staticBtn.addEventListener("click", () => game?.static_fill?.());
+  // Buttons that only make sense while the board is live; disabling greys them
+  // out and stops them acting until the simulation is re-enabled.
+  const liveBtns = [clearBtn, resetBtn, staticBtn];
+
+  clearBtn.addEventListener("click", () => !disabled && game?.clear?.());
+  resetBtn.addEventListener("click", () => !disabled && game?.reset?.());
+  staticBtn.addEventListener("click", () => !disabled && game?.static_fill?.());
+
+  // "disable" fully hides the board (overlay, blur, scrollbar) and pauses the
+  // sim, leaving the page beneath fully interactive; the button flips to
+  // "enable" and the other controls grey out. "enable" brings it all back.
+  let disabled = false;
+  powerBtn.addEventListener("click", () => {
+    disabled = !disabled;
+    powerBtn.textContent = disabled ? "▶ enable" : "✕ disable";
+    for (const b of liveBtns) {
+      b.disabled = disabled;
+      b.style.opacity = disabled ? "0.4" : "1";
+      b.style.cursor = disabled ? "not-allowed" : "pointer";
+    }
+    if (disabled) {
+      running = false;
+      cancelAnimationFrame(raf);
+      overlay.style.display = "none";
+      scrollbar.style.display = "none";
+    } else {
+      overlay.style.display = "";
+      running = true;
+      updateScrollbar();
+      startLoop?.();
+    }
+  });
 
   // First-visit hint: the front page lives *beneath* this board, so a newcomer
   // needs telling how to reveal it. It sits under the canvas (lower z-index), so
@@ -449,6 +483,8 @@ export default () => {
   let raf = 0;
   let w = 0;
   let h = 0;
+  // Restarts the render loop; set once the wasm is loaded, used by "enable".
+  let startLoop: (() => void) | null = null;
 
   const resize = () => {
     const cw = Math.max(canvas.clientWidth, 1);
@@ -498,11 +534,22 @@ export default () => {
 
   loadWasm()
     .then((wasm) => {
-      if (!running) return;
       game = wasm;
       wasm.seed?.(Date.now() >>> 0);
       wasm.reset();
       framePtr = wasm.frame_ptr();
+      // Signed-in visitors start on a cleared board — the reveal is for
+      // newcomers, so wipe the cover (and the "drag to erode" hint with it) as
+      // soon as the session resolves. Non-blocking so signed-out visitors get
+      // the covered board immediately, without waiting on `/auth/me`.
+      clearOnStart
+        ?.then((clear) => {
+          if (clear && game) {
+            game.clear();
+            dismissHint();
+          }
+        })
+        .catch(() => {});
       let last = performance.now();
       let revealed = false;
 
@@ -531,7 +578,12 @@ export default () => {
         }
         raf = requestAnimationFrame(loop);
       };
-      raf = requestAnimationFrame(loop);
+      startLoop = () => {
+        last = performance.now();
+        raf = requestAnimationFrame(loop);
+      };
+      // Skip the initial start if the user disabled the board mid-load.
+      if (running) startLoop();
     })
     .catch((err) => console.error("wasm game failed to load:", err));
 };
