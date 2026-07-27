@@ -107,7 +107,10 @@ const routes: Record<string, Route> = {
     auth: "public",
     render: lazy(() => import("./secret_python.ts")),
   },
-  "/secret/notes": { auth: "user", render: lazy(() => import("./secret_notes.ts")) },
+  "/secret/notes": {
+    auth: "user",
+    render: disposable("notes", () => import("./secret_notes.ts")),
+  },
   "/secret/admin": {
     auth: "admin",
     render: (app, me) =>
@@ -170,6 +173,9 @@ async function renderPage(): Promise<void> {
   }
   if (page !== "/secret/time") {
     loaded.get("time")?.disposeTime(); // stop the relative-time tab's 1s ticker
+  }
+  if (page !== "/secret/notes") {
+    loaded.get("notes")?.disposeNotes(); // detach the online/offline listeners
   }
 
   app.innerHTML = "";

@@ -3,11 +3,25 @@
 import { api, esc, fmtDate, readingTime, setMeta } from "./helpers";
 import { renderMarkdown } from "./markdown";
 
+type PostType = "article" | "book_review";
+
+type BookReview = {
+  book_title: string;
+  author: string;
+  rating: number | null;
+  cover_url: string | null;
+  isbn: string | null;
+  read_date: string | null;
+  link: string | null;
+};
+
 type PostSummary = {
   slug: string;
   title: string;
   excerpt: string;
   published_at: string | null;
+  post_type: PostType;
+  book_review?: BookReview;
 };
 
 type Post = {
@@ -15,6 +29,15 @@ type Post = {
   title: string;
   body: string;
   published_at: string | null;
+  post_type: PostType;
+  book_review?: BookReview;
+};
+
+// A ★★★☆☆ rating out of 5, or empty for an unrated review.
+const stars = (rating: number | null): string => {
+  if (!rating) return "";
+  const n = Math.max(0, Math.min(5, rating));
+  return `<span class="text-yellow-500" aria-label="${n} out of 5">${"★".repeat(n)}<span class="text-green-900">${"★".repeat(5 - n)}</span></span>`;
 };
 
 const PAGE_SIZE = 8; // list entries shown before "load more"
@@ -52,14 +75,32 @@ const errorBlock = (msg: string) => `
     </button>
   </div>`;
 
-const card = (p: PostSummary) => `
-  <a href="/posts/${esc(p.slug)}" class="block border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
-    <div class="flex items-baseline justify-between gap-4">
-      <h2 class="text-lg font-bold text-lime-300">${esc(p.title)}</h2>
-      <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
+const card = (p: PostSummary) => {
+  const br = p.post_type === "book_review" ? p.book_review : undefined;
+  const cover =
+    br?.cover_url
+      ? `<img src="${esc(br.cover_url)}" alt="" loading="lazy"
+             class="shrink-0 w-16 h-24 object-cover border border-green-900 bg-stone-950" />`
+      : "";
+  const meta = br
+    ? `<div class="flex items-center gap-2 text-xs text-green-700 mt-1">
+         ${br.author ? `<span>${esc(br.author)}</span>` : ""}
+         ${br.rating ? stars(br.rating) : ""}
+       </div>`
+    : "";
+  return `
+  <a href="/posts/${esc(p.slug)}" class="flex gap-4 border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
+    ${cover}
+    <div class="min-w-0 flex-1">
+      <div class="flex items-baseline justify-between gap-4">
+        <h2 class="text-lg font-bold text-lime-300">${esc(p.title)}</h2>
+        <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
+      </div>
+      ${meta}
+      <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
     </div>
-    <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
   </a>`;
+};
 
 export const postsList = async (app: HTMLElement) => {
   setMeta("Posts — Andrew McCall", "Writing by Andrew McCall.");
@@ -88,10 +129,22 @@ export const postsList = async (app: HTMLElement) => {
   await load();
 };
 
-// Renders the search box, the paged results, and a "load more" button, wiring
-// filtering and paging over the in-memory `posts` array.
+// The type filters offered above the list. `all` disables type filtering.
+const TYPE_FILTERS: { value: PostType | "all"; label: string }[] = [
+  { value: "all", label: "all" },
+  { value: "article", label: "articles" },
+  { value: "book_review", label: "reviews" },
+];
+
+// Renders the type tabs, search box, paged results, and a "load more" button,
+// wiring filtering and paging over the in-memory `posts` array.
 const renderList = (container: HTMLElement, posts: PostSummary[]) => {
+  const tabBtn = (f: (typeof TYPE_FILTERS)[number]) =>
+    `<button class="tab border border-green-900 hover:border-green-600 px-3 py-1 text-sm text-green-500 data-[active=true]:bg-green-900/40 data-[active=true]:text-green-300"
+       data-type="${f.value}">${f.label}</button>`;
+
   container.innerHTML = `
+    <div class="tabs flex gap-2 flex-wrap">${TYPE_FILTERS.map(tabBtn).join("")}</div>
     <input type="search" placeholder="search posts…" aria-label="Search posts"
       class="search bg-stone-900 border border-green-900 focus:border-green-600 outline-none
              text-green-300 placeholder-green-800 px-3 py-2 w-full font-mono text-sm" />
@@ -103,30 +156,49 @@ const renderList = (container: HTMLElement, posts: PostSummary[]) => {
   const search = container.querySelector<HTMLInputElement>(".search")!;
   const results = container.querySelector<HTMLElement>(".results")!;
   const more = container.querySelector<HTMLButtonElement>(".more")!;
+  const tabs = container.querySelectorAll<HTMLButtonElement>(".tab");
 
+  // A `#reviews` / `#articles` hash (e.g. from the home page) preselects a tab.
+  const fromHash: Record<string, PostType> = {
+    "#reviews": "book_review",
+    "#articles": "article",
+  };
+  let activeType: PostType | "all" = fromHash[window.location.hash] ?? "all";
   let filtered = posts;
   let shown = 0;
 
   const paint = () => {
     results.innerHTML =
       filtered.length === 0
-        ? `<p class="text-green-700">No posts match “${esc(search.value)}”.</p>`
+        ? `<p class="text-green-700">No posts match.</p>`
         : filtered.slice(0, shown).map(card).join("");
     more.classList.toggle("hidden", shown >= filtered.length);
   };
 
   const apply = () => {
     const q = search.value.trim().toLowerCase();
-    filtered = q
-      ? posts.filter(
-          (p) =>
-            p.title.toLowerCase().includes(q) ||
-            p.excerpt.toLowerCase().includes(q),
-        )
-      : posts;
+    filtered = posts.filter((p) => {
+      if (activeType !== "all" && p.post_type !== activeType) return false;
+      if (!q) return true;
+      return (
+        p.title.toLowerCase().includes(q) ||
+        p.excerpt.toLowerCase().includes(q) ||
+        (p.book_review?.author.toLowerCase().includes(q) ?? false)
+      );
+    });
     shown = Math.min(PAGE_SIZE, filtered.length);
     paint();
   };
+
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      activeType = (tab.dataset.type as PostType | "all") ?? "all";
+      for (const t of tabs)
+        t.dataset.active = String(t.dataset.type === activeType);
+      apply();
+    });
+  }
+  for (const t of tabs) t.dataset.active = String(t.dataset.type === activeType);
 
   more.addEventListener("click", () => {
     shown = Math.min(shown + PAGE_SIZE, filtered.length);
@@ -180,6 +252,25 @@ const renderPost = (
   const plain = post.body.slice(0, 160).replace(/[#*`>\n]/g, " ").trim();
   setMeta(`${post.title} — Andrew McCall`, plain || post.title);
 
+  const br = post.post_type === "book_review" ? post.book_review : undefined;
+  const reviewHeader = br
+    ? `<div class="flex gap-5 border border-green-900 bg-stone-900/60 p-4">
+         ${
+           br.cover_url
+             ? `<img src="${esc(br.cover_url)}" alt="" class="shrink-0 w-24 h-36 object-cover border border-green-900 bg-stone-950" />`
+             : ""
+         }
+         <dl class="min-w-0 flex-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm self-center">
+           ${br.book_title ? `<dt class="text-green-700">Book</dt><dd class="text-lime-300 truncate">${esc(br.book_title)}</dd>` : ""}
+           ${br.author ? `<dt class="text-green-700">Author</dt><dd class="text-stone-300 truncate">${esc(br.author)}</dd>` : ""}
+           ${br.rating ? `<dt class="text-green-700">Rating</dt><dd>${stars(br.rating)}</dd>` : ""}
+           ${br.read_date ? `<dt class="text-green-700">Read</dt><dd class="text-stone-300">${fmtDate(br.read_date)}</dd>` : ""}
+           ${br.isbn ? `<dt class="text-green-700">ISBN</dt><dd class="text-stone-300">${esc(br.isbn)}</dd>` : ""}
+           ${br.link ? `<dt class="text-green-700">Link</dt><dd class="truncate"><a href="${esc(br.link)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline">${esc(br.link.replace(/^https?:\/\//, ""))}</a></dd>` : ""}
+         </dl>
+       </div>`
+    : "";
+
   const idx = list.findIndex((p) => p.slug === post.slug);
   const newer = idx > 0 ? list[idx - 1] : null; // list is newest-first
   const older = idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
@@ -203,6 +294,7 @@ const renderPost = (
           copy link
         </button>
       </div>
+      ${reviewHeader}
       ${renderMarkdown(post.body)}
     </article>
     <nav class="flex gap-3 mt-8">

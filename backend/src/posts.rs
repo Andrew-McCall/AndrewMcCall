@@ -76,7 +76,7 @@ fn clean_slug(raw: &str, title: &str) -> Result<String, ApiError> {
 /// type slots in here plus, optionally, its own side table and payload struct.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-enum PostType {
+pub enum PostType {
     #[default]
     Article,
     BookReview,
@@ -276,20 +276,43 @@ fn excerpt(body: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Loads published post summaries, newest first. Shared with the `/home`
-/// aggregate (`limit` caps the home slice).
+/// aggregate (`limit` caps the home slice). `only_type`, when set, restricts to
+/// one [`PostType`] discriminator — the home page loads articles and reviews
+/// separately.
 pub async fn published_summaries(
     pool: &sqlx::PgPool,
     limit: i64,
 ) -> Result<Vec<PostSummary>, sqlx::Error> {
+    published_summaries_filtered(pool, None, limit).await
+}
+
+/// Like [`published_summaries`] but restricted to a single post type.
+pub async fn published_summaries_of_type(
+    pool: &sqlx::PgPool,
+    post_type: PostType,
+    limit: i64,
+) -> Result<Vec<PostSummary>, sqlx::Error> {
+    published_summaries_filtered(pool, Some(post_type), limit).await
+}
+
+async fn published_summaries_filtered(
+    pool: &sqlx::PgPool,
+    only_type: Option<PostType>,
+    limit: i64,
+) -> Result<Vec<PostSummary>, sqlx::Error> {
+    // `$2 IS NULL OR p.post_type = $2` keeps a single query for both the
+    // all-types and single-type cases.
     let rows: Vec<SummaryRow> = sqlx::query_as(
         "SELECT p.slug, p.title, p.body, p.published_at, p.post_type, \
          br.book_title AS br_book_title, br.author AS br_author, \
          br.rating AS br_rating, br.cover_url AS br_cover_url \
          FROM posts p LEFT JOIN book_reviews br ON br.post_id = p.id \
          WHERE p.is_published AND NOT p.is_deleted \
+         AND ($2::text IS NULL OR p.post_type = $2) \
          ORDER BY p.published_at DESC LIMIT $1",
     )
     .bind(limit)
+    .bind(only_type.map(PostType::as_str))
     .fetch_all(pool)
     .await?;
 

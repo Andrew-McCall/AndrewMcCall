@@ -8,6 +8,19 @@ import { api, esc, fmtDate } from "./helpers";
 import { renderMarkdown } from "./markdown";
 import { getMe } from "./session";
 
+type PostSummary = {
+  slug: string;
+  title: string;
+  excerpt: string;
+  published_at: string | null;
+  post_type: "article" | "book_review";
+  book_review?: {
+    author: string;
+    rating: number | null;
+    cover_url: string | null;
+  };
+};
+
 type Home = {
   profile: {
     intro_markdown: string;
@@ -27,12 +40,8 @@ type Home = {
     url: string;
     committed_at: string;
   }[];
-  posts: {
-    slug: string;
-    title: string;
-    excerpt: string;
-    published_at: string | null;
-  }[];
+  posts: PostSummary[];
+  book_reviews: PostSummary[];
   details: {
     key: string;
     label: string;
@@ -48,7 +57,7 @@ const section = (title: string, inner: string) => `
   </section>`;
 
 const renderHome = (root: HTMLElement, home: Home) => {
-  const { profile, projects, commits, posts, details } = home;
+  const { profile, projects, commits, posts, book_reviews, details } = home;
 
   // The "Now" box: a fixed key/value table of what I'm currently up to.
   const detailRows = details
@@ -73,7 +82,7 @@ const renderHome = (root: HTMLElement, home: Home) => {
     <div class="flex flex-col sm:flex-row gap-6 items-start">
       ${
         profile.profile_image_url
-          ? `<div class="shrink-0 border-2 border-green-600 w-44 h-44 rounded-full overflow-hidden">
+          ? `<div class="shrink-0 w-full aspect-square sm:w-44 sm:h-44 sm:aspect-auto border-2 border-green-600 rounded-full overflow-hidden">
                <canvas class="profile-photo w-full h-full" aria-label="Andrew McCall"
                  data-src="${esc(profile.profile_image_url)}"></canvas>
              </div>`
@@ -128,32 +137,60 @@ const renderHome = (root: HTMLElement, home: Home) => {
     )
     .join("");
 
-  const postCards = posts
-    .map(
-      (p) => `
-      <a href="/posts/${esc(p.slug)}" class="group block border border-green-900 bg-stone-900 p-5 cursor-pointer transition-all duration-150 ease-out hover:border-green-500 hover:bg-stone-800 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
-        <div class="flex items-baseline justify-between gap-4">
-          <h3 class="text-lg font-bold text-lime-300 transition-colors group-hover:text-lime-200">${esc(p.title)}</h3>
-          <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
+  // A ★★★☆☆ rating out of 5, blank when unrated.
+  const stars = (rating: number | null) => {
+    if (!rating) return "";
+    const n = Math.max(0, Math.min(5, rating));
+    return `<span class="text-yellow-500">${"★".repeat(n)}<span class="text-green-900">${"★".repeat(5 - n)}</span></span>`;
+  };
+
+  const postCard = (p: PostSummary) => {
+    const br = p.post_type === "book_review" ? p.book_review : undefined;
+    const cover = br?.cover_url
+      ? `<img src="${esc(br.cover_url)}" alt="" loading="lazy"
+             class="shrink-0 w-14 h-20 object-cover border border-green-900 bg-stone-950" />`
+      : "";
+    const meta = br
+      ? `<div class="flex items-center gap-2 text-xs text-green-700 mt-1">
+           ${br.author ? `<span>${esc(br.author)}</span>` : ""}${stars(br.rating)}
+         </div>`
+      : "";
+    return `
+      <a href="/posts/${esc(p.slug)}" class="group flex gap-4 border border-green-900 bg-stone-900 p-5 cursor-pointer transition-all duration-150 ease-out hover:border-green-500 hover:bg-stone-800 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
+        ${cover}
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline justify-between gap-4">
+            <h3 class="text-lg font-bold text-lime-300 transition-colors group-hover:text-lime-200">${esc(p.title)}</h3>
+            <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
+          </div>
+          ${meta}
+          <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
         </div>
-        <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
-      </a>`,
-    )
-    .join("");
+      </a>`;
+  };
+
+  // A "Posts"/"Book Reviews" block: its cards plus a link through to the full,
+  // filterable /posts page.
+  const postSection = (
+    title: string,
+    list: PostSummary[],
+    more: string,
+    href: string,
+  ) =>
+    list.length > 0
+      ? section(
+          title,
+          `<div class="flex flex-col gap-4">${list.map(postCard).join("")}</div>
+           <a href="${href}" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm cursor-pointer">${more} →</a>`,
+        )
+      : "";
 
   root.innerHTML = `
     ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
     ${details.length > 0 ? section("Now", now) : ""}
     ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
-    ${
-      posts.length > 0
-        ? section(
-            "Posts",
-            `<div class="flex flex-col gap-4">${postCards}</div>
-             <a href="/posts" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm cursor-pointer">all posts →</a>`,
-          )
-        : ""
-    }
+    ${postSection("Posts", posts, "all posts", "/posts")}
+    ${postSection("Book Reviews", book_reviews, "all reviews", "/posts#reviews")}
     ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}`;
 
   for (const row of root.querySelectorAll<HTMLTableRowElement>(

@@ -169,7 +169,10 @@ export default (clearOnStart?: Promise<boolean>) => {
     hint.style.cssText =
       "position:fixed;left:50%;bottom:56px;transform:translateX(-50%);z-index:40;" +
       "font:12px ui-monospace,monospace;letter-spacing:.08em;color:#4ade80;" +
-      "white-space:nowrap;pointer-events:none;opacity:0.85;transition:opacity .5s ease";
+      // Constrain to the viewport and wrap: at full width the single line
+      // overflows a phone screen and clips off both edges.
+      "max-width:calc(100vw - 32px);text-align:center;" +
+      "pointer-events:none;opacity:0.85;transition:opacity .5s ease";
     document.body.appendChild(hint);
   }
   const dismissHint = () => {

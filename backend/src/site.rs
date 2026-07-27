@@ -38,7 +38,7 @@ const DETAILS: [(&str, &str); 5] = [
 
 /// How many commits / posts the home aggregate carries.
 const HOME_COMMITS: i64 = 10;
-const HOME_POSTS: i64 = 3;
+const HOME_POSTS: i64 = 4;
 
 /// The `site_settings` keys the profile editor may read and write. Internal
 /// keys (like the GitHub sync etag) are deliberately not listed.
@@ -174,6 +174,7 @@ struct HomeJson {
     projects: Vec<ProjectJson>,
     commits: Vec<CommitJson>,
     posts: Vec<posts::PostSummary>,
+    book_reviews: Vec<posts::PostSummary>,
     details: Vec<DetailJson>,
 }
 
@@ -330,7 +331,14 @@ pub async fn home(
             profile: load_profile(&pool).await?,
             projects: load_projects(&pool).await?,
             commits: load_commits(&pool, HOME_COMMITS).await?,
-            posts: posts::published_summaries(&pool, HOME_POSTS).await?,
+            posts: posts::published_summaries_of_type(&pool, posts::PostType::Article, HOME_POSTS)
+                .await?,
+            book_reviews: posts::published_summaries_of_type(
+                &pool,
+                posts::PostType::BookReview,
+                HOME_POSTS,
+            )
+            .await?,
             details,
         })
     };
