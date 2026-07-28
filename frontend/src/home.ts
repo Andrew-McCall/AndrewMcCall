@@ -191,58 +191,27 @@ const renderHome = (root: HTMLElement, home: Home) => {
 // as an overt route into the secret menu (the click-counter easter egg aside).
 const SECRET_BTN_DELAY_MS = 180_000;
 
-// How long the signed-in visitor's top button lingers before fading away, and
-// the length of that fade.
-const TOP_BTN_LINGER_MS = 5_000;
-const TOP_BTN_FADE_MS = 500;
-
-const SECRET_BTN_CLASS =
-  "relative z-[60] block w-full max-w-3xl mx-auto px-8 py-8 " +
-  "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
-  "border-2 border-green-600 bg-stone-900 cursor-pointer ease-out " +
-  "hover:bg-stone-800 hover:border-green-500 hover:text-lime-200 " +
-  "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
-  "active:translate-y-0 active:shadow-none";
-
-const secretButton = (extraClass: string) => {
-  const btn = document.createElement("button");
-  btn.textContent = ">_ enter the secret menu";
-  btn.className = `${SECRET_BTN_CLASS} ${extraClass}`;
-  btn.addEventListener("click", () => window.navigate("/secret"));
-  return btn;
-};
-
 export default async (app: HTMLElement) => {
   app.innerHTML = `
     <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
 
   // Signed-in visitors have already seen the erosion reveal, so bring the board
-  // up cleared for them — as if the "clear" button had been pressed.
-  const signedIn = getMe().then((me) => me !== null);
-  secret_canvas(signedIn);
-
-  // Signed-in visitors skip the wait: the same button also sits at the very top,
-  // above the canvas, as soon as the session resolves. Guarded on the <main> we
-  // just wrote rather than on `app` — the router reuses `app` across pages, so
-  // `app.isConnected` stays true even after navigating away from home.
-  // It's a shortcut, not furniture: it fades out again a few seconds later,
-  // leaving the board unobstructed.
-  const main = app.querySelector<HTMLElement>("#home-content")!;
-  signedIn.then((yes) => {
-    if (!yes || !main.isConnected) return;
-    const topBtn = secretButton("mt-6 mb-4");
-    topBtn.style.cssText += `transition:opacity ${TOP_BTN_FADE_MS}ms`;
-    main.before(topBtn);
-    setTimeout(() => {
-      topBtn.style.opacity = "0";
-      topBtn.style.pointerEvents = "none";
-      setTimeout(() => topBtn.remove(), TOP_BTN_FADE_MS);
-    }, TOP_BTN_LINGER_MS);
-  });
+  // up cleared for them — as if the "clear" button had been pressed. Signed in
+  // also earns the board's own "secret" control, which the canvas adds itself.
+  secret_canvas(getMe().then((me) => me !== null));
 
   // Large secret-menu button at the very bottom, revealed after the delay. It
   // sits above the fixed board (z-60) so it's directly clickable once reached.
-  const secretBtn = secretButton("mb-24");
+  const secretBtn = document.createElement("button");
+  secretBtn.textContent = ">_ enter the secret menu →";
+  secretBtn.className =
+    "relative z-[60] block w-full max-w-3xl mx-auto mb-24 px-8 py-8 " +
+    "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
+    "border-2 border-green-600 bg-stone-900 cursor-pointer ease-out " +
+    "hover:bg-stone-800 hover:border-green-500 hover:text-lime-200 " +
+    "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
+    "active:translate-y-0 active:shadow-none";
+  secretBtn.addEventListener("click", () => window.navigate("/secret"));
   secretBtn.style.cssText +=
     "opacity:0;pointer-events:none;" +
     "transition:opacity 1s,transform .15s,box-shadow .15s,background-color .15s,border-color .15s,color .15s";

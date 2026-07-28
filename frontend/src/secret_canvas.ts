@@ -54,6 +54,12 @@ const BLUR_ALPHA = 0.6;
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
 
+// The signed-in visitor's "secret" control opens above the board so it's there
+// to be clicked straight away, then fades and drops beneath it to join the other
+// controls, where only erosion brings it back.
+const SECRET_BTN_LINGER_MS = 5_000;
+const SECRET_BTN_FADE_MS = 500;
+
 let teardown: (() => void) | null = null;
 let secret_counter = 10;
 
@@ -73,11 +79,11 @@ export function hideGame(): void {
   teardown = null;
 }
 
-// `clearOnStart` resolves to true when the board should come up already
-// cleared (as if the "clear" button had been pressed) rather than covering the
-// page — used for signed-in visitors, who've seen the reveal and just want the
-// content.
-export default (clearOnStart?: Promise<boolean>) => {
+// `signedIn` resolves to true for a signed-in visitor. They've seen the reveal
+// and just want the content, so the board comes up already cleared (as if the
+// "clear" button had been pressed) rather than covering the page, and they get
+// the extra "secret" control below.
+export default (signedIn?: Promise<boolean>) => {
   if (teardown) return;
 
   const overlay = document.createElement("div");
@@ -107,14 +113,24 @@ export default (clearOnStart?: Promise<boolean>) => {
   // top:8vmin keeps the buttons clear of the board's self-healing top band
   // (~5% of the shorter side), which is always opaque — sat inside it, they'd
   // never be uncovered by erosion.
+  //
+  // The row carries neither a z-index nor a centring transform — either one
+  // makes it a stacking context, which would pin every button below the overlay
+  // and leave the "secret" button unable to start above it. So it spans the
+  // width and centres with flex, and each button carries the
+  // beneath-the-board z-index itself. Full width means the row would otherwise
+  // sit in front of the page across that whole band and swallow the overlay's
+  // click-forwarding, so it takes no pointer events and the buttons take theirs
+  // back.
   const controls = document.createElement("div");
   controls.style.cssText =
-    "position:absolute;left:50%;top:8vmin;transform:translateX(-50%);z-index:40;" +
-    "display:flex;gap:10px";
+    "position:absolute;left:0;right:0;top:8vmin;pointer-events:none;" +
+    "display:flex;justify-content:center;gap:10px";
   const mkBtn = (label: string) => {
     const b = document.createElement("button");
     b.textContent = label;
     b.style.cssText =
+      "position:relative;z-index:40;pointer-events:auto;" +
       "padding:6px 14px;font:12px ui-monospace,monospace;letter-spacing:.08em;" +
       "color:#4ade80;background:rgba(12,10,9,.6);border:1px solid #14532d;cursor:pointer";
     return b;
@@ -158,6 +174,29 @@ export default (clearOnStart?: Promise<boolean>) => {
       startLoop?.();
     }
   });
+
+  // Signed-in visitors get a direct route into the secret menu, so they don't
+  // have to hunt for it. It joins the control row, but starts above the board
+  // (z-60) rather than under it: after the linger it fades out, moves down to
+  // the beneath-the-board layer with the rest of the controls, and fades back
+  // in there — so from then on it's only reachable through eroded ground.
+  signedIn
+    ?.then((yes) => {
+      if (!yes || !controls.isConnected) return;
+      const secretBtn = mkBtn("secret");
+      secretBtn.style.zIndex = "60";
+      secretBtn.style.transition = `opacity ${SECRET_BTN_FADE_MS}ms`;
+      secretBtn.addEventListener("click", () => window.navigate("/secret"));
+      controls.appendChild(secretBtn);
+      setTimeout(() => {
+        secretBtn.style.opacity = "0";
+        setTimeout(() => {
+          secretBtn.style.zIndex = "40";
+          secretBtn.style.opacity = "1";
+        }, SECRET_BTN_FADE_MS);
+      }, SECRET_BTN_LINGER_MS);
+    })
+    .catch(() => {});
 
   // First-visit hint: the front page lives *beneath* this board, so a newcomer
   // needs telling how to reveal it. It sits under the canvas (lower z-index), so
@@ -561,7 +600,7 @@ export default (clearOnStart?: Promise<boolean>) => {
       // newcomers, so wipe the cover (and the "drag to erode" hint with it) as
       // soon as the session resolves. Non-blocking so signed-out visitors get
       // the covered board immediately, without waiting on `/auth/me`.
-      clearOnStart
+      signedIn
         ?.then((clear) => {
           if (clear && game) {
             game.clear();
