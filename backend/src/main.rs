@@ -65,6 +65,11 @@ async fn route(
         },
         (_, "/http") => http_dump(req, peer, &config).await,
 
+        // Liveness probe. Deliberately dependency-free (no database, no config
+        // lookups): a 200 here means the process is up and serving, which is
+        // exactly what the frontend gates the canvas transparency on.
+        (&Method::GET, "/health") => ResponseBuilder::new(StatusCode::OK).text("OK").into(),
+
         (&Method::GET, "/password/types") => password::types_response(),
         (m, "/password") if *m == Method::POST || m.as_str() == "QUERY" => {
             password::respond(req).await
@@ -103,7 +108,7 @@ async fn route(
         // Known path, but the method above didn't match: 405 (not 404).
         (
             _,
-            "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
+            "/health" | "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
             | "/auth/logout" | "/auth/me" | "/auth/totp/setup" | "/auth/totp/enable"
             | "/auth/totp/disable" | "/admin/users" | "/admin/visits" | "/admin/posts"
             | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home" | "/posts"

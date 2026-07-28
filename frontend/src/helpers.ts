@@ -3,6 +3,17 @@
 export const api = (path: string, init?: RequestInit) =>
   fetch(`/api${path}`, { credentials: "include", ...init });
 
+// Is the backend up? `GET /api/health` answers 200 "OK" from a route with no
+// database or config dependencies, so a failure here means the process itself
+// is unreachable. The result is cached for the page's lifetime: everything that
+// gates on it wants one answer, not a probe per caller. Never rejects — a dead
+// backend resolves false.
+let health: Promise<boolean> | null = null;
+export const backendHealthy = (): Promise<boolean> =>
+  (health ??= api("/health")
+    .then(async (res) => res.ok && (await res.text()).trim() === "OK")
+    .catch(() => false));
+
 export const jsonInit = (body: unknown, method = "POST"): RequestInit => ({
   method,
   headers: { "content-type": "application/json" },
@@ -54,3 +65,25 @@ export const esc = (s: string): string =>
         c
       ]!,
   );
+
+// Shared chrome. `LINK_CLASS` is the standard inline link; `CARD_LIFT_CLASS`
+// is the hover treatment on the home page's cards and buttons.
+export const LINK_CLASS =
+  "text-green-500 hover:text-green-400 underline cursor-pointer";
+
+export const CARD_LIFT_CLASS =
+  "transition-all duration-150 ease-out hover:border-green-500 " +
+  "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
+  "active:translate-y-0 active:shadow-none";
+
+// An escaped link out to another site, opened in a new tab.
+export const extLink = (
+  url: string,
+  text: string,
+  cls = LINK_CLASS,
+): string =>
+  `<a href="${esc(url)}" target="_blank" rel="noopener" class="${cls}">${esc(text)}</a>`;
+
+// Drops the scheme from a URL, for display as link text.
+export const bareUrl = (url: string): string =>
+  url.replace(/^https?:\/\//, "");

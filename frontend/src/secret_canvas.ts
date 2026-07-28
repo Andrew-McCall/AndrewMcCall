@@ -9,6 +9,7 @@
 // see-through pixel is forwarded to whatever link or button it revealed.
 
 import { float_alert } from "./float_alert";
+import { backendHealthy } from "./helpers";
 import { isMobile } from "./mobile.ts";
 
 interface GameWasm {
@@ -184,6 +185,17 @@ export default (clearOnStart?: Promise<boolean>) => {
     setTimeout(() => el.remove(), 500);
   };
 
+  // Everything the board reveals — the page beneath, the click-through, the
+  // route into /secret — stays sealed until the backend answers /health. With
+  // it down the pages behind the board are empty shells and the secret menu
+  // can't load anything, so the board stays fully opaque instead: no
+  // transparency, no click-through, no secrets. Starts false, so nothing is
+  // enabled before the check comes back.
+  let secretsEnabled = false;
+  backendHealthy().then((ok) => {
+    secretsEnabled = ok;
+  });
+
   let game: GameWasm | null = null;
   let framePtr = 0;
   let stroke: { id: number; alive: number; x: number; y: number } | null = null;
@@ -205,6 +217,9 @@ export default (clearOnStart?: Promise<boolean>) => {
 
   // Alpha of the last rendered frame at a client position; opaque if unknown.
   const alphaAt = (ev: { clientX: number; clientY: number }): number => {
+    // Backend down (or not checked yet): the ground counts as solid everywhere,
+    // which shuts off click-through, hover forwarding and scroll-through.
+    if (!secretsEnabled) return 255;
     if (!game || framePtr === 0 || w === 0 || h === 0) return 255;
     const { x, y } = toFb(ev);
     const px = Math.floor(x);
@@ -409,6 +424,7 @@ export default (clearOnStart?: Promise<boolean>) => {
   overlay.addEventListener("click", (ev) => {
     if (dragged) return;
     if (alphaAt(ev) < CLICK_THROUGH_ALPHA && forwardClick(ev)) return;
+    if (!secretsEnabled) return; // no counting towards /secret while it's dead
     if (secret_counter < 6) {
       if (secret_counter < 1) return window.navigate("/secret");
       float_alert(
@@ -513,7 +529,7 @@ export default (clearOnStart?: Promise<boolean>) => {
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") window.navigate("/secret");
+    if (e.key === "Escape" && secretsEnabled) window.navigate("/secret");
   };
 
   teardown = () => {
@@ -572,9 +588,11 @@ export default (clearOnStart?: Promise<boolean>) => {
           // carrying its alpha so eroded ground stays see-through.
           bctx.clearRect(0, 0, blur.width, blur.height);
           bctx.drawImage(canvas, 0, 0, blur.width, blur.height);
-          if (!revealed) {
+          if (!revealed && secretsEnabled) {
             // The canvas now covers the viewport, so drop the overlay's
             // backdrop: framebuffer transparency reveals the page beneath.
+            // Held back until /health answers — while the backdrop stays
+            // painted, eroded tiles show it rather than the page.
             revealed = true;
             overlay.style.background = "transparent";
           }
