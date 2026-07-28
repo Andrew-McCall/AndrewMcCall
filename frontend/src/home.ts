@@ -217,10 +217,12 @@ export default async (app: HTMLElement) => {
   secret_canvas(signedIn);
 
   // Signed-in visitors skip the wait: the same button also sits at the very top,
-  // above the canvas, as soon as the session resolves.
+  // above the canvas, as soon as the session resolves. Guarded on the <main> we
+  // just wrote rather than on `app` — the router reuses `app` across pages, so
+  // `app.isConnected` stays true even after navigating away from home.
+  const main = app.querySelector<HTMLElement>("#home-content")!;
   signedIn.then((yes) => {
-    if (!yes || !app.isConnected) return;
-    app.prepend(secretButton("mt-6 mb-4"));
+    if (yes && main.isConnected) main.before(secretButton("mt-6 mb-4"));
   });
 
   // Large secret-menu button at the very bottom, revealed after the delay. It
