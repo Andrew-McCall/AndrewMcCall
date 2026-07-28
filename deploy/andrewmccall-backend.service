@@ -2,6 +2,10 @@
 Description=AndrewMcCall backend (Rust/hyper)
 After=network.target postgresql.service
 Wants=postgresql.service
+# Give up after 3 restarts inside 60s so a crash-looping build stops thrashing
+# and stays down (systemctl reset-failed + start to bring it back by hand).
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
