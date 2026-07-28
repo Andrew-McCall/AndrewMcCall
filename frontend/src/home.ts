@@ -191,6 +191,11 @@ const renderHome = (root: HTMLElement, home: Home) => {
 // as an overt route into the secret menu (the click-counter easter egg aside).
 const SECRET_BTN_DELAY_MS = 180_000;
 
+// How long the signed-in visitor's top button lingers before fading away, and
+// the length of that fade.
+const TOP_BTN_LINGER_MS = 5_000;
+const TOP_BTN_FADE_MS = 500;
+
 const SECRET_BTN_CLASS =
   "relative z-[60] block w-full max-w-3xl mx-auto px-8 py-8 " +
   "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
@@ -201,7 +206,7 @@ const SECRET_BTN_CLASS =
 
 const secretButton = (extraClass: string) => {
   const btn = document.createElement("button");
-  btn.textContent = ">_ enter the secret menu →";
+  btn.textContent = ">_ enter the secret menu";
   btn.className = `${SECRET_BTN_CLASS} ${extraClass}`;
   btn.addEventListener("click", () => window.navigate("/secret"));
   return btn;
@@ -220,9 +225,19 @@ export default async (app: HTMLElement) => {
   // above the canvas, as soon as the session resolves. Guarded on the <main> we
   // just wrote rather than on `app` — the router reuses `app` across pages, so
   // `app.isConnected` stays true even after navigating away from home.
+  // It's a shortcut, not furniture: it fades out again a few seconds later,
+  // leaving the board unobstructed.
   const main = app.querySelector<HTMLElement>("#home-content")!;
   signedIn.then((yes) => {
-    if (yes && main.isConnected) main.before(secretButton("mt-6 mb-4"));
+    if (!yes || !main.isConnected) return;
+    const topBtn = secretButton("mt-6 mb-4");
+    topBtn.style.cssText += `transition:opacity ${TOP_BTN_FADE_MS}ms`;
+    main.before(topBtn);
+    setTimeout(() => {
+      topBtn.style.opacity = "0";
+      topBtn.style.pointerEvents = "none";
+      setTimeout(() => topBtn.remove(), TOP_BTN_FADE_MS);
+    }, TOP_BTN_LINGER_MS);
   });
 
   // Large secret-menu button at the very bottom, revealed after the delay. It
