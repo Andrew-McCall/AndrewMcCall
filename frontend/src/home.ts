@@ -4,22 +4,19 @@
 
 import secret_canvas from "./secret_canvas";
 import { initProfilePhoto } from "./profile_photo";
-import { api, backendHealthy, esc, fmtDate } from "./helpers";
+import {
+  api,
+  backendHealthy,
+  bareUrl,
+  esc,
+  extLink,
+  fmtDate,
+  CARD_LIFT_CLASS,
+  LINK_CLASS,
+} from "./helpers";
+import { postCard, type PostSummary } from "./post_card";
 import { renderMarkdown } from "./markdown";
 import { getMe } from "./session";
-
-type PostSummary = {
-  slug: string;
-  title: string;
-  excerpt: string;
-  published_at: string | null;
-  post_type: "article" | "book_review";
-  book_review?: {
-    author: string;
-    rating: number | null;
-    cover_url: string | null;
-  };
-};
 
 type Home = {
   profile: {
@@ -56,44 +53,56 @@ const section = (title: string, inner: string) => `
     ${inner}
   </section>`;
 
-const renderHome = (root: HTMLElement, home: Home) => {
-  const { profile, projects, commits, posts, book_reviews, details } = home;
+// The "About" block: the profile photo (drawn into a canvas) beside the intro.
+const aboutSection = (profile: Home["profile"]) => {
+  if (!profile.intro_markdown) return "";
+  const photo = profile.profile_image_url
+    ? `<div class="shrink-0 w-full aspect-square sm:w-44 sm:h-44 sm:aspect-auto border-2 border-green-600 rounded-full overflow-hidden">
+         <canvas class="profile-photo w-full h-full" aria-label="Andrew McCall"
+           data-src="${esc(profile.profile_image_url)}"></canvas>
+       </div>`
+    : "";
+  return section(
+    "About",
+    `<div class="flex flex-col sm:flex-row gap-6 items-start">
+       ${photo}
+       <div class="flex-1 flex flex-col gap-3 text-stone-300">
+         ${renderMarkdown(profile.intro_markdown)}
+       </div>
+     </div>`,
+  );
+};
 
-  // The "Now" box: a fixed key/value table of what I'm currently up to.
-  const detailRows = details
+// The "Now" box: a fixed key/value table of what I'm currently up to. Its links
+// sit on a green-300 value column, so they run a step brighter than LINK_CLASS.
+const DETAIL_LINK_CLASS =
+  "text-green-400 hover:text-green-300 underline cursor-pointer";
+
+const nowSection = (details: Home["details"]) => {
+  if (details.length === 0) return "";
+  const rows = details
     .map(
       (f) => `
       <tr class="border-b border-green-900/40">
         <td class="py-2 pr-6 text-green-700 whitespace-nowrap align-top">${esc(f.label)}</td>
         <td class="py-2 text-green-300">${
-          f.url
-            ? `<a href="${esc(f.url)}" target="_blank" rel="noopener" class="text-green-400 hover:text-green-300 underline cursor-pointer">${esc(f.value)}</a>`
-            : esc(f.value)
+          f.url ? extLink(f.url, f.value, DETAIL_LINK_CLASS) : esc(f.value)
         }</td>
       </tr>`,
     )
     .join("");
-  const now = `
-    <div class="overflow-x-auto">
-      <table class="w-full text-left font-mono text-sm"><tbody>${detailRows}</tbody></table>
-    </div>`;
+  return section(
+    "Now",
+    `<div class="overflow-x-auto">
+       <table class="w-full text-left font-mono text-sm"><tbody>${rows}</tbody></table>
+     </div>`,
+  );
+};
 
-  const about = `
-    <div class="flex flex-col sm:flex-row gap-6 items-start">
-      ${
-        profile.profile_image_url
-          ? `<div class="shrink-0 w-full aspect-square sm:w-44 sm:h-44 sm:aspect-auto border-2 border-green-600 rounded-full overflow-hidden">
-               <canvas class="profile-photo w-full h-full" aria-label="Andrew McCall"
-                 data-src="${esc(profile.profile_image_url)}"></canvas>
-             </div>`
-          : ""
-      }
-      <div class="flex-1 flex flex-col gap-3 text-stone-300">
-        ${renderMarkdown(profile.intro_markdown)}
-      </div>
-    </div>`;
-
-  const commitRows = commits
+// Recent commits; each row opens the commit on GitHub (wired after injection).
+const githubSection = (profile: Home["profile"], commits: Home["commits"]) => {
+  if (!profile.github_url && commits.length === 0) return "";
+  const rows = commits
     .map(
       (c) => `
       <tr class="border-b border-green-900/40 hover:bg-stone-800 cursor-pointer transition-colors" data-url="${esc(c.url)}">
@@ -103,95 +112,70 @@ const renderHome = (root: HTMLElement, home: Home) => {
       </tr>`,
     )
     .join("");
-  const github = `
-    ${
-      profile.github_url
-        ? `<a href="${esc(profile.github_url)}" target="_blank" rel="noopener"
-             class="text-green-500 hover:text-green-400 underline cursor-pointer">${esc(profile.github_url.replace(/^https?:\/\//, ""))}</a>`
-        : ""
-    }
-    ${
-      commits.length > 0
-        ? `<div class="overflow-x-auto mt-4">
-             <table class="w-full text-left font-mono text-sm">
-               <thead class="text-green-700 border-b border-green-900">
-                 <tr><th class="py-2 pr-4">Repo</th><th class="py-2 pr-4">Commit</th><th class="py-2">When</th></tr>
-               </thead>
-               <tbody>${commitRows}</tbody>
-             </table>
-           </div>`
-        : ""
-    }`;
+  const table =
+    commits.length > 0
+      ? `<div class="overflow-x-auto mt-4">
+           <table class="w-full text-left font-mono text-sm">
+             <thead class="text-green-700 border-b border-green-900">
+               <tr><th class="py-2 pr-4">Repo</th><th class="py-2 pr-4">Commit</th><th class="py-2">When</th></tr>
+             </thead>
+             <tbody>${rows}</tbody>
+           </table>
+         </div>`
+      : "";
+  const link = profile.github_url
+    ? extLink(profile.github_url, bareUrl(profile.github_url))
+    : "";
+  return section("GitHub", `${link}${table}`);
+};
 
-  const projectCards = projects
+const projectsSection = (projects: Home["projects"]) => {
+  if (projects.length === 0) return "";
+  const cards = projects
     .map(
       (p) => `
-      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 transition-all duration-150 ease-out hover:border-green-500 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
+      <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 ${CARD_LIFT_CLASS}">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
         <div class="flex gap-4 text-sm">
-          ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline cursor-pointer">visit ↗</a>` : ""}
-          ${p.repo ? `<a href="https://github.com/${esc(p.repo)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline cursor-pointer">source ↗</a>` : ""}
+          ${p.url ? extLink(p.url, "visit ↗") : ""}
+          ${p.repo ? extLink(`https://github.com/${p.repo}`, "source ↗") : ""}
         </div>
       </div>`,
     )
     .join("");
+  return section(
+    "Projects",
+    `<div class="grid sm:grid-cols-2 gap-4">${cards}</div>`,
+  );
+};
 
-  // A ★★★☆☆ rating out of 5, blank when unrated.
-  const stars = (rating: number | null) => {
-    if (!rating) return "";
-    const n = Math.max(0, Math.min(5, rating));
-    return `<span class="text-yellow-500">${"★".repeat(n)}<span class="text-green-900">${"★".repeat(5 - n)}</span></span>`;
-  };
+// A "Posts"/"Book Reviews" block: its cards plus a link through to the full,
+// filterable /posts page.
+const postSection = (
+  title: string,
+  list: PostSummary[],
+  more: string,
+  href: string,
+) =>
+  list.length > 0
+    ? section(
+        title,
+        `<div class="flex flex-col gap-4">${list.map((p) => postCard(p, "home")).join("")}</div>
+         <a href="${href}" class="inline-block mt-4 ${LINK_CLASS} text-sm">${more} →</a>`,
+      )
+    : "";
 
-  const postCard = (p: PostSummary) => {
-    const br = p.post_type === "book_review" ? p.book_review : undefined;
-    const cover = br?.cover_url
-      ? `<img src="${esc(br.cover_url)}" alt="" loading="lazy"
-             class="shrink-0 w-14 h-20 object-cover border border-green-900 bg-stone-950" />`
-      : "";
-    const meta = br
-      ? `<div class="flex items-center gap-2 text-xs text-green-700 mt-1">
-           ${br.author ? `<span>${esc(br.author)}</span>` : ""}${stars(br.rating)}
-         </div>`
-      : "";
-    return `
-      <a href="/posts/${esc(p.slug)}" class="group flex gap-4 border border-green-900 bg-stone-900 p-5 cursor-pointer transition-all duration-150 ease-out hover:border-green-500 hover:bg-stone-800 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] active:translate-y-0 active:shadow-none">
-        ${cover}
-        <div class="min-w-0 flex-1">
-          <div class="flex items-baseline justify-between gap-4">
-            <h3 class="text-lg font-bold text-lime-300 transition-colors group-hover:text-lime-200">${esc(p.title)}</h3>
-            <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
-          </div>
-          ${meta}
-          <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
-        </div>
-      </a>`;
-  };
-
-  // A "Posts"/"Book Reviews" block: its cards plus a link through to the full,
-  // filterable /posts page.
-  const postSection = (
-    title: string,
-    list: PostSummary[],
-    more: string,
-    href: string,
-  ) =>
-    list.length > 0
-      ? section(
-          title,
-          `<div class="flex flex-col gap-4">${list.map(postCard).join("")}</div>
-           <a href="${href}" class="inline-block mt-4 text-green-500 hover:text-green-400 underline text-sm cursor-pointer">${more} →</a>`,
-        )
-      : "";
+const renderHome = (root: HTMLElement, home: Home) => {
+  const { profile, projects, commits, posts, book_reviews, details } = home;
 
   root.innerHTML = `
-    ${about.trim() && profile.intro_markdown ? section("About", about) : ""}
-    ${details.length > 0 ? section("Now", now) : ""}
-    ${profile.github_url || commits.length > 0 ? section("GitHub", github) : ""}
+    ${aboutSection(profile)}
+    ${nowSection(details)}
+    ${githubSection(profile, commits)}
     ${postSection("Posts", posts, "all posts", "/posts")}
     ${postSection("Book Reviews", book_reviews, "all reviews", "/posts#reviews")}
-    ${projects.length > 0 ? section("Projects", `<div class="grid sm:grid-cols-2 gap-4">${projectCards}</div>`) : ""}`;
+    ${projectsSection(projects)}`;
 
   for (const row of root.querySelectorAll<HTMLTableRowElement>(
     "tr[data-url]",
@@ -215,6 +199,14 @@ const SECRET_BTN_CLASS =
   "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
   "active:translate-y-0 active:shadow-none";
 
+const secretButton = (extraClass: string) => {
+  const btn = document.createElement("button");
+  btn.textContent = ">_ enter the secret menu →";
+  btn.className = `${SECRET_BTN_CLASS} ${extraClass}`;
+  btn.addEventListener("click", () => window.navigate("/secret"));
+  return btn;
+};
+
 export default async (app: HTMLElement) => {
   app.innerHTML = `
     <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
@@ -228,22 +220,15 @@ export default async (app: HTMLElement) => {
   // above the canvas, as soon as the session resolves.
   signedIn.then((yes) => {
     if (!yes || !app.isConnected) return;
-    const topBtn = document.createElement("button");
-    topBtn.textContent = ">_ enter the secret menu →";
-    topBtn.className = SECRET_BTN_CLASS + " mt-6 mb-4";
-    topBtn.addEventListener("click", () => window.navigate("/secret"));
-    app.prepend(topBtn);
+    app.prepend(secretButton("mt-6 mb-4"));
   });
 
   // Large secret-menu button at the very bottom, revealed after the delay. It
   // sits above the fixed board (z-60) so it's directly clickable once reached.
-  const secretBtn = document.createElement("button");
-  secretBtn.textContent = ">_ enter the secret menu →";
-  secretBtn.className = SECRET_BTN_CLASS + " mb-24";
+  const secretBtn = secretButton("mb-24");
   secretBtn.style.cssText +=
     "opacity:0;pointer-events:none;" +
     "transition:opacity 1s,transform .15s,box-shadow .15s,background-color .15s,border-color .15s,color .15s";
-  secretBtn.addEventListener("click", () => window.navigate("/secret"));
   app.appendChild(secretBtn);
   setTimeout(async () => {
     if (!secretBtn.isConnected) return; // left the front page before it fired

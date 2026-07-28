@@ -111,6 +111,11 @@ const routes: Record<string, Route> = {
     auth: "user",
     render: disposable("notes", () => import("./secret_notes.ts")),
   },
+  "/secret/account": {
+    auth: "user",
+    render: (app, me) =>
+      import("./secret_account.ts").then((m) => m.default(app, me!)),
+  },
   "/secret/admin": {
     auth: "admin",
     render: (app, me) =>

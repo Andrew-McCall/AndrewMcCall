@@ -1,44 +1,22 @@
 // Public blog: the /posts list and /posts/{slug} detail pages.
 
-import { api, esc, fmtDate, readingTime, setMeta } from "./helpers";
+import {
+  api,
+  bareUrl,
+  esc,
+  extLink,
+  fmtDate,
+  readingTime,
+  setMeta,
+} from "./helpers";
+import {
+  postCard,
+  stars,
+  type Post,
+  type PostSummary,
+  type PostType,
+} from "./post_card";
 import { renderMarkdown } from "./markdown";
-
-type PostType = "article" | "book_review";
-
-type BookReview = {
-  book_title: string;
-  author: string;
-  rating: number | null;
-  cover_url: string | null;
-  isbn: string | null;
-  read_date: string | null;
-  link: string | null;
-};
-
-type PostSummary = {
-  slug: string;
-  title: string;
-  excerpt: string;
-  published_at: string | null;
-  post_type: PostType;
-  book_review?: BookReview;
-};
-
-type Post = {
-  slug: string;
-  title: string;
-  body: string;
-  published_at: string | null;
-  post_type: PostType;
-  book_review?: BookReview;
-};
-
-// A ★★★☆☆ rating out of 5, or empty for an unrated review.
-const stars = (rating: number | null): string => {
-  if (!rating) return "";
-  const n = Math.max(0, Math.min(5, rating));
-  return `<span class="text-yellow-500" aria-label="${n} out of 5">${"★".repeat(n)}<span class="text-green-900">${"★".repeat(5 - n)}</span></span>`;
-};
 
 const PAGE_SIZE = 8; // list entries shown before "load more"
 
@@ -74,33 +52,6 @@ const errorBlock = (msg: string) => `
       retry
     </button>
   </div>`;
-
-const card = (p: PostSummary) => {
-  const br = p.post_type === "book_review" ? p.book_review : undefined;
-  const cover =
-    br?.cover_url
-      ? `<img src="${esc(br.cover_url)}" alt="" loading="lazy"
-             class="shrink-0 w-16 h-24 object-cover border border-green-900 bg-stone-950" />`
-      : "";
-  const meta = br
-    ? `<div class="flex items-center gap-2 text-xs text-green-700 mt-1">
-         ${br.author ? `<span>${esc(br.author)}</span>` : ""}
-         ${br.rating ? stars(br.rating) : ""}
-       </div>`
-    : "";
-  return `
-  <a href="/posts/${esc(p.slug)}" class="flex gap-4 border border-green-900 bg-stone-900 p-5 hover:border-green-700 transition-colors">
-    ${cover}
-    <div class="min-w-0 flex-1">
-      <div class="flex items-baseline justify-between gap-4">
-        <h2 class="text-lg font-bold text-lime-300">${esc(p.title)}</h2>
-        <span class="text-green-700 text-sm whitespace-nowrap">${fmtDate(p.published_at)}</span>
-      </div>
-      ${meta}
-      <p class="text-sm text-stone-400 leading-relaxed mt-2">${esc(p.excerpt)}</p>
-    </div>
-  </a>`;
-};
 
 export const postsList = async (app: HTMLElement) => {
   setMeta("Posts — Andrew McCall", "Writing by Andrew McCall.");
@@ -171,7 +122,10 @@ const renderList = (container: HTMLElement, posts: PostSummary[]) => {
     results.innerHTML =
       filtered.length === 0
         ? `<p class="text-green-700">No posts match.</p>`
-        : filtered.slice(0, shown).map(card).join("");
+        : filtered
+            .slice(0, shown)
+            .map((p) => postCard(p))
+            .join("");
     more.classList.toggle("hidden", shown >= filtered.length);
   };
 
@@ -266,7 +220,7 @@ const renderPost = (
            ${br.rating ? `<dt class="text-green-700">Rating</dt><dd>${stars(br.rating)}</dd>` : ""}
            ${br.read_date ? `<dt class="text-green-700">Read</dt><dd class="text-stone-300">${fmtDate(br.read_date)}</dd>` : ""}
            ${br.isbn ? `<dt class="text-green-700">ISBN</dt><dd class="text-stone-300">${esc(br.isbn)}</dd>` : ""}
-           ${br.link ? `<dt class="text-green-700">Link</dt><dd class="truncate"><a href="${esc(br.link)}" target="_blank" rel="noopener" class="text-green-500 hover:text-green-400 underline">${esc(br.link.replace(/^https?:\/\//, ""))}</a></dd>` : ""}
+           ${br.link ? `<dt class="text-green-700">Link</dt><dd class="truncate">${extLink(br.link, bareUrl(br.link))}</dd>` : ""}
          </dl>
        </div>`
     : "";

@@ -81,6 +81,7 @@ async fn route(
         (&Method::POST, "/auth/login") => auth::login(req, peer, &config).await,
         (&Method::POST, "/auth/logout") => auth::logout(req, peer, &config).await,
         (&Method::GET, "/auth/me") => auth::me(req, peer, &config).await,
+        (&Method::POST, "/auth/pin") => auth::change_pin(req, peer, &config).await,
         (&Method::POST, "/auth/totp/setup") => auth::totp_setup(req, peer, &config).await,
         (&Method::POST, "/auth/totp/enable") => auth::totp_enable(req, peer, &config).await,
         (&Method::POST, "/auth/totp/disable") => auth::totp_disable(req, peer, &config).await,
@@ -109,7 +110,7 @@ async fn route(
         (
             _,
             "/health" | "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
-            | "/auth/logout" | "/auth/me" | "/auth/totp/setup" | "/auth/totp/enable"
+            | "/auth/logout" | "/auth/me" | "/auth/pin" | "/auth/totp/setup" | "/auth/totp/enable"
             | "/auth/totp/disable" | "/admin/users" | "/admin/visits" | "/admin/posts"
             | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home" | "/posts"
             | "/notes" | "/tags",

@@ -618,6 +618,179 @@ pub async fn login(
     builder.json(&reply).into()
 }
 
+#[derive(Deserialize)]
+struct ChangePinRequest {
+    current_pin: String,
+    new_pin: String,
+    /// A current TOTP or an unused recovery code, required when TOTP is enrolled.
+    code: Option<String>,
+}
+
+/// Smallest PIN a user may set for themselves. Deliberately stricter than
+/// `/admin/users`, which only rejects an empty PIN.
+const MIN_PIN_LENGTH: usize = 4;
+const MAX_PIN_LENGTH: usize = 64;
+
+/// `POST /auth/pin` — body `{current_pin, new_pin, code?}`. Changes *only* the
+/// caller's own PIN: the account is taken from the session token, never from the
+/// request body, so there is no id to tamper with and no admin override here.
+///
+/// Re-authenticates with the current PIN (and the second factor, when enrolled)
+/// rather than trusting the session alone, so a borrowed browser can't be used
+/// to lock the owner out. Failures are recorded in `login_attempts` and the same
+/// per-IP ban that guards `/auth/login` applies, so this endpoint is no cheaper
+/// to brute-force than login is. On success every *other* session for the user
+/// is revoked; the caller's own token keeps working.
+pub async fn change_pin(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    let user = match authenticate(&req, peer, config).await {
+        Ok(user) => user,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+    let current_token_hash = extract_token(&req).map(|token| sha256_hex(&token));
+
+    let client_ip = resolve_client_ip(config.ip_source, &req, peer)
+        .map(|ip| ip.0)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let user_agent = req
+        .headers()
+        .get(USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let pool = config.db.pool();
+    match is_ip_banned(&pool, &client_ip).await {
+        Ok(true) => return ResponseBuilder::from(ApiError::TooManyRequests).into(),
+        Ok(false) => {}
+        Err(err) => return ResponseBuilder::from(err).into(),
+    }
+
+    let body: ChangePinRequest = match response::read_json(
+        req,
+        r#"expected a JSON body like {"current_pin": "1234", "new_pin": "5678"}"#,
+    )
+    .await
+    {
+        Ok(body) => body,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+    let attempt_hash = pin_attempt_hash(&body.current_pin, config.pin_hash_key.as_deref());
+
+    let row: Option<AuthRow> =
+        match sqlx::query_as("SELECT id, name, pin, totp_secret, role FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_optional(&pool)
+            .await
+        {
+            Ok(row) => row,
+            Err(err) => {
+                tracing::error!(error = %err, "failed to load user for pin change");
+                return ResponseBuilder::from(ApiError::Internal).into();
+            }
+        };
+    let Some(current) = row else {
+        // The token resolved a moment ago, so the row can only be gone if the
+        // account was deleted mid-request.
+        return ResponseBuilder::from(ApiError::Unauthorized).into();
+    };
+
+    // Same generic 401 for a wrong PIN and a wrong second factor, both counted
+    // against the IP ban.
+    let fail = |user_id: Uuid| -> hyper::Response<Body> {
+        record_login_attempt(
+            config,
+            client_ip.clone(),
+            user_agent.clone(),
+            attempt_hash.clone(),
+            false,
+            Some(user_id),
+        );
+        ResponseBuilder::from(ApiError::Unauthorized).into()
+    };
+
+    if !verify_pin(&current.pin, &body.current_pin) {
+        return fail(current.id);
+    }
+
+    if let Some(secret) = &current.totp_secret {
+        let code = body.code.as_deref().unwrap_or("").trim();
+        let allowed = verify_totp(secret, &current.name, code)
+            || (!code.is_empty() && consume_recovery_code(&pool, current.id, code).await);
+        if !allowed {
+            return fail(current.id);
+        }
+    }
+
+    let new_pin = body.new_pin.trim();
+    if new_pin.len() < MIN_PIN_LENGTH || new_pin.len() > MAX_PIN_LENGTH {
+        return ResponseBuilder::from(ApiError::BadRequest(format!(
+            "pin must be between {MIN_PIN_LENGTH} and {MAX_PIN_LENGTH} characters"
+        )))
+        .into();
+    }
+    if new_pin == body.current_pin.trim() {
+        return ResponseBuilder::from(ApiError::BadRequest(
+            "the new pin must differ from the current one".into(),
+        ))
+        .into();
+    }
+
+    // Login is PIN-only, so two accounts sharing a PIN would make sign-in
+    // ambiguous (whichever row the scan hits first wins). Reject the collision
+    // without saying whose account it belongs to.
+    let others: Vec<String> = match sqlx::query_scalar("SELECT pin FROM users WHERE id <> $1")
+        .bind(current.id)
+        .fetch_all(&pool)
+        .await
+    {
+        Ok(pins) => pins,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to load pins for collision check");
+            return ResponseBuilder::from(ApiError::Internal).into();
+        }
+    };
+    if others.iter().any(|hash| verify_pin(hash, new_pin)) {
+        return ResponseBuilder::from(ApiError::BadRequest(
+            "that pin is already in use — pick another".into(),
+        ))
+        .into();
+    }
+
+    let new_hash = match hash_pin(new_pin) {
+        Ok(hash) => hash,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let updated = async {
+        sqlx::query("UPDATE users SET pin = $1 WHERE id = $2")
+            .bind(&new_hash)
+            .bind(current.id)
+            .execute(&pool)
+            .await?;
+        // Any session other than this one is now stale: a PIN change is how a
+        // user reacts to a suspected compromise, so it must sign the other
+        // sessions out. A caller using `Authorization: Bearer` with no
+        // extractable token simply loses every session, including its own.
+        sqlx::query("DELETE FROM user_tokens WHERE user_id = $1 AND token IS DISTINCT FROM $2")
+            .bind(current.id)
+            .bind(current_token_hash.as_deref())
+            .execute(&pool)
+            .await?;
+        Ok::<_, sqlx::Error>(())
+    };
+    if let Err(err) = updated.await {
+        tracing::error!(error = %err, "failed to change pin");
+        return ResponseBuilder::from(ApiError::Internal).into();
+    }
+
+    tracing::info!(user_id = %current.id, "pin changed");
+    ResponseBuilder::new(StatusCode::NO_CONTENT).empty().into()
+}
+
 /// Marks a matching unused recovery code as consumed. Returns true only if a row
 /// was actually updated (so each code works exactly once).
 async fn consume_recovery_code(pool: &sqlx::PgPool, user_id: Uuid, code: &str) -> bool {
