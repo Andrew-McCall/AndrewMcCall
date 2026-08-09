@@ -72,6 +72,12 @@ const renderWikilink = (raw: string, resolve: (t: string) => WikiTarget): string
 
 export function inline(text: string, opts: InlineOptions = {}): string {
   let html = esc(text)
+    // A newline only reaches here because block.ts put it there for a hard
+    // break — every other block type is a single line. Done before the markup
+    // passes so nothing downstream mistakes the break for a space: `<br />`
+    // stops the autolinker at a `<`, whereas a newline would read as an
+    // ordinary word boundary.
+    .replace(/\n/g, "<br />")
     .replace(/`([^`]+)`/g, `<code class="bg-stone-900 text-lime-300 px-1">$1</code>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")

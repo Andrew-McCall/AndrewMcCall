@@ -40,14 +40,31 @@ export function parseBlocks(md: string, opts: BlockOptions = {}): Block[] {
   const out: Block[] = [];
   const lines = md.replace(/\r\n/g, "\n").split("\n");
 
-  let paragraph: string[] = [];
+  // Each entry is one source line plus whether it asked for a hard break.
+  let paragraph: { text: string; hardBreak: boolean }[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
   let code: { lang: string; lines: string[] } | null = null;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
-    // Wrapped lines join into one paragraph with single spaces.
-    out.push({ kind: "paragraph", text: paragraph.join(" ") });
+    // Wrapped lines join into one paragraph with single spaces. A line that
+    // asked for a hard break joins with a newline instead — the only newline
+    // that can appear in paragraph text, which is how inline.ts knows to emit
+    // a `<br />`.
+    const text = paragraph
+      .map((line, i) => {
+        // The final line's marker is dropped: there is nothing below it to
+        // break away from, and a trailing `<br />` would just pad the
+        // paragraph. Its backslash therefore stays as literal text, matching
+        // CommonMark.
+        if (i === paragraph.length - 1) return line.text;
+        if (!line.hardBreak) return line.text + " ";
+        // A backslash marker is part of the text and has to come off; the
+        // space marker was already removed by the trim.
+        return line.text.replace(/\\$/, "") + "\n";
+      })
+      .join("");
+    out.push({ kind: "paragraph", text });
     paragraph = [];
   };
   const flushList = () => {
@@ -133,7 +150,14 @@ export function parseBlocks(md: string, opts: BlockOptions = {}): Block[] {
     }
 
     flushList();
-    paragraph.push(line.trim());
+    // Markdown's two hard-break markers: two or more trailing spaces, or a
+    // trailing backslash. Spaces only for the former — a tab there is
+    // invisible whitespace the author didn't ask for.
+    const text = line.trim();
+    paragraph.push({
+      text,
+      hardBreak: / {2,}$/.test(line) || text.endsWith("\\"),
+    });
   }
 
   // An unclosed fence still emits its content rather than swallowing it.

@@ -19,6 +19,8 @@ const CASES: [name: string, md: string][] = [
   ["heading beyond h3 is a paragraph", "#### Four\n##### Five"],
   ["heading id slugification", "## Hello, World! (v2)"],
   ["paragraph joins wrapped lines", "one\ntwo\nthree"],
+  ["two trailing spaces are a hard break", "one  \ntwo\nthree"],
+  ["a trailing backslash is a hard break", "one\\\ntwo\nthree"],
   ["paragraphs split on blank line", "first para\n\nsecond para"],
   ["bullet list with both markers", "- alpha\n* beta\n- gamma"],
   ["numbered list", "1. first\n2. second\n10. tenth"],
@@ -67,6 +69,63 @@ const CASES: [name: string, md: string][] = [
 describe("renderMarkdown formatting", () => {
   it.each(CASES)("%s", (_name, md) => {
     expect(renderMarkdown(md)).toMatchSnapshot();
+  });
+});
+
+// Hard assertions rather than snapshots: which lines break is the behaviour
+// being fixed here, so it should fail loudly rather than be blessed with -u.
+describe("hard line breaks", () => {
+  it("breaks a line ending in two spaces", () => {
+    const html = renderMarkdown("one  \ntwo");
+    expect(html).toContain("one<br />two");
+    // Still one paragraph — a break is not a paragraph split.
+    expect(html.match(/<p /g)).toHaveLength(1);
+  });
+
+  it("breaks a line ending in a backslash, consuming the marker", () => {
+    const html = renderMarkdown("one\\\ntwo");
+    expect(html).toContain("one<br />two");
+    expect(html).not.toContain("\\");
+    expect(html.match(/<p /g)).toHaveLength(1);
+  });
+
+  it("keeps a trailing backslash on the last line as literal text", () => {
+    // Nothing below it to break from, so the marker is not a marker — which is
+    // what CommonMark does with it too.
+    expect(renderMarkdown("only\\")).toContain("only\\");
+    expect(renderMarkdown("only\\")).not.toContain("<br");
+  });
+
+  it("mixes both markers in one paragraph", () => {
+    const html = renderMarkdown("one\\\ntwo  \nthree");
+    expect(html).toContain("one<br />two<br />three");
+  });
+
+  it("treats a single trailing space as a soft wrap", () => {
+    expect(renderMarkdown("one \ntwo")).toContain("one two");
+    expect(renderMarkdown("one \ntwo")).not.toContain("<br");
+  });
+
+  it("ignores trailing spaces on the last line of a paragraph", () => {
+    expect(renderMarkdown("only  \n\nnext")).not.toContain("<br");
+    expect(renderMarkdown("only  ")).not.toContain("<br");
+  });
+
+  it("breaks every marked line, not just the first", () => {
+    const html = renderMarkdown("one  \ntwo  \nthree");
+    expect(html.match(/<br \/>/g)).toHaveLength(2);
+  });
+
+  it("still escapes the line it breaks", () => {
+    const html = renderMarkdown("<script>  \nx");
+    expect(html).not.toContain("<script");
+    expect(html).toContain("&lt;script&gt;<br />x");
+  });
+
+  it("leaves inline markup across a break intact", () => {
+    expect(renderMarkdown("**bold**  \n[posts](/posts)")).toContain(
+      "<strong>bold</strong><br /><a ",
+    );
   });
 });
 
