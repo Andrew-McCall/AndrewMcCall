@@ -54,11 +54,11 @@ const BLUR_ALPHA = 0.6;
 // Framebuffer alpha below which a click falls through to the page beneath.
 const CLICK_THROUGH_ALPHA = 64;
 
-// The signed-in visitor's "secret" control opens above the board so it's there
-// to be clicked straight away, then fades and drops beneath it to join the other
-// controls, where only erosion brings it back.
-const SECRET_BTN_LINGER_MS = 5_000;
-const SECRET_BTN_FADE_MS = 500;
+// For a signed-in visitor a "secret" button covers the whole control row, above
+// the board, so it's there to be clicked straight away — then it fades out,
+// uncovering the row and the regular-size "secret" button sitting in it.
+const SECRET_COVER_LINGER_MS = 5_000;
+const SECRET_COVER_FADE_MS = 500;
 
 let teardown: (() => void) | null = null;
 let secret_counter = 10;
@@ -114,18 +114,23 @@ export default (signedIn?: Promise<boolean>) => {
   // (~5% of the shorter side), which is always opaque — sat inside it, they'd
   // never be uncovered by erosion.
   //
-  // The row carries neither a z-index nor a centring transform — either one
-  // makes it a stacking context, which would pin every button below the overlay
-  // and leave the "secret" button unable to start above it. So it spans the
-  // width and centres with flex, and each button carries the
-  // beneath-the-board z-index itself. Full width means the row would otherwise
-  // sit in front of the page across that whole band and swallow the overlay's
-  // click-forwarding, so it takes no pointer events and the buttons take theirs
-  // back.
+  // Neither the row nor the group carries a z-index or a centring transform —
+  // either one makes a stacking context, which would pin everything inside it
+  // below the overlay and leave the signed-in "secret" cover (further down)
+  // unable to sit above the board. So the row spans the width and centres the
+  // group with flex, and each button carries the beneath-the-board z-index
+  // itself. Full width means the row would otherwise sit in front of the page
+  // across that whole band and swallow the overlay's click-forwarding, so it
+  // takes no pointer events and the buttons take theirs back.
   const controls = document.createElement("div");
   controls.style.cssText =
     "position:absolute;left:0;right:0;top:8vmin;pointer-events:none;" +
     "display:flex;justify-content:center;gap:10px";
+  // The buttons live in their own shrink-to-fit group so the cover can span
+  // exactly them (inset:0) rather than the full-width row.
+  const group = document.createElement("div");
+  group.style.cssText = "position:relative;display:flex;gap:10px";
+  controls.appendChild(group);
   const mkBtn = (label: string) => {
     const b = document.createElement("button");
     b.textContent = label;
@@ -139,7 +144,7 @@ export default (signedIn?: Promise<boolean>) => {
   const resetBtn = mkBtn("↺ reset");
   const staticBtn = mkBtn("▓ static");
   const powerBtn = mkBtn("✕ disable");
-  controls.append(clearBtn, resetBtn, staticBtn, powerBtn);
+  group.append(clearBtn, resetBtn, staticBtn, powerBtn);
   document.body.appendChild(controls);
 
   // Buttons that only make sense while the board is live; disabling greys them
@@ -176,25 +181,33 @@ export default (signedIn?: Promise<boolean>) => {
   });
 
   // Signed-in visitors get a direct route into the secret menu, so they don't
-  // have to hunt for it. It joins the control row, but starts above the board
-  // (z-60) rather than under it: after the linger it fades out, moves down to
-  // the beneath-the-board layer with the rest of the controls, and fades back
-  // in there — so from then on it's only reachable through eroded ground.
+  // have to hunt for it. Two buttons, both only for them:
+  //
+  //  - a permanent one in the control row, beneath the board like its
+  //    neighbours, reached through eroded ground;
+  //  - a cover laid over the whole group at z-60, above the board, so it's
+  //    there to be clicked the moment the page loads. It hides the row it
+  //    covers, then fades out after the linger and leaves for good.
   signedIn
     ?.then((yes) => {
-      if (!yes || !controls.isConnected) return;
+      if (!yes || !group.isConnected) return;
       const secretBtn = mkBtn("secret");
-      secretBtn.style.zIndex = "60";
-      secretBtn.style.transition = `opacity ${SECRET_BTN_FADE_MS}ms`;
       secretBtn.addEventListener("click", () => window.navigate("/secret"));
-      controls.appendChild(secretBtn);
+      group.appendChild(secretBtn);
+
+      const cover = mkBtn("secret");
+      // Opaque, unlike the translucent row beneath it: the buttons it covers
+      // would otherwise ghost through on a cleared board.
+      cover.style.cssText +=
+        `position:absolute;inset:0;z-index:60;background:#0c0a09;` +
+        `transition:opacity ${SECRET_COVER_FADE_MS}ms`;
+      cover.addEventListener("click", () => window.navigate("/secret"));
+      group.appendChild(cover);
       setTimeout(() => {
-        secretBtn.style.opacity = "0";
-        setTimeout(() => {
-          secretBtn.style.zIndex = "40";
-          secretBtn.style.opacity = "1";
-        }, SECRET_BTN_FADE_MS);
-      }, SECRET_BTN_LINGER_MS);
+        cover.style.opacity = "0";
+        cover.style.pointerEvents = "none";
+        setTimeout(() => cover.remove(), SECRET_COVER_FADE_MS);
+      }, SECRET_COVER_LINGER_MS);
     })
     .catch(() => {});
 
