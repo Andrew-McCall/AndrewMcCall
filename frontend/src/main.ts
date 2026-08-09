@@ -84,7 +84,10 @@ const routes: Record<string, Route> = {
     auth: "public",
     render: lazy(() => import("./secret_prettier.ts")),
   },
-  "/secret/vim": { auth: "public", render: lazy(() => import("./secret_vim.ts")) },
+  "/secret/vim": {
+    auth: "public",
+    render: disposable("vim", () => import("./secret_vim.ts")),
+  },
   "/secret/time": {
     auth: "public",
     render: disposable("time", () => import("./secret_time.ts")),
@@ -189,6 +192,11 @@ async function renderPage(): Promise<void> {
   }
   if (page !== "/secret/time") {
     loaded.get("time")?.disposeTime(); // stop the relative-time tab's 1s ticker
+  }
+  if (page !== "/secret/vim") {
+    // Tear down an open game: its keydown handler preventDefaults keys the rest
+    // of the site needs (Snake takes h/j/k/l and space).
+    loaded.get("vim")?.disposeVim();
   }
   // The notes page owns keyboard/connectivity listeners and a pending autosave,
   // so it is only torn down when leaving the section entirely — navigating

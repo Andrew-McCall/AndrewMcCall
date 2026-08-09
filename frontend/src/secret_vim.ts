@@ -64,6 +64,21 @@ type GameName = "snake" | "motions" | "quiz" | "games";
 // call through this so `:snake` etc. reach the live page's game panel.
 let gameLauncher: ((name: GameName) => void) | null = null;
 
+// Tears down whatever the last mount left running. Set on mount, called by the
+// router on the way out (see main.ts) — the same disposeX pattern as
+// secret_pi / secret_morse.
+//
+// Without this, navigating away with a game open left its `keydown` listener
+// attached: Snake's calls preventDefault on h/j/k/l/space, so those four
+// letters could no longer be typed into any input on the site, and space
+// stopped scrolling, until a full reload.
+let teardown: (() => void) | null = null;
+
+export function disposeVim(): void {
+  teardown?.();
+  teardown = null;
+}
+
 const buildEditor = async (doc: string): Promise<any> => {
   CSS.forEach(loadCss);
   await loadScript(CORE);
@@ -202,6 +217,8 @@ const normalize = (s: string): string =>
     .replace(/\n+$/, "");
 
 export default (app: HTMLElement) => {
+  disposeVim(); // drop anything a previous visit left running
+
   app.innerHTML = `
 <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
   <a href="/secret" title="Back to the secret menu">
@@ -465,6 +482,18 @@ export default (app: HTMLElement) => {
   };
 
   gameLauncher = launchGame;
+
+  // Leaving the page has to do what `returnToEditor` does for the listeners,
+  // without touching DOM the router has already discarded.
+  teardown = () => {
+    if (disposeGame) {
+      disposeGame();
+      disposeGame = null;
+    }
+    window.removeEventListener("keydown", onGameEscape, true);
+    gameLauncher = null;
+  };
+
   app.querySelector<HTMLButtonElement>("#vg-back")!.onclick = returnToEditor;
 
   // Build the editor once and reuse it across navigations (preserves the
