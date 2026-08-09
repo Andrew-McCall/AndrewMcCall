@@ -1,3 +1,6 @@
 # deploy.sh runtime state (per-machine, must never be committed)
 .deploy.state
 .deploy.lock
+
+# Scratch working notes (open questions, review scratchpad) — local only.
+refer.md

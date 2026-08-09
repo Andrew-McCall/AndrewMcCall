@@ -62,8 +62,10 @@ export function mountMotions(host: HTMLElement): () => void {
     <div>Total keys: <span id="mo-total" class="text-green-400">0</span></div>
   </div>
 
+  <!-- select-none: the grid is a keyboard game, and dragging across the cells
+       to select characters only ever gets in the way. -->
   <div id="mo-grid"
-    class="w-full max-w-2xl mt-3 bg-stone-900 border border-green-900 rounded p-4 overflow-x-auto font-mono text-base leading-7"></div>
+    class="w-full max-w-2xl mt-3 bg-stone-900 border border-green-900 rounded p-4 overflow-x-auto font-mono text-base leading-7 select-none"></div>
 
   <div id="mo-flash" class="h-6 mt-2 font-mono text-sm text-green-400"></div>
 

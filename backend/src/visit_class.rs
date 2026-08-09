@@ -14,11 +14,19 @@
 //!
 //! The nginx mirror logs a hit for every request it receives — page or not — so
 //! `route` alone can't be trusted; this is what actually separates real page
-//! visits from asset fetches and bot noise. Both the `/stats` aggregates (via
-//! the SQL predicates) and the admin per-visit rows (via [`classify`]) draw
-//! their classification from here, so the two never drift.
+//! visits from asset fetches and bot noise.
+//!
+//! [`classify`] is the only definition of these rules. The `/stats` aggregates
+//! used to repeat them as SQL — including a Postgres regex for hashed bundle
+//! names — which meant two implementations and a comment on each asking the
+//! reader to keep them in step. Now SQL only narrows to non-page rows and
+//! [`split_noise`] does the classifying, so there is nothing to drift.
 
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::LazyLock;
+
+use crate::text;
 
 /// Every real page route the frontend router serves (the `routes` table in
 /// `frontend/src/main.ts`). Keep the two lists in sync.
@@ -142,23 +150,13 @@ fn is_asset(route: &str) -> bool {
 /// Whether `route`'s final segment is a Vite-hashed bundle: a name ending in
 /// `-<8 chars>.<ext>`, where the 8 characters are base64url (`[A-Za-z0-9_-]`,
 /// so the hash may itself contain `-`/`_`) and `<ext>` is a known asset
-/// extension. Mirrors the SQL `ASSET_BUNDLE_RE` exactly.
+/// extension.
 fn is_hashed_bundle(route: &str) -> bool {
-    let segment = route.rsplit('/').next().unwrap_or(route);
-    let Some((stem, ext)) = segment.rsplit_once('.') else {
+    let Some((stem, ext)) = text::split_extension(text::last_segment(route)) else {
         return false;
     };
-    if !ASSET_EXTS.iter().any(|e| ext.eq_ignore_ascii_case(e)) {
-        return false;
-    }
-    // The stem must end in `-` followed by exactly 8 base64url characters.
-    let chars: Vec<char> = stem.chars().collect();
-    let n = chars.len();
-    n >= 9
-        && chars[n - 9] == '-'
-        && chars[n - 8..]
-            .iter()
-            .all(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+    ASSET_EXTS.iter().any(|e| ext.eq_ignore_ascii_case(e))
+        && text::strip_hash_suffix(stem).is_some()
 }
 
 /// Renders a route slice as a Postgres `ARRAY[...]::text[]` literal. Inputs are
@@ -173,18 +171,9 @@ fn routes_array(routes: &[&str]) -> String {
 /// compile-time constant, never user input.
 static VALID_ROUTES_ARRAY: LazyLock<String> = LazyLock::new(|| routes_array(VALID_ROUTES));
 
-/// A Postgres `text[]` literal of `ROBOT_ROUTES`. Same contract as above.
-static ROBOT_ROUTES_ARRAY: LazyLock<String> = LazyLock::new(|| routes_array(ROBOT_ROUTES));
-
-/// A Postgres `text[]` literal of `STATIC_ASSET_FILES`. Same contract as above.
-static STATIC_ASSET_FILES_ARRAY: LazyLock<String> =
-    LazyLock::new(|| routes_array(STATIC_ASSET_FILES));
-
-/// A case-insensitive Postgres regex matching a Vite-hashed bundle name at the
-/// end of the path: `-<8 base64url chars>.<ext>`, with the extension list drawn
-/// from the shared constant so it can't drift from `is_hashed_bundle`.
-static ASSET_BUNDLE_RE: LazyLock<String> =
-    LazyLock::new(|| format!(r"-[A-Za-z0-9_-]{{8}}\.({})$", ASSET_EXTS.join("|")));
+// `ROBOT_ROUTES` and `STATIC_ASSET_FILES` no longer need SQL array literals:
+// only `VALID_ROUTES` is used to narrow rows in the query, and everything
+// finer-grained is decided by `classify` in `split_noise`.
 
 /// Bundled-asset extensions whose Vite content-hash suffix is collapsed when
 /// grouping the static bucket. Vite names each build's bundle
@@ -194,16 +183,77 @@ static ASSET_BUNDLE_RE: LazyLock<String> =
 /// exact path.
 const HASH_GROUPED_EXTS: &[&str] = &["js", "mjs", "css"];
 
-/// A SQL expression that rewrites a route's Vite content-hash suffix to a
-/// literal `*`, so every build's `index-<hash>.js` groups under one
-/// `index-*.js` key instead of scattering a row per deploy. `column` is the SQL
-/// column (or expression) to rewrite. Any path without an 8-char hash suffix on
-/// a `HASH_GROUPED_EXTS` extension is left untouched.
-pub fn hash_grouped(column: &str) -> String {
-    format!(
-        r"regexp_replace({column}, '-[A-Za-z0-9_-]{{8}}\.({})$', '-*.\1')",
-        HASH_GROUPED_EXTS.join("|")
-    )
+/// Rewrites a route's Vite content-hash suffix to a literal `*`, so every
+/// build's `index-<hash>.js` groups under one `index-*.js` key instead of
+/// scattering a row per deploy. Any path without an 8-character hash suffix on
+/// a [`HASH_GROUPED_EXTS`] extension is returned untouched, and borrowed — the
+/// common case allocates nothing.
+pub fn hash_collapsed(route: &str) -> Cow<'_, str> {
+    let segment = text::last_segment(route);
+    let Some((stem, ext)) = text::split_extension(segment) else {
+        return Cow::Borrowed(route);
+    };
+    if !HASH_GROUPED_EXTS.iter().any(|e| ext.eq_ignore_ascii_case(e)) {
+        return Cow::Borrowed(route);
+    }
+    let Some(base) = text::strip_hash_suffix(stem) else {
+        return Cow::Borrowed(route);
+    };
+    let dir = &route[..route.len() - segment.len()];
+    Cow::Owned(format!("{dir}{base}-*.{ext}"))
+}
+
+/// The two noise buckets, folded out of one grouped query.
+#[derive(Default)]
+pub struct Noise {
+    pub static_total: i64,
+    pub static_routes: Vec<(String, i64)>,
+    pub robot_total: i64,
+    pub robot_routes: Vec<(String, i64)>,
+}
+
+/// Splits raw `(route, count)` rows into the static and robot buckets, folding
+/// each build's hashed bundle names together.
+///
+/// Classification lives here rather than in SQL so [`classify`] is the single
+/// definition of what a bot probe is — previously the same rules existed twice,
+/// once in Rust and once as a Postgres regex, with a comment on each asking the
+/// reader to keep them in step.
+pub fn split_noise(rows: impl IntoIterator<Item = (String, i64)>, limit: usize) -> Noise {
+    let mut statics: HashMap<String, i64> = HashMap::new();
+    let mut robots: HashMap<String, i64> = HashMap::new();
+    let mut out = Noise::default();
+
+    for (route, count) in rows {
+        match classify(Some(&route)) {
+            VisitClass::Page => continue, // filtered in SQL; belt and braces
+            VisitClass::Static => {
+                out.static_total += count;
+                *statics.entry(hash_collapsed(&route).into_owned()).or_default() += count;
+            }
+            VisitClass::Robot => {
+                out.robot_total += count;
+                *robots.entry(route).or_default() += count;
+            }
+        }
+    }
+
+    // Busiest first, then by route so equal counts are stably ordered — the
+    // same ordering the SQL `ORDER BY COUNT(*) DESC, route` produced.
+    let rank = |mut v: Vec<(String, i64)>| {
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        v.truncate(limit);
+        v
+    };
+    out.static_routes = rank(statics.into_iter().collect());
+    out.robot_routes = rank(robots.into_iter().collect());
+    out
+}
+
+/// SQL predicate for everything the two noise buckets cover: a real, non-page
+/// route. Which bucket each row lands in is decided by [`split_noise`].
+pub fn noise_only() -> String {
+    not_page()
 }
 
 /// SQL predicate keeping only real page visits (null routes included).
@@ -223,43 +273,6 @@ fn not_page() -> String {
     format!(
         "route IS NOT NULL AND NOT (route = ANY({}))",
         &*VALID_ROUTES_ARRAY
-    )
-}
-
-/// SQL boolean matching a genuine site asset: an exact root public file, or a
-/// hash-stamped `/assets/…` bundle. Mirrors [`is_asset`], and shared by the two
-/// noise predicates so they can't drift and stay exact complements. A bare
-/// extension match elsewhere (`/random.js`, `/assets/jquery.js`) is deliberately
-/// excluded — that's a bot probe, not a real fetch.
-fn is_static_asset_sql() -> String {
-    format!(
-        "(route = ANY({}) OR (route LIKE '{}%' AND route ~* '{}'))",
-        &*STATIC_ASSET_FILES_ARRAY,
-        STATIC_ASSET_PREFIX,
-        &*ASSET_BUNDLE_RE,
-    )
-}
-
-/// SQL predicate for static-asset fetches: a non-page route that isn't a forced
-/// robot path and points at a genuine site asset.
-pub fn static_only() -> String {
-    format!(
-        "({}) AND NOT (route = ANY({})) AND {}",
-        not_page(),
-        &*ROBOT_ROUTES_ARRAY,
-        is_static_asset_sql(),
-    )
-}
-
-/// SQL predicate for robot/scanner noise: a non-page route that is either a
-/// forced robot path or isn't a genuine site asset. The exact complement of
-/// `static_only()` over non-page routes, so the two partition the noise.
-pub fn robot_only() -> String {
-    format!(
-        "({}) AND (route = ANY({}) OR NOT {})",
-        not_page(),
-        &*ROBOT_ROUTES_ARRAY,
-        is_static_asset_sql(),
     )
 }
 
@@ -331,15 +344,94 @@ mod tests {
     }
 
     #[test]
-    fn hash_grouped_collapses_vite_bundle_hashes() {
-        let expr = hash_grouped("route");
-        // The Vite content-hash suffix (a `-` then 8 base64url chars) is
-        // rewritten to `-*`, and the extension list is drawn from the shared
-        // constant so the regex can't drift.
+    fn hash_collapsed_folds_vite_bundle_hashes() {
+        assert_eq!(hash_collapsed("/assets/index-a1B2c3D4.js"), "/assets/index-*.js");
+        assert_eq!(hash_collapsed("/assets/style-Zz_9-Yx8.css"), "/assets/style-*.css");
+        assert_eq!(hash_collapsed("/assets/app-a1B2c3D4.mjs"), "/assets/app-*.mjs");
+    }
+
+    #[test]
+    fn hash_collapsed_leaves_everything_else_alone() {
+        for route in [
+            "/chip.svg",                     // not a grouped extension
+            "/canvas.wasm",                  // not a grouped extension
+            "/assets/jquery.js",             // no hash suffix
+            "/assets/index-short.js",        // hash too short
+            "/assets/index-a1B2c3D4e.js",    // hash too long
+            "/posts/some-slug",              // no extension
+            "",
+        ] {
+            assert_eq!(hash_collapsed(route), route, "changed {route:?}");
+        }
+    }
+
+    #[test]
+    fn hash_collapsed_borrows_when_unchanged() {
+        // The common case must not allocate.
+        assert!(matches!(hash_collapsed("/posts/x"), Cow::Borrowed(_)));
+        assert!(matches!(hash_collapsed("/assets/a-a1B2c3D4.js"), Cow::Owned(_)));
+    }
+
+    #[test]
+    fn split_noise_partitions_and_folds() {
+        let rows = vec![
+            ("/assets/index-a1B2c3D4.js".to_string(), 3),
+            ("/assets/index-Zz_9-Yx8.js".to_string(), 4), // same bundle, later build
+            ("/chip.svg".to_string(), 2),
+            ("/wp-login.php".to_string(), 9),
+            ("/robots.txt".to_string(), 1), // forced robot path
+        ];
+        let noise = split_noise(rows, 10);
+
+        // Both builds of the bundle fold into one row.
+        assert_eq!(noise.static_total, 9);
         assert_eq!(
-            expr,
-            r"regexp_replace(route, '-[A-Za-z0-9_-]{8}\.(js|mjs|css)$', '-*.\1')"
+            noise.static_routes,
+            vec![("/assets/index-*.js".to_string(), 7), ("/chip.svg".to_string(), 2)]
         );
+
+        assert_eq!(noise.robot_total, 10);
+        assert_eq!(
+            noise.robot_routes,
+            vec![("/wp-login.php".to_string(), 9), ("/robots.txt".to_string(), 1)]
+        );
+    }
+
+    #[test]
+    fn split_noise_orders_by_count_then_route_and_limits() {
+        let rows = vec![
+            ("/b.php".to_string(), 5),
+            ("/a.php".to_string(), 5), // tie broken by route
+            ("/c.php".to_string(), 9),
+        ];
+        let noise = split_noise(rows, 2);
+        assert_eq!(
+            noise.robot_routes,
+            vec![("/c.php".to_string(), 9), ("/a.php".to_string(), 5)]
+        );
+        // The total counts every row, not just the ones that survived the limit.
+        assert_eq!(noise.robot_total, 19);
+    }
+
+    #[test]
+    fn split_noise_matches_classify_for_every_route() {
+        // The buckets are exactly what `classify` says, which is the property
+        // the old SQL predicates had to reimplement by hand.
+        let routes = [
+            "/assets/index-a1B2c3D4.js",
+            "/assets/jquery.js",
+            "/chip.svg",
+            "/random.js",
+            "/wp-login.php",
+            "/sitemap.xml",
+        ];
+        let noise = split_noise(routes.iter().map(|r| (r.to_string(), 1)), 100);
+        let expected_static = routes
+            .iter()
+            .filter(|r| classify(Some(r)) == VisitClass::Static)
+            .count() as i64;
+        assert_eq!(noise.static_total, expected_static);
+        assert_eq!(noise.robot_total, routes.len() as i64 - expected_static);
     }
 
     #[test]

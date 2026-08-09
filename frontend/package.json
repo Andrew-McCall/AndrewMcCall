@@ -7,7 +7,9 @@
     "dev": "vite",
     "deploy": "git pull && npm i && npm run build && rm -rf /var/www/andrewmccall/dist/* && mv -f dist /var/www/andrewmccall",
     "build:wasm": "cargo build --release --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown && cp wasm/target/wasm32-unknown-unknown/release/canvas_wasm.wasm dist/canvas.wasm || echo 'build:wasm skipped (no rust wasm toolchain); using committed public/canvas.wasm'",
-    "build": "tsc && vite build && npm run build:wasm",
+    "build": "tsc && npm test && vite build && npm run build:wasm",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview"
   },
   "devDependencies": {
@@ -16,7 +18,8 @@
     "path": "^0.12.7",
     "tailwindcss": "^4.0.13",
     "typescript": "^5.7.2",
-    "vite": "^7.1.9"
+    "vite": "^7.1.9",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "apexcharts": "^5.16.0"

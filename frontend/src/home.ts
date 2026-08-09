@@ -193,7 +193,7 @@ const SECRET_BTN_DELAY_MS = 180_000;
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-    <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
+    <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh]"></main>`;
 
   // Signed-in visitors have already seen the erosion reveal, so bring the board
   // up cleared for them — as if the "clear" button had been pressed. Signed in

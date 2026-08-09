@@ -39,7 +39,7 @@ export default async (app: HTMLElement) => {
       <button id="preview-btn" class="text-green-600 hover:text-green-400 cursor-pointer text-sm">preview</button>
       <span id="status" class="text-green-700 text-sm"></span>
     </div>
-    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4 select-text"></div>
+    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4"></div>
   </div>
 </div>`;
 

@@ -27,7 +27,7 @@ use sonic_rs::Serialize;
 
 use crate::config::ApiConfig;
 use crate::response::{ApiError, Body, ResponseBuilder};
-use crate::visit_class::{hash_grouped, named_page, page_only, robot_only, static_only};
+use crate::visit_class::{named_page, noise_only, page_only, split_noise};
 
 /// How many days of the per-day series to return, counting back from today
 /// (inclusive) in the caller's timezone. `generate_series` fills empty days as
@@ -243,43 +243,36 @@ pub async fn stats_response(config: &ApiConfig, query: Option<&str>) -> hyper::R
     // `route` for robot noise, but a hash-collapsing rewrite for static assets
     // so every build's `index-<hash>.js` folds into one `index-*.js` row rather
     // than a fresh row per deploy.
-    let load_bucket = |predicate: String, group: String| {
-        let pool = pool.clone();
-        async move {
-            let total = sqlx::query_scalar::<_, i64>(&format!(
-                "SELECT COUNT(*) FROM visits WHERE {predicate}"
-            ))
-            .fetch_one(&pool)
-            .await?;
-            let by_route = sqlx::query_as::<_, (String, i64)>(&format!(
-                "SELECT {group} AS route, COUNT(*) FROM visits WHERE {predicate} \
-                 GROUP BY {group} ORDER BY COUNT(*) DESC, route LIMIT $1"
-            ))
-            .bind(ROUTES)
-            .fetch_all(&pool)
-            .await?
-            .into_iter()
-            .map(|(route, count)| RouteCount { route, count })
-            .collect::<Vec<_>>();
-            Ok::<_, sqlx::Error>((total, by_route))
-        }
-    };
+    // One grouped query for both noise buckets, split in Rust by
+    // `visit_class::classify`. This replaced four queries whose predicates
+    // duplicated the classifier in SQL — two of them running a Postgres regex
+    // per row to recognise a hashed bundle name. Grouping by raw route first
+    // keeps the transferred rows down to distinct paths, not visits.
+    let noise_rows = sqlx::query_as::<_, (String, i64)>(&format!(
+        "SELECT route, COUNT(*) FROM visits WHERE {} GROUP BY route",
+        noise_only()
+    ))
+    .fetch_all(&pool)
+    .await;
 
-    let (static_total, by_static_route) =
-        match load_bucket(static_only(), hash_grouped("route")).await {
-            Ok(bucket) => bucket,
-            Err(err) => {
-                tracing::error!(error = %err, "failed to load static-asset visits");
-                return ResponseBuilder::from(ApiError::Internal).into();
-            }
-        };
-    let (robot_total, by_robot_route) = match load_bucket(robot_only(), "route".to_string()).await {
-        Ok(bucket) => bucket,
+    let noise = match noise_rows {
+        Ok(rows) => split_noise(rows, ROUTES as usize),
         Err(err) => {
-            tracing::error!(error = %err, "failed to load robot visits");
+            tracing::error!(error = %err, "failed to load non-page visits");
             return ResponseBuilder::from(ApiError::Internal).into();
         }
     };
+
+    let to_counts = |routes: Vec<(String, i64)>| {
+        routes
+            .into_iter()
+            .map(|(route, count)| RouteCount { route, count })
+            .collect::<Vec<_>>()
+    };
+    let static_total = noise.static_total;
+    let robot_total = noise.robot_total;
+    let by_static_route = to_counts(noise.static_routes);
+    let by_robot_route = to_counts(noise.robot_routes);
 
     let stats = StatsJson {
         total,

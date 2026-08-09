@@ -373,13 +373,10 @@ pub async fn delete_user(
 }
 
 /// Percent-decodes the first value of query parameter `key`, if present.
-fn query_param(query: Option<&str>, key: &str) -> Option<String> {
+pub fn query_param(query: Option<&str>, key: &str) -> Option<String> {
     query
-        .into_iter()
-        .flat_map(|q| q.split('&'))
-        .filter_map(|pair| pair.split_once('='))
-        .find(|(k, _)| *k == key)
-        .map(|(_, v)| {
+        .and_then(|q| crate::text::query_value(q, key))
+        .map(|v| {
             percent_encoding::percent_decode_str(v)
                 .decode_utf8_lossy()
                 .into_owned()
