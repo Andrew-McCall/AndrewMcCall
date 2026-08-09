@@ -6,7 +6,7 @@
 // or disable).
 
 import type { Me } from "./session.ts";
-import { api, esc, errorText, jsonInit, setMeta } from "./helpers";
+import { PAGE_CLASS, api, esc, errorText, jsonInit, setMeta } from "./helpers";
 
 type AdminUser = {
   id: string;
@@ -55,7 +55,7 @@ export default async (app: HTMLElement, me: Me) => {
   setMeta("Admin", "Site administration.");
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <header class="w-full max-w-3xl flex flex-col gap-4">
     <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
       <a href="/secret" title="Back to the secret menu" class="${RING} focus-visible:ring-green-500">

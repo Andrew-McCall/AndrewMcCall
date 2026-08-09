@@ -5,6 +5,8 @@
 // raw visits (time, source, page, client IP, user agent) from
 // `/api/admin/visits`, filterable by kind and by clicking a page path.
 
+import { PAGE_CLASS } from "./helpers";
+
 type Visit = {
   id: string;
   created_at: string;
@@ -77,7 +79,7 @@ export default async (app: HTMLElement) => {
   let route: string | null = null;
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <div class="w-full max-w-5xl flex items-center justify-between">
     <a href="/secret/admin" title="Back to admin">
       <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">

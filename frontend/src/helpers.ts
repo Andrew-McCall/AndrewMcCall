@@ -66,6 +66,28 @@ export const esc = (s: string): string =>
       ]!,
   );
 
+// The centred full-page wrapper every standalone view opens with.
+export const PAGE_CLASS =
+  "flex flex-col items-center min-h-screen py-10 px-4 text-green-500";
+
+// The big centred gradient title the standalone tool pages open with, linked
+// back to wherever the page came from.
+//
+// Deliberately covers only this one shape. The admin and list headers use a
+// smaller left-aligned title in a row beside other controls, at three different
+// back-links and two indentations, and one of them carries an extra class on
+// the anchor — folding those in would take more parameters than the duplication
+// costs.
+export const pageTitle = (
+  text: string,
+  { href = "/secret", hint = "Back to the secret menu" } = {},
+): string =>
+  `<a href="${esc(href)}" title="${esc(hint)}">\n` +
+  `    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">\n` +
+  `      ${esc(text)}\n` +
+  `    </h1>\n` +
+  `  </a>`;
+
 // Shared chrome. `LINK_CLASS` is the standard inline link; `CARD_LIFT_CLASS`
 // is the hover treatment on the home page's cards and buttons.
 export const LINK_CLASS =

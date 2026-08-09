@@ -2,7 +2,7 @@
 // whitelist (labels come from the server); this page just edits each detail's
 // value and optional link, saving the whole set in one PUT. Router gates to admins.
 
-import { api, esc, errorText, jsonInit } from "./helpers";
+import { PAGE_CLASS, api, esc, errorText, jsonInit } from "./helpers";
 
 type Detail = {
   key: string;
@@ -13,7 +13,7 @@ type Detail = {
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <div class="w-full max-w-3xl">
     <a href="/secret/admin" title="Back to admin">
       <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">

@@ -1,3 +1,4 @@
+import { PAGE_CLASS, pageTitle } from "./helpers";
 import { float_alert } from "./float_alert";
 
 // Password generator page. Talks to the backend template API by POSTing
@@ -28,12 +29,8 @@ const DEFAULT_TEMPLATE = "{W}-{W}-{W}{n4}{?}";
 
 export default (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Password Generator
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Password Generator")}
 
   <div class="w-full max-w-xl mt-8 flex flex-col gap-4">
     <div class="flex flex-col sm:flex-row gap-2">

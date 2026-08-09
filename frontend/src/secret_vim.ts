@@ -14,6 +14,7 @@
 // own Ex line — type `:snake`, `:motions`, `:quiz` (or `:games` for a menu) and
 // the game takes over the panel; Esc drops you back on the editor.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
 import { mountSnake } from "./secret_snake.ts";
 import { mountMotions } from "./secret_motion.ts";
 import { mountQuiz } from "./secret_vimquiz.ts";
@@ -220,12 +221,8 @@ export default (app: HTMLElement) => {
   disposeVim(); // drop anything a previous visit left running
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Vim
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Vim")}
 
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
     Real CodeMirror + Vim, fetched from a CDN on load — no bundled deps.
