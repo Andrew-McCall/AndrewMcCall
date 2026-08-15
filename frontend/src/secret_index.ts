@@ -31,6 +31,7 @@ const groups: MenuGroup[] = [
       { href: "/secret/password", label: "Password Generator" },
       { href: "/secret/colour", label: "Colour Picker" },
       { href: "/secret/barcode", label: "Barcodes" },
+      { href: "/secret/pixels", label: "Pixel Shapes" },
       { href: "/secret/time", label: "Time" },
       { href: "/secret/notes", label: "Notes", auth: true },
     ],

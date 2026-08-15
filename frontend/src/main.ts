@@ -100,6 +100,10 @@ const routes: Record<string, Route> = {
     auth: "public",
     render: lazy(() => import("./secret_barcode.ts")),
   },
+  "/secret/pixels": {
+    auth: "public",
+    render: lazy(() => import("./secret_pixels.ts")),
+  },
   "/secret/cron": { auth: "public", render: lazy(() => import("./secret_cron.ts")) },
   "/secret/man": { auth: "public", render: lazy(() => import("./secret_man.ts")) },
   "/secret/languages": {
