@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { bounds, closeDiagonals, rows, tidy, trim } from "./mask";
+import { bounds, closeDiagonals, rows, trim } from "./mask";
 import { fromRows, toRows } from "./test-helpers";
 
 describe("bounds", () => {
@@ -95,40 +95,6 @@ describe("trim", () => {
     const mask = fromRows(["..", ".."]);
 
     expect(trim(mask)).toBe(mask);
-  });
-});
-
-describe("tidy", () => {
-  test("removes an isolated speck", () => {
-    const mask = fromRows([".....", ".....", "..#..", ".....", "....."]);
-
-    expect(toRows(tidy(mask))).toEqual([
-      ".....",
-      ".....",
-      ".....",
-      ".....",
-      ".....",
-    ]);
-  });
-
-  test("removes a dead-end nub hanging off a wall", () => {
-    const mask = fromRows(["..#..", "..#..", "..#.."]);
-
-    // Top and bottom cells each have exactly one filled neighbour, so both go;
-    // the middle is then a speck and goes on the next pass.
-    expect(toRows(tidy(mask))).toEqual([".....", ".....", "....."]);
-  });
-
-  test("fills a pinhole surrounded on all sides", () => {
-    const mask = fromRows(["###", "#.#", "###"]);
-
-    expect(toRows(tidy(mask))).toEqual(["###", "###", "###"]);
-  });
-
-  test("leaves a clean ring untouched", () => {
-    const ring = ["#####", "#...#", "#...#", "#...#", "#####"];
-
-    expect(toRows(tidy(fromRows(ring)))).toEqual(ring);
   });
 });
 

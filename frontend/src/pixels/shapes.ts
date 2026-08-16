@@ -1,7 +1,7 @@
 // The shape table. Every entry declares its own controls, so the page renders
 // them rather than hard-coding a block of markup per shape.
 
-import { closeDiagonals, tidy, trim, type Mask, type Options } from "./mask";
+import { closeDiagonals, trim, type Mask, type Options } from "./mask";
 import * as ellipse from "./ellipse";
 import * as square from "./square";
 import * as star from "./star";
@@ -31,10 +31,6 @@ export interface Shape {
   inputs: Input[];
   build: (values: Values, options: Options) => Mask;
   maxThickness: (values: Values, bias: number) => number;
-}
-
-export interface GenerateOptions extends Options {
-  tidy: boolean;
 }
 
 const num = (values: Values, key: string): number => Number(values[key]);
@@ -212,8 +208,5 @@ export const maxThicknessFor = (
 export const generate = (
   shape: Shape,
   values: Values,
-  options: GenerateOptions,
-): Mask => {
-  const mask = shape.build(values, options);
-  return trim(options.tidy ? tidy(mask) : mask);
-};
+  options: Options,
+): Mask => trim(shape.build(values, options));

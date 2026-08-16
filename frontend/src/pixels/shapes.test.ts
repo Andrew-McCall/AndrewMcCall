@@ -14,7 +14,6 @@ const options = (over: Partial<Parameters<typeof generate>[2]> = {}) => ({
   mode: "outline" as const,
   thickness: 1,
   bias: -0.5,
-  tidy: false,
   ...over,
 });
 
@@ -114,19 +113,12 @@ describe("generate", () => {
     expect(components(thick, 4)).toBe(1);
   });
 
-  test("runs the tidy pass only when asked", () => {
+  test("draws the smallest circle as a ring, not a blob", () => {
     const small = { circle: true, w: 3, h: 3 };
-    const rough = generate(ellipse, small, options({ mode: "outline", bias: 0.4 }));
-    const tidied = generate(
-      ellipse,
-      small,
-      options({ mode: "outline", bias: 0.4, tidy: true }),
-    );
 
-    // At this size the outline closes around a single empty cell, which is
-    // exactly the pinhole tidy exists to fill.
-    expect(toRows(rough)).toEqual(["###", "#.#", "###"]);
-    expect(toRows(tidied)).toEqual(["###", "###", "###"]);
+    expect(
+      toRows(generate(ellipse, small, options({ mode: "outline", bias: 0.4 }))),
+    ).toEqual(["###", "#.#", "###"]);
   });
 
   test("caps the wall per shape", () => {

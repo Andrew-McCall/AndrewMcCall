@@ -54,23 +54,6 @@ export const copy = (mask: Mask): Mask => ({
   cells: mask.cells.slice(),
 });
 
-const NEIGHBOURS = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-  [1, 1],
-  [1, -1],
-  [-1, 1],
-  [-1, -1],
-];
-
-const filledNeighbours = (mask: Mask, x: number, y: number): number => {
-  let count = 0;
-  for (const [dx, dy] of NEIGHBOURS) count += at(mask, x + dx, y + dy);
-  return count;
-};
-
 // Squared distance from a cell's centre to the grid's centre.
 const centreDistance = (mask: Mask, x: number, y: number): number => {
   const dx = x + 0.5 - mask.w / 2;
@@ -114,39 +97,10 @@ export const closeDiagonals = (ring: Mask, solid: Mask): Mask => {
   return out;
 };
 
-// Sweeps up the two artefacts worth sweeping: specks and dead-end nubs on one
-// side, pinholes on the other. Each pass reads the previous grid and writes a
-// fresh one, so the result never depends on which way the scan ran.
-export const tidy = (mask: Mask): Mask => {
-  let current = mask;
-  for (let pass = 0; pass < 3; pass++) {
-    const next = copy(current);
-    let changed = false;
-    for (let y = 0; y < current.h; y++) {
-      for (let x = 0; x < current.w; x++) {
-        const neighbours = filledNeighbours(current, x, y);
-        if (at(current, x, y)) {
-          if (neighbours <= 1) {
-            setCell(next, x, y, 0);
-            changed = true;
-          }
-        } else if (neighbours >= 7) {
-          setCell(next, x, y, 1);
-          changed = true;
-        }
-      }
-    }
-    if (!changed) return current;
-    current = next;
-  }
-  return current;
-};
-
 // The box the drawn cells actually occupy, or null when nothing is drawn.
 //
 // This is not the same as the grid: a negative smoothing bias pulls the edge
-// in, and the tidy pass can take a speck off a corner, so the shape is often
-// smaller than the size that was asked for.
+// in, so the shape is often smaller than the size that was asked for.
 export const bounds = (
   mask: Mask,
 ): { x0: number; y0: number; x1: number; y1: number } | null => {

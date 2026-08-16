@@ -96,9 +96,6 @@ export default (app: HTMLElement) => {
       </label>
 
       <div class="flex flex-wrap gap-4 font-mono text-sm text-green-300">
-        <label class="flex items-center gap-2 cursor-pointer select-none" title="Remove specks and fill pinholes">
-          <input id="px-tidy" type="checkbox" class="accent-green-600" /> Tidy
-        </label>
         <label class="flex items-center gap-2 cursor-pointer select-none" title="Rule the preview, centred on the shape">
           <input id="px-grid" type="checkbox" class="accent-green-600" /> Grid
         </label>
@@ -180,7 +177,6 @@ export default (app: HTMLElement) => {
   const biasValue = $<HTMLSpanElement>("px-bias-value");
   const pixelScale = $<HTMLInputElement>("px-pixel");
   const pixelValue = $<HTMLSpanElement>("px-pixel-value");
-  const tidy = $<HTMLInputElement>("px-tidy");
   const gridToggle = $<HTMLInputElement>("px-grid");
   const gridStep = $<HTMLInputElement>("px-grid-step");
   const colour = $<HTMLInputElement>("px-colour");
@@ -200,7 +196,6 @@ export default (app: HTMLElement) => {
     mode,
     thickness: 2,
     bias: 0.0,
-    tidy: false,
   });
 
   const renderInput = (input: Input): string => {
@@ -375,7 +370,6 @@ export default (app: HTMLElement) => {
         mode,
         thickness: Number(thickness.value),
         bias: shape.smoothing ? Number(bias.value) : 0,
-        tidy: tidy.checked,
       });
       paint(current);
       // The mask is trimmed to what it draws, so this is the size the shape
@@ -439,7 +433,6 @@ export default (app: HTMLElement) => {
     thickness,
     bias,
     pixelScale,
-    tidy,
     gridToggle,
     gridStep,
     colour,
