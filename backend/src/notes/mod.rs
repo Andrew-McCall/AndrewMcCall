@@ -29,6 +29,7 @@ use std::net::SocketAddr;
 use chrono::{DateTime, Utc};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::auth;
@@ -51,7 +52,8 @@ const EXCERPT_LEN: usize = 200;
 /// A list entry. Deliberately without the body: the browser, quick switcher and
 /// `[[link]]` autocomplete all work from this, and shipping every note's full
 /// text to a phone to render a sidebar would be wasteful.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "NoteIndexEntry")]
 struct NoteIndexJson {
     id: String,
     /// `None` for a soft-deleted note: deletion releases its names so they can
@@ -76,14 +78,14 @@ struct NoteIndexJson {
     updated_at: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Ts)]
 struct MetaEntry {
     key: String,
     value: String,
 }
 
-#[derive(Serialize)]
-struct LinkJson {
+#[derive(Serialize, Ts)]
+struct NoteLink {
     slug: String,
     /// `None` when the target doesn't exist yet — a dangling link.
     title: Option<String>,
@@ -91,7 +93,8 @@ struct LinkJson {
 }
 
 /// One note in full, with everything the reader needs in a single request.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "Note")]
 struct NoteJson {
     id: String,
     slug: String,
@@ -101,8 +104,8 @@ struct NoteJson {
     /// Every name this note answers to, primary first.
     names: Vec<String>,
     udf: Vec<MetaEntry>,
-    links: Vec<LinkJson>,
-    backlinks: Vec<LinkJson>,
+    links: Vec<NoteLink>,
+    backlinks: Vec<NoteLink>,
     created_at: String,
     updated_at: String,
     /// Non-fatal problems from the last save (empty on a plain read).
@@ -394,7 +397,7 @@ async fn load_full(
             .collect(),
         links: links
             .into_iter()
-            .map(|(slug, id, title)| LinkJson {
+            .map(|(slug, id, title)| NoteLink {
                 slug,
                 id: id.map(|i| i.to_string()),
                 title,
@@ -402,7 +405,7 @@ async fn load_full(
             .collect(),
         backlinks: backlinks
             .into_iter()
-            .map(|(id, slug, title)| LinkJson {
+            .map(|(id, slug, title)| NoteLink {
                 slug,
                 id: Some(id.to_string()),
                 title: Some(title),

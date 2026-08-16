@@ -2,14 +2,7 @@
 
 import { PAGE_CLASS, api, esc, errorText, jsonInit } from "./helpers";
 
-type Project = {
-  id: string;
-  name: string;
-  description: string;
-  url: string | null;
-  repo: string | null;
-  sort_order: number;
-};
+import type { Project } from "@andrewmccall/api-types";
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `

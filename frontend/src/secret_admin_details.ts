@@ -4,12 +4,7 @@
 
 import { PAGE_CLASS, api, esc, errorText, jsonInit } from "./helpers";
 
-type Detail = {
-  key: string;
-  label: string;
-  value: string;
-  url: string | null;
-};
+import type { Detail } from "@andrewmccall/api-types";
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `

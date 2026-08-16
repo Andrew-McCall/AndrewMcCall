@@ -8,14 +8,7 @@
 import type { Me } from "./session.ts";
 import { PAGE_CLASS, api, esc, errorText, jsonInit, setMeta } from "./helpers";
 
-type AdminUser = {
-  id: string;
-  name: string;
-  role: string;
-  totp_enabled: boolean;
-  created_at: string;
-  last_login: string | null;
-};
+import type { AdminUser } from "@andrewmccall/api-types";
 
 // Dates here are audit data, so unlike the public pages' `fmtDate` these keep
 // the time of day.

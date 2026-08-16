@@ -22,6 +22,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@andrewmccall/api-types": "file:../backend/bindings",
     "apexcharts": "^5.16.0"
   }
 }

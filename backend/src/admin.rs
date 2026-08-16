@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use chrono::{DateTime, Utc};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::auth::{self, AuthUser};
@@ -45,7 +46,8 @@ struct AdminUser {
 
 /// The JSON wire shape of an admin user listing row. `UserRole` has no serde
 /// impl (it's only a `sqlx::Type`), so we map to explicit string fields here.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "AdminUser")]
 struct AdminUserJson {
     id: String,
     name: String,
@@ -209,8 +211,8 @@ struct VisitRow {
 }
 
 /// The JSON wire shape of a detailed visit row.
-#[derive(Serialize)]
-struct VisitJson {
+#[derive(Serialize, Ts)]
+struct Visit {
     id: String,
     created_at: String,
     kind: String,
@@ -223,7 +225,7 @@ struct VisitJson {
     user_agent: String,
 }
 
-impl From<VisitRow> for VisitJson {
+impl From<VisitRow> for Visit {
     fn from(v: VisitRow) -> Self {
         Self {
             id: v.id.to_string(),
@@ -239,12 +241,12 @@ impl From<VisitRow> for VisitJson {
 
 /// A page of detailed visits plus the total matching the current filters, so the
 /// client can drive prev/next controls.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct VisitsPage {
     total: i64,
     limit: i64,
     offset: i64,
-    visits: Vec<VisitJson>,
+    visits: Vec<Visit>,
 }
 
 /// Largest page the admin visits endpoint will return in one request.
@@ -325,7 +327,7 @@ pub async fn list_visits(
         total,
         limit,
         offset,
-        visits: rows.into_iter().map(VisitJson::from).collect(),
+        visits: rows.into_iter().map(Visit::from).collect(),
     };
     ResponseBuilder::new(StatusCode::OK).json(&page).into()
 }

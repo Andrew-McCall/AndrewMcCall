@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use hyper::header::{CACHE_CONTROL, HeaderValue};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::admin;
@@ -121,8 +122,8 @@ struct ProjectRow {
     sort_order: i32,
 }
 
-#[derive(Serialize)]
-struct ProjectJson {
+#[derive(Serialize, Ts)]
+struct Project {
     id: String,
     name: String,
     description: String,
@@ -131,7 +132,7 @@ struct ProjectJson {
     sort_order: i32,
 }
 
-impl From<ProjectRow> for ProjectJson {
+impl From<ProjectRow> for Project {
     fn from(row: ProjectRow) -> Self {
         Self {
             id: row.id.to_string(),
@@ -144,15 +145,15 @@ impl From<ProjectRow> for ProjectJson {
     }
 }
 
-#[derive(Serialize, Default)]
-struct ProfileJson {
+#[derive(Serialize, Default, Ts)]
+struct Profile {
     intro_markdown: String,
     profile_image_url: String,
     github_url: String,
 }
 
-#[derive(Serialize)]
-struct CommitJson {
+#[derive(Serialize, Ts)]
+struct Commit {
     sha: String,
     repo: String,
     message: String,
@@ -160,36 +161,37 @@ struct CommitJson {
     committed_at: String,
 }
 
-#[derive(Serialize)]
-struct DetailJson {
+#[derive(Serialize, Ts)]
+struct Detail {
     key: String,
     label: String,
     value: String,
     url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "Home")]
 struct HomeJson {
-    profile: ProfileJson,
-    projects: Vec<ProjectJson>,
-    commits: Vec<CommitJson>,
+    profile: Profile,
+    projects: Vec<Project>,
+    commits: Vec<Commit>,
     posts: Vec<posts::PostSummary>,
     book_reviews: Vec<posts::PostSummary>,
-    details: Vec<DetailJson>,
+    details: Vec<Detail>,
 }
 
 // ---------------------------------------------------------------------------
 // Shared loaders.
 // ---------------------------------------------------------------------------
 
-async fn load_profile(pool: &sqlx::PgPool) -> Result<ProfileJson, sqlx::Error> {
+async fn load_profile(pool: &sqlx::PgPool) -> Result<Profile, sqlx::Error> {
     let rows: Vec<(String, String)> =
         sqlx::query_as("SELECT key, value FROM site_settings WHERE key = ANY($1)")
             .bind(&PROFILE_KEYS[..])
             .fetch_all(pool)
             .await?;
 
-    let mut profile = ProfileJson::default();
+    let mut profile = Profile::default();
     for (key, value) in rows {
         match key.as_str() {
             "intro_markdown" => profile.intro_markdown = value,
@@ -201,17 +203,17 @@ async fn load_profile(pool: &sqlx::PgPool) -> Result<ProfileJson, sqlx::Error> {
     Ok(profile)
 }
 
-async fn load_projects(pool: &sqlx::PgPool) -> Result<Vec<ProjectJson>, sqlx::Error> {
+async fn load_projects(pool: &sqlx::PgPool) -> Result<Vec<Project>, sqlx::Error> {
     let rows: Vec<ProjectRow> = sqlx::query_as(
         "SELECT id, name, description, url, repo, sort_order \
          FROM projects WHERE NOT is_deleted ORDER BY sort_order, created_at",
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(ProjectJson::from).collect())
+    Ok(rows.into_iter().map(Project::from).collect())
 }
 
-async fn load_commits(pool: &sqlx::PgPool, limit: i64) -> Result<Vec<CommitJson>, sqlx::Error> {
+async fn load_commits(pool: &sqlx::PgPool, limit: i64) -> Result<Vec<Commit>, sqlx::Error> {
     let rows: Vec<(String, String, String, String, DateTime<Utc>)> = sqlx::query_as(
         "SELECT sha, repo, message, url, committed_at \
          FROM github_commits ORDER BY committed_at DESC LIMIT $1",
@@ -221,7 +223,7 @@ async fn load_commits(pool: &sqlx::PgPool, limit: i64) -> Result<Vec<CommitJson>
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(sha, repo, message, url, committed_at)| CommitJson {
+        .map(|(sha, repo, message, url, committed_at)| Commit {
             sha,
             repo,
             message,
@@ -246,7 +248,7 @@ async fn detail_rows(
 fn assemble_details(
     rows: &[(String, String, Option<String>)],
     include_empty: bool,
-) -> Vec<DetailJson> {
+) -> Vec<Detail> {
     DETAILS
         .iter()
         .filter_map(|(key, label)| {
@@ -255,7 +257,7 @@ fn assemble_details(
             if value.is_empty() && !include_empty {
                 return None;
             }
-            Some(DetailJson {
+            Some(Detail {
                 key: (*key).to_string(),
                 label: (*label).to_string(),
                 value,
@@ -292,8 +294,8 @@ fn dynamic_details(
     req: &Request<hyper::body::Incoming>,
     peer: SocketAddr,
     config: &ApiConfig,
-) -> Vec<DetailJson> {
-    let mut details = vec![DetailJson {
+) -> Vec<Detail> {
+    let mut details = vec![Detail {
         key: "uptime".into(),
         label: "Uptime".into(),
         value: format_uptime(config.started_at.elapsed().as_secs()),
@@ -302,7 +304,7 @@ fn dynamic_details(
     // Skip the IP detail rather than failing the page if it can't be resolved
     // (e.g. a missing forwarding header behind a misconfigured proxy).
     if let Ok(ip) = resolve_client_ip(config.ip_source, req, peer) {
-        details.push(DetailJson {
+        details.push(Detail {
             key: "your_ip".into(),
             label: "Your IP".into(),
             value: ip.0,
@@ -481,7 +483,7 @@ pub async fn update_profile(
         }
     }
 
-    let profile = ProfileJson {
+    let profile = Profile {
         intro_markdown: body.intro_markdown,
         profile_image_url: image_url,
         github_url,
@@ -696,7 +698,7 @@ pub async fn create_project(
 
     match result {
         Ok(_) => ResponseBuilder::new(StatusCode::CREATED)
-            .json(&ProjectJson {
+            .json(&Project {
                 id: id.to_string(),
                 name: project.name,
                 description: project.description,
@@ -752,7 +754,7 @@ pub async fn update_project(
 
     match result {
         Ok(done) if done.rows_affected() > 0 => ResponseBuilder::new(StatusCode::OK)
-            .json(&ProjectJson {
+            .json(&Project {
                 id: project_id.to_string(),
                 name: project.name,
                 description: project.description,

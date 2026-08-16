@@ -24,6 +24,7 @@
 
 use chrono::NaiveDate;
 use sonic_rs::Serialize;
+use ts_typegen::Ts;
 
 use crate::config::ApiConfig;
 use crate::response::{ApiError, Body, ResponseBuilder};
@@ -34,28 +35,28 @@ use crate::visit_class::{named_page, noise_only, page_only, split_noise};
 /// zero so the axis is continuous.
 const DAYS: i32 = 30;
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct DayCount {
     /// ISO date (`YYYY-MM-DD`) in the caller's timezone.
     day: String,
     count: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct KindCount {
     /// Visit kind: `static`, `js`, or `secret`.
     kind: String,
     count: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct HourCount {
     /// Hour of day in the caller's timezone, `0`–`23`.
     hour: i32,
     count: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct RouteCount {
     /// The page path, e.g. `/` or `/secret/pi`.
     route: String,
@@ -66,7 +67,8 @@ struct RouteCount {
 /// picker without unbounding the response.
 const ROUTES: i64 = 20;
 
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "Stats")]
 struct StatsJson {
     total: i64,
     /// Distinct client IPs — an aggregate count only; no IP is ever returned.

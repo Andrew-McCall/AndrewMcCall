@@ -5,22 +5,7 @@
 
 import { PAGE_CLASS, pageTitle } from "./helpers";
 
-type City = {
-  name: string;
-  x: number;
-  y: number;
-  population: number | null;
-  capital: boolean;
-};
-
-type Country = {
-  country: string;
-  population: number | null;
-  gdp: number | null;
-  image: string;
-  flag: string | null;
-  cities: City[];
-};
+import type { Country } from "@andrewmccall/api-types";
 
 type FlatCity = { name: string; country: string; population: number | null };
 

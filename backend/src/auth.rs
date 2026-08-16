@@ -25,6 +25,7 @@ use rand_core::UnwrapErr;
 use sha2::{Digest, Sha256};
 use sonic_rs::{Deserialize, Serialize};
 use totp_rs::{Algorithm, Secret, TOTP};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
@@ -383,7 +384,8 @@ fn record_auth(
 // ---------------------------------------------------------------------------
 
 /// The public JSON shape of a user — never carries the pin hash or TOTP secret.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "Me")]
 pub struct UserView {
     pub id: String,
     pub name: String,

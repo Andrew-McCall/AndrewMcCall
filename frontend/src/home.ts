@@ -17,35 +17,8 @@ import {
 import { postCard, type PostSummary } from "./post_card";
 import { renderMarkdown } from "./markdown";
 import { getMe } from "./session";
-
-type Home = {
-  profile: {
-    intro_markdown: string;
-    profile_image_url: string;
-    github_url: string;
-  };
-  projects: {
-    name: string;
-    description: string;
-    url: string | null;
-    repo: string | null;
-  }[];
-  commits: {
-    sha: string;
-    repo: string;
-    message: string;
-    url: string;
-    committed_at: string;
-  }[];
-  posts: PostSummary[];
-  book_reviews: PostSummary[];
-  details: {
-    key: string;
-    label: string;
-    value: string;
-    url: string | null;
-  }[];
-};
+// Generated from `HomeJson` in `backend/src/site.rs` — see `backend/build.rs`.
+import type { Home } from "@andrewmccall/api-types";
 
 const section = (title: string, inner: string) => `
   <section class="w-full max-w-3xl mx-auto px-6 py-10">

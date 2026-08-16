@@ -4,11 +4,7 @@
 import { PAGE_CLASS, api, errorText, jsonInit } from "./helpers";
 import { renderMarkdown } from "./markdown";
 
-type Profile = {
-  intro_markdown: string;
-  profile_image_url: string;
-  github_url: string;
-};
+import type { Profile } from "@andrewmccall/api-types";
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `

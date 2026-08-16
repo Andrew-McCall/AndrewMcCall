@@ -18,32 +18,9 @@
 import { PAGE_CLASS, pageTitle } from "./helpers";
 import type ApexCharts from "apexcharts";
 
-type DayCount = { day: string; count: number };
-type KindCount = { kind: string; count: number };
-type HourCount = { hour: number; count: number };
-type RouteCount = { route: string; count: number };
-
-type Stats = {
-  total: number;
-  unique_visitors: number;
-  // The page the aggregates are filtered to, or null when they span all pages.
-  route: string | null;
-  per_day: DayCount[];
-  by_kind: KindCount[];
-  by_hour: HourCount[];
-  // Busiest pages overall — always all-pages, so it stays a stable picker menu.
-  by_route: RouteCount[];
-  // Non-page routes that look like static-asset fetches (`/chip.svg`, a `.css`)
-  // — real resource loads, not spam. Kept out of every count above. All-pages.
-  static_total: number;
-  // The most-hit static-asset paths. Always all-pages.
-  by_static_route: RouteCount[];
-  // Non-page routes that are robot/scanner noise, including crawler fetches of
-  // `/robots.txt`/`/sitemap.xml`. Kept out of every count above. All-pages.
-  robot_total: number;
-  // The most-hit robot paths. Always all-pages.
-  by_robot_route: RouteCount[];
-};
+// Generated from `stats.rs` — see `backend/build.rs`. The per-field comments
+// that used to live here are carried through as JSDoc on the generated types.
+import type { DayCount, HourCount, KindCount, RouteCount, Stats } from "@andrewmccall/api-types";
 
 // Shared palette, sampled from the site's green identity so all three charts
 // read as one system.

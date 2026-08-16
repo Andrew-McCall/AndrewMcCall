@@ -13,50 +13,18 @@
 
 import { api, errorText } from "../helpers";
 
-export interface NoteIndexEntry {
-  id: string;
-  /** `null` for a trashed note: deletion releases its names, so it has no
-   *  address until restored. Nullable so the compiler forces callers to say
-   *  what they do about it rather than navigating to `/secret/notes/`. */
-  slug: string | null;
-  title: string;
-  tags: string[];
-  /** Every name this note answers to, primary first — so a `[[link]]` written
-   *  against a superseded name resolves client-side exactly as the server
-   *  resolves it. */
-  names: string[];
-  /** User-defined properties, which the browser filters on client-side. */
-  udf: MetaEntry[];
-  excerpt: string;
-  created_at: string;
-  updated_at: string;
-}
+// The wire shapes are generated from the Rust types that serialize them
+// (`backend/src/notes/mod.rs`) — see `backend/build.rs`. They are re-exported
+// here so this module stays the one place the rest of the notes UI imports
+// from, exactly as when they were written out by hand.
+import type {
+  MetaEntry,
+  Note,
+  NoteIndexEntry,
+  NoteLink,
+} from "@andrewmccall/api-types";
 
-export interface MetaEntry {
-  key: string;
-  value: string;
-}
-
-export interface NoteLink {
-  slug: string;
-  title: string | null;
-  id: string | null;
-}
-
-export interface Note {
-  id: string;
-  slug: string;
-  title: string;
-  body: string;
-  tags: string[];
-  names: string[];
-  udf: MetaEntry[];
-  links: NoteLink[];
-  backlinks: NoteLink[];
-  created_at: string;
-  updated_at: string;
-  notices?: string[];
-}
+export type { MetaEntry, Note, NoteIndexEntry, NoteLink };
 
 export class ApiError extends Error {
   constructor(
