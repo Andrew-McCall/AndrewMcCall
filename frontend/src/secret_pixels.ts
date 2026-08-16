@@ -84,7 +84,7 @@ export default (app: HTMLElement) => {
           <span title="Shifts the edge in or out by this many cells">Smoothing</span>
           <span id="px-bias-value" class="text-green-600"></span>
         </span>
-        <input id="px-bias" type="range" min="-1" max="1" step="0.05" value="-0.5" class="accent-green-600 w-full" />
+        <input id="px-bias" type="range" min="-1" max="1" step="0.05" value="0" class="accent-green-600 w-full" />
       </label>
 
       <label class="flex flex-col gap-1 font-mono text-sm text-green-300">
