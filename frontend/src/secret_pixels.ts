@@ -199,7 +199,7 @@ export default (app: HTMLElement) => {
   let current: Mask = generate(shape, values, {
     mode,
     thickness: 2,
-    bias: -0.5,
+    bias: 0.0,
     tidy: false,
   });
 
