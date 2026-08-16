@@ -151,6 +151,7 @@ export default (app: HTMLElement) => {
               <tr class="sticky top-0 bg-stone-950 text-green-600 uppercase tracking-widest">
                 <th class="text-right px-3 py-2 w-12">y</th>
                 <th class="text-right px-3 py-2 w-16">Cells</th>
+                <th class="text-left px-3 py-2">Sizes</th>
                 <th class="text-left px-3 py-2">Spans</th>
               </tr>
             </thead>
@@ -380,15 +381,21 @@ export default (app: HTMLElement) => {
         : "nothing to draw";
       const stats = rowStats(current);
       rowsPanel.innerHTML = stats
-        .map(
-          (row) => {
-            const span = spansOf(row);
-            return `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
+        .map((row) => {
+          const spans = spansOf(row);
+
+          const sizes = spans.map((span) => {
+            const [start, end] = span.split("-").map(Number);
+            return end - start + 1;
+          });
+
+          return `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
             <td class="text-right px-3 py-1 text-green-700">${row.y}</td>
-            <td class="text-right px-3 py-1 text-lime-300">${span.length > 1 ? row.total: `${row.total} (${row.total/span.length})`}</td>
-            <td class="px-3 py-1 text-green-400">${span.join(", ")}</td>
-          </tr>`},
-        )
+            <td class="text-right px-3 py-1 text-lime-300">${row.total}</td>
+            <td class="px-3 py-1 text-green-500">${sizes.join(", ")}</td>
+            <td class="px-3 py-1 text-green-400">${spans.join(", ")}</td>
+          </tr>`;
+        })
         .join("");
       const cells = stats.reduce((sum, row) => sum + row.total, 0);
       totalLabel.textContent = `${cells} cells, ${stats.length} rows`;
