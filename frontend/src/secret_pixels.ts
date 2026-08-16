@@ -1,11 +1,13 @@
 // Pixel Shape Generator. Everything is client-side: the shape table in
 // `pixels/shapes.ts` says which controls to draw, the rasterisers turn those
-// values into a grid of cells, and the canvas here is one device pixel per cell
-// blown up with `image-rendering: pixelated`.
+// values into a grid of cells, and the canvas here blows that grid up with
+// `image-rendering: pixelated` — one device pixel per cell normally, several
+// each once Pixel size asks for gaps between them.
 
 import { PAGE_CLASS, pageTitle, setMeta } from "./helpers";
 import { rowCountText, toPngBlob, toSvg, download } from "./pixels/export";
 import { GRID_BOLD, GRID_FINE, gridOffset, line } from "./pixels/grid";
+import { backingScale, cellRect } from "./pixels/render";
 import type { Mask, Mode } from "./pixels/mask";
 import {
   SHAPES,
@@ -46,8 +48,7 @@ export default (app: HTMLElement) => {
   ${pageTitle("Pixel Shapes")}
 
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
-    Circles that look right on a grid — pick a shape, set the size, and read the
-    rows off or download it.
+    Circles that are just right -.- pick a shape, set the size, and see for yourself.
   </p>
 
   <div class="w-full max-w-5xl mt-8 flex flex-col lg:flex-row gap-6">
@@ -77,6 +78,14 @@ export default (app: HTMLElement) => {
           <span id="px-bias-value" class="text-green-600"></span>
         </span>
         <input id="px-bias" type="range" min="-1" max="1" step="0.05" value="-0.5" class="accent-green-600 w-full" />
+      </label>
+
+      <label class="flex flex-col gap-1 font-mono text-sm text-green-300">
+        <span class="flex justify-between">
+          <span title="Draw each pixel smaller than its cell, leaving gaps between them">Pixel size</span>
+          <span id="px-pixel-value" class="text-green-600"></span>
+        </span>
+        <input id="px-pixel" type="range" min="0.1" max="1" step="0.05" value="1" class="accent-green-600 w-full" />
       </label>
 
       <div class="flex flex-wrap gap-4 font-mono text-sm text-green-300">
@@ -148,6 +157,8 @@ export default (app: HTMLElement) => {
   const biasRow = $<HTMLLabelElement>("px-bias-row");
   const bias = $<HTMLInputElement>("px-bias");
   const biasValue = $<HTMLSpanElement>("px-bias-value");
+  const pixelScale = $<HTMLInputElement>("px-pixel");
+  const pixelValue = $<HTMLSpanElement>("px-pixel-value");
   const tidy = $<HTMLInputElement>("px-tidy");
   const gridToggle = $<HTMLInputElement>("px-grid");
   const gridStep = $<HTMLInputElement>("px-grid-step");
@@ -236,31 +247,14 @@ export default (app: HTMLElement) => {
 
     biasValue.textContent = Number(bias.value).toFixed(2);
     biasRow.classList.toggle("hidden", !shape.smoothing);
+
+    pixelValue.textContent = `${Math.round(Number(pixelScale.value) * 100)}%`;
   };
 
-  const paint = (mask: Mask) => {
-    canvas.width = mask.w;
-    canvas.height = mask.h;
-    canvas.style.aspectRatio = `${mask.w} / ${mask.h}`;
-
-    const context = canvas.getContext("2d")!;
-    const image = context.createImageData(mask.w, mask.h);
-    const red = parseInt(colour.value.slice(1, 3), 16);
-    const green = parseInt(colour.value.slice(3, 5), 16);
-    const blue = parseInt(colour.value.slice(5, 7), 16);
-
-    for (let i = 0; i < mask.cells.length; i++) {
-      if (!mask.cells[i]) continue;
-      image.data[i * 4] = red;
-      image.data[i * 4 + 1] = green;
-      image.data[i * 4 + 2] = blue;
-      image.data[i * 4 + 3] = 255;
-    }
-    context.putImageData(image, 0, 0);
-
-    // The overlay takes the canvas's own aspect ratio rather than being pinned
-    // to the box, so the two are the same rectangle to the pixel and the lines
-    // sit on real cell boundaries.
+  // The overlay takes the canvas's own aspect ratio rather than being pinned to
+  // the box, so the two are the same rectangle to the pixel and the lines sit on
+  // real cell boundaries.
+  const paintGrid = (mask: Mask) => {
     overlay.classList.toggle("hidden", !gridToggle.checked);
     overlay.style.aspectRatio = `${mask.w} / ${mask.h}`;
     if (!gridToggle.checked) return;
@@ -296,6 +290,57 @@ export default (app: HTMLElement) => {
 
     overlay.style.backgroundImage = layers.join(",");
     overlay.style.backgroundSize = tiles.join(",");
+  };
+
+  // At full size a cell is one device pixel and the whole mask goes down in a
+  // single putImageData. Gaps need room inside a cell, so the canvas grows to
+  // several pixels each and the cells are drawn one at a time.
+  const paintCells = (mask: Mask, pixelSize: number, scale: number) => {
+    const context = canvas.getContext("2d")!;
+    const rect = cellRect(scale, pixelSize);
+    context.fillStyle = colour.value;
+
+    for (let y = 0; y < mask.h; y++) {
+      for (let x = 0; x < mask.w; x++) {
+        if (!mask.cells[y * mask.w + x]) continue;
+        context.fillRect(
+          x * scale + rect.offset,
+          y * scale + rect.offset,
+          rect.size,
+          rect.size,
+        );
+      }
+    }
+  };
+
+  const paint = (mask: Mask) => {
+    const pixelSize = Number(pixelScale.value);
+    const scale = backingScale(Math.max(mask.w, mask.h), pixelSize);
+
+    canvas.width = mask.w * scale;
+    canvas.height = mask.h * scale;
+    canvas.style.aspectRatio = `${mask.w} / ${mask.h}`;
+
+    const context = canvas.getContext("2d")!;
+    if (scale > 1) {
+      paintCells(mask, pixelSize, scale);
+      return paintGrid(mask);
+    }
+
+    const image = context.createImageData(mask.w, mask.h);
+    const red = parseInt(colour.value.slice(1, 3), 16);
+    const green = parseInt(colour.value.slice(3, 5), 16);
+    const blue = parseInt(colour.value.slice(5, 7), 16);
+
+    for (let i = 0; i < mask.cells.length; i++) {
+      if (!mask.cells[i]) continue;
+      image.data[i * 4] = red;
+      image.data[i * 4 + 1] = green;
+      image.data[i * 4 + 2] = blue;
+      image.data[i * 4 + 3] = 255;
+    }
+    context.putImageData(image, 0, 0);
+    paintGrid(mask);
   };
 
   let frame = 0;
@@ -357,7 +402,15 @@ export default (app: HTMLElement) => {
     draw();
   });
 
-  for (const control of [thickness, bias, tidy, gridToggle, gridStep, colour]) {
+  for (const control of [
+    thickness,
+    bias,
+    pixelScale,
+    tidy,
+    gridToggle,
+    gridStep,
+    colour,
+  ]) {
     control.addEventListener("input", draw);
   }
 
@@ -385,6 +438,7 @@ export default (app: HTMLElement) => {
       cell: Math.max(1, Number(cellSize.value)),
       fill: colour.value,
       background: transparent.checked ? undefined : "#0c0a09",
+      pixelSize: Number(pixelScale.value),
     });
     download(blob, filename("png"));
   });
@@ -393,6 +447,7 @@ export default (app: HTMLElement) => {
     const svg = toSvg(current, {
       fill: colour.value,
       background: transparent.checked ? undefined : "#0c0a09",
+      pixelSize: Number(pixelScale.value),
     });
     download(new Blob([svg], { type: "image/svg+xml" }), filename("svg"));
   });

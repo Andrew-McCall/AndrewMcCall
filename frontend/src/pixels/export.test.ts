@@ -26,6 +26,32 @@ describe("toSvg", () => {
   });
 });
 
+describe("toSvg with gaps between the pixels", () => {
+  test("keeps merging runs while the cells still touch", () => {
+    expect(toSvg(mask, { pixelSize: 1 }).match(/<rect/g)).toHaveLength(3);
+  });
+
+  test("draws each cell on its own once they do not", () => {
+    // Runs cannot be merged into one rect when there is a gap in between.
+    expect(toSvg(mask, { pixelSize: 0.5 }).match(/<rect/g)).toHaveLength(6);
+  });
+
+  test("centres the smaller cell in the space it would have filled", () => {
+    expect(toSvg(mask, { pixelSize: 0.5 })).toContain(
+      '<rect x="0.25" y="0.25" width="0.5" height="0.5"',
+    );
+  });
+
+  test("keeps the viewBox on whole cells so nothing shifts", () => {
+    expect(toSvg(mask, { pixelSize: 0.5 })).toContain('viewBox="0 0 6 3"');
+  });
+
+  test("writes coordinates a person can read", () => {
+    // Not 0.30000000000000004.
+    expect(toSvg(mask, { pixelSize: 0.4 })).toContain('x="0.3"');
+  });
+});
+
 describe("rowCountText", () => {
   test("counts each run in a row and totals the lot", () => {
     expect(rowCountText(mask)).toBe(
