@@ -25,6 +25,15 @@ export default async (app: HTMLElement) => {
   const list = app.querySelector<HTMLDivElement>("#project-list")!;
 
   let projects: Project[] = [];
+  // Every tag already in use, for the click-to-add row under the tags field.
+  // Autofill is help, not function: if the request fails the row is just empty.
+  let knownTags: string[] = [];
+
+  const splitTags = (raw: string) =>
+    raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
 
   const field = (
     id: string,
@@ -48,6 +57,17 @@ export default async (app: HTMLElement) => {
         ${field("url", "https://…", project?.url ?? "", "flex-1")}
         ${field("repo", "owner/name", project?.repo ?? "", "flex-1")}
       </div>
+      ${field("tags", "tags, comma separated", (project?.tags ?? []).join(", "))}
+      ${
+        knownTags.length
+          ? `<div class="flex flex-wrap gap-1">${knownTags
+              .map(
+                (t) =>
+                  `<button type="button" data-tag="${esc(t)}" class="text-green-600 bg-green-900/30 hover:bg-green-900/60 px-1.5 py-0.5 text-xs font-mono cursor-pointer">${esc(t)}</button>`,
+              )
+              .join("")}</div>`
+          : ""
+      }
       <div class="flex gap-4 text-sm">
         <button data-action="save" class="bg-transparent border border-green-500 hover:bg-green-500/10 disabled:opacity-60 text-green-400 font-bold px-4 py-1.5 cursor-pointer transition-colors">Save</button>
         ${project ? `<button data-action="delete" class="text-red-500 hover:text-red-400 cursor-pointer ml-auto">delete</button>` : ""}
@@ -56,6 +76,16 @@ export default async (app: HTMLElement) => {
     const value = (name: string) =>
       div.querySelector<HTMLInputElement>(`[data-field="${name}"]`)!.value.trim();
     const saveBtn = div.querySelector<HTMLButtonElement>('[data-action="save"]')!;
+    const tagsInput = div.querySelector<HTMLInputElement>('[data-field="tags"]')!;
+
+    for (const chip of div.querySelectorAll<HTMLButtonElement>("[data-tag]")) {
+      chip.onclick = () => {
+        const tag = chip.dataset.tag!;
+        const current = splitTags(tagsInput.value);
+        if (!current.includes(tag)) current.push(tag);
+        tagsInput.value = current.join(", ");
+      };
+    }
 
     saveBtn.onclick = async () => {
       if (saveBtn.disabled) return;
@@ -66,6 +96,7 @@ export default async (app: HTMLElement) => {
         url: value("url"),
         repo: value("repo"),
         sort_order: parseInt(value("sort_order"), 10) || 0,
+        tags: splitTags(tagsInput.value),
       };
       try {
         const res = project
@@ -112,12 +143,16 @@ export default async (app: HTMLElement) => {
 
   const load = async () => {
     try {
-      const res = await api("/admin/projects");
+      const [res, tagsRes] = await Promise.all([
+        api("/admin/projects"),
+        api("/admin/project-tags"),
+      ]);
       if (!res.ok) {
         list.innerHTML = `<p class="text-red-400 text-sm">${await errorText(res)}</p>`;
         return;
       }
       projects = await res.json();
+      knownTags = tagsRes.ok ? await tagsRes.json() : [];
       render();
     } catch {
       list.innerHTML = `<p class="text-red-400 text-sm">Network error.</p>`;

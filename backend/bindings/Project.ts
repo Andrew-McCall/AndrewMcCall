@@ -6,4 +6,5 @@ export interface Project {
   url: string | null;
   repo: string | null;
   sort_order: number;
+  tags: string[];
 }

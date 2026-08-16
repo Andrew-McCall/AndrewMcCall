@@ -105,6 +105,17 @@ const githubSection = (profile: Home["profile"], commits: Home["commits"]) => {
   return section("GitHub", `${link}${table}`);
 };
 
+// Same chip as the notes browser, so a tag looks like a tag everywhere.
+const TAG_CHIP =
+  "text-green-600 bg-green-900/30 px-1.5 py-0.5 text-xs font-mono whitespace-nowrap";
+
+const tagChips = (tags: string[]) =>
+  tags.length > 0
+    ? `<div class="flex flex-wrap gap-1">${tags
+        .map((t) => `<span class="${TAG_CHIP}">${esc(t)}</span>`)
+        .join("")}</div>`
+    : "";
+
 const projectsSection = (projects: Home["projects"]) => {
   if (projects.length === 0) return "";
   const cards = projects
@@ -113,6 +124,7 @@ const projectsSection = (projects: Home["projects"]) => {
       <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 ${CARD_LIFT_CLASS}">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
+        ${tagChips(p.tags)}
         <div class="flex gap-4 text-sm">
           ${p.url ? extLink(p.url, "visit ↗") : ""}
           ${p.repo ? extLink(`https://github.com/${p.repo}`, "source ↗") : ""}

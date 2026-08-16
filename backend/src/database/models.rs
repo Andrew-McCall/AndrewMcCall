@@ -241,6 +241,14 @@ pub struct Project {
     pub updated_at: DateTime<Utc>,
 }
 
+/// A tag on a pinned project (`project_tags` join table). Bare strings shared
+/// between projects: a tag exists precisely while some live project names it.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ProjectTag {
+    pub project_id: Uuid,
+    pub tag: String,
+}
+
 /// A cached GitHub commit (`github_commits` table), upserted by the background
 /// sync and pruned to the newest N.
 #[derive(Debug, Clone, sqlx::FromRow)]

@@ -96,6 +96,7 @@ async fn route(
         (&Method::POST, "/admin/posts") => posts::create(req, peer, &config).await,
         (&Method::GET, "/admin/projects") => site::list_projects(req, peer, &config).await,
         (&Method::POST, "/admin/projects") => site::create_project(req, peer, &config).await,
+        (&Method::GET, "/admin/project-tags") => site::list_project_tags(req, peer, &config).await,
         (&Method::GET, "/admin/profile") => site::get_profile(req, peer, &config).await,
         (&Method::PUT, "/admin/profile") => site::update_profile(req, peer, &config).await,
         (&Method::GET, "/admin/details") => site::get_details(req, peer, &config).await,
@@ -115,7 +116,8 @@ async fn route(
             "/health" | "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
             | "/auth/logout" | "/auth/me" | "/auth/pin" | "/auth/totp/setup" | "/auth/totp/enable"
             | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
-            | "/admin/posts" | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home"
+            | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
+            | "/admin/details" | "/home"
             | "/posts" | "/notes" | "/meta" | "/meta/types",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
