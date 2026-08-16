@@ -32,6 +32,52 @@ pub async fn require_admin(
     }
 }
 
+/// A human-readable process uptime like `3d 4h 12m`, falling back to seconds
+/// under a minute so a freshly-restarted server still shows something.
+fn format_uptime(secs: u64) -> String {
+    let (days, hours, mins) = (secs / 86_400, (secs % 86_400) / 3_600, (secs % 3_600) / 60);
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if mins > 0 {
+        parts.push(format!("{mins}m"));
+    }
+    if parts.is_empty() {
+        parts.push(format!("{secs}s"));
+    }
+    parts.join(" ")
+}
+
+/// What the admin page shows about the server itself.
+#[derive(Serialize, Ts)]
+#[ts(rename = "AdminStatus")]
+struct AdminStatusJson {
+    uptime: String,
+}
+
+/// `GET /admin/status` — how long this process has been serving. Admin-only:
+/// the public pages used to carry it as a home-page detail, which told every
+/// visitor when the box was last restarted.
+pub async fn status(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    if let Err(err) = require_admin(&req, peer, config).await {
+        return ResponseBuilder::from(err).into();
+    }
+
+    ResponseBuilder::new(StatusCode::OK)
+        .json(&AdminStatusJson {
+            uptime: format_uptime(config.started_at.elapsed().as_secs()),
+        })
+        .into()
+}
+
 /// One row of the admin user listing, read from the database.
 #[derive(sqlx::FromRow)]
 struct AdminUser {
@@ -426,5 +472,15 @@ mod tests {
         assert!(!is_valid_route("secret"));
         assert!(!is_valid_route(&format!("/{}", "a".repeat(256))));
         assert!(!is_valid_route("/bad\nroute"));
+    }
+
+    #[test]
+    fn format_uptime_is_human_readable() {
+        assert_eq!(format_uptime(0), "0s");
+        assert_eq!(format_uptime(45), "45s");
+        assert_eq!(format_uptime(90), "1m");
+        assert_eq!(format_uptime(3_600), "1h");
+        assert_eq!(format_uptime(3 * 86_400 + 4 * 3_600 + 12 * 60), "3d 4h 12m");
+        assert_eq!(format_uptime(86_400), "1d");
     }
 }

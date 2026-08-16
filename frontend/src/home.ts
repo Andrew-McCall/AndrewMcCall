@@ -11,8 +11,11 @@ import {
   esc,
   extLink,
   fmtDate,
+  setMeta,
   CARD_LIFT_CLASS,
   LINK_CLASS,
+  SITE_TITLE,
+  SITE_DESCRIPTION,
 } from "./helpers";
 import { postCard, type PostSummary } from "./post_card";
 import { renderMarkdown } from "./markdown";
@@ -142,10 +145,22 @@ const postSection = (
 const renderHome = (root: HTMLElement, home: Home) => {
   const { profile, projects, commits, posts, book_reviews, details } = home;
 
+  // Search-result copy, editable from the admin profile page. Blank there means
+  // "keep the build-time default", which index.html is already showing — so the
+  // tags stay correct even when this never runs because the API is down.
+  //
+  // Restoring it on every render matters for more than the first paint: a
+  // visitor who opens a post and clicks back reaches this page without a reload,
+  // and the head would otherwise still be describing the post.
+  setMeta(
+    profile.seo_title || SITE_TITLE,
+    profile.seo_description || SITE_DESCRIPTION,
+  );
+
   root.innerHTML = `
     ${aboutSection(profile)}
-    ${nowSection(details)}
     ${githubSection(profile, commits)}
+    ${nowSection(details)}
     ${postSection("Posts", posts, "all posts", "/posts")}
     ${postSection("Book Reviews", book_reviews, "all reviews", "/posts#reviews")}
     ${projectsSection(projects)}`;

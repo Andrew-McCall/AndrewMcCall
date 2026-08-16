@@ -24,6 +24,12 @@ const MAX_URL_LEN: usize = 500;
 const MAX_INTRO_LEN: usize = 20_000;
 const MAX_DETAIL_VALUE_LEN: usize = 500;
 
+/// Search engines truncate around 60 characters of title and 160 of description.
+/// The caps sit a little above that so a slightly long line is still saveable —
+/// they're a guard against nonsense, not a style rule.
+const MAX_SEO_TITLE_LEN: usize = 70;
+const MAX_SEO_DESCRIPTION_LEN: usize = 200;
+
 /// The home-page "Now" details: a fixed whitelist of `(key, label)` display rows,
 /// in display order. The value (and an optional link) behind each key is edited
 /// via the admin API and stored in `home_details`; the key set itself is fixed
@@ -43,7 +49,13 @@ const HOME_POSTS: i64 = 4;
 
 /// The `site_settings` keys the profile editor may read and write. Internal
 /// keys (like the GitHub sync etag) are deliberately not listed.
-const PROFILE_KEYS: [&str; 3] = ["intro_markdown", "profile_image_url", "github_url"];
+const PROFILE_KEYS: [&str; 5] = [
+    "intro_markdown",
+    "profile_image_url",
+    "github_url",
+    "seo_title",
+    "seo_description",
+];
 
 // ---------------------------------------------------------------------------
 // Validation helpers.
@@ -67,6 +79,12 @@ fn clean_url(raw: &str) -> Result<Option<String>, ApiError> {
         ));
     }
     Ok(Some(url.to_string()))
+}
+
+/// Flattens a value destined for a `<meta>` tag to a single trimmed line,
+/// squashing runs of whitespace. Empty stays empty.
+fn one_line(raw: &str) -> String {
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Validates a GitHub `owner/name` repo reference; empty becomes `None`.
@@ -145,11 +163,18 @@ impl From<ProjectRow> for Project {
     }
 }
 
+/// `seo_title` / `seo_description` are the home page's search-result copy. Both
+/// are allowed to be empty, and empty means "use the build-time default baked
+/// into `index.html`" — see `VITE_SITE_TITLE` / `VITE_SITE_DESCRIPTION` in
+/// `frontend/.env`. That's why they're plain `String` rather than `Option`: the
+/// frontend only ever asks "is this blank?", and a blank string answers it.
 #[derive(Serialize, Default, Ts)]
 struct Profile {
     intro_markdown: String,
     profile_image_url: String,
     github_url: String,
+    seo_title: String,
+    seo_description: String,
 }
 
 #[derive(Serialize, Ts)]
@@ -197,6 +222,8 @@ async fn load_profile(pool: &sqlx::PgPool) -> Result<Profile, sqlx::Error> {
             "intro_markdown" => profile.intro_markdown = value,
             "profile_image_url" => profile.profile_image_url = value,
             "github_url" => profile.github_url = value,
+            "seo_title" => profile.seo_title = value,
+            "seo_description" => profile.seo_description = value,
             _ => {}
         }
     }
@@ -267,51 +294,29 @@ fn assemble_details(
         .collect()
 }
 
-/// A human-readable process uptime like `3d 4h 12m`, falling back to seconds
-/// under a minute so a freshly-restarted server still shows something.
-fn format_uptime(secs: u64) -> String {
-    let (days, hours, mins) = (secs / 86_400, (secs % 86_400) / 3_600, (secs % 3_600) / 60);
-    let mut parts = Vec::new();
-    if days > 0 {
-        parts.push(format!("{days}d"));
-    }
-    if hours > 0 {
-        parts.push(format!("{hours}h"));
-    }
-    if mins > 0 {
-        parts.push(format!("{mins}m"));
-    }
-    if parts.is_empty() {
-        parts.push(format!("{secs}s"));
-    }
-    parts.join(" ")
-}
-
 /// The always-present dynamic details, computed per request and appended after
-/// the curated ones: server uptime and the visitor's own IP. These are not stored
-/// in `home_details` and are not part of the admin-editable whitelist.
+/// the curated ones: just the visitor's own IP. These are not stored in
+/// `home_details` and are not part of the admin-editable whitelist.
+///
+/// Server uptime used to live here too. It says how long the box has been up
+/// and how recently it was restarted, which is nobody's business but the
+/// admin's, so it moved to `GET /admin/status`.
 fn dynamic_details(
     req: &Request<hyper::body::Incoming>,
     peer: SocketAddr,
     config: &ApiConfig,
 ) -> Vec<Detail> {
-    let mut details = vec![Detail {
-        key: "uptime".into(),
-        label: "Uptime".into(),
-        value: format_uptime(config.started_at.elapsed().as_secs()),
-        url: None,
-    }];
     // Skip the IP detail rather than failing the page if it can't be resolved
     // (e.g. a missing forwarding header behind a misconfigured proxy).
-    if let Ok(ip) = resolve_client_ip(config.ip_source, req, peer) {
-        details.push(Detail {
-            key: "your_ip".into(),
-            label: "Your IP".into(),
-            value: ip.0,
-            url: None,
-        });
-    }
-    details
+    let Ok(ip) = resolve_client_ip(config.ip_source, req, peer) else {
+        return Vec::new();
+    };
+    vec![Detail {
+        key: "your_ip".into(),
+        label: "Your IP".into(),
+        value: ip.0,
+        url: None,
+    }]
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +412,10 @@ struct ProfileRequest {
     profile_image_url: String,
     #[serde(default)]
     github_url: String,
+    #[serde(default)]
+    seo_title: String,
+    #[serde(default)]
+    seo_description: String,
 }
 
 /// `GET /admin/profile` — the editable profile settings.
@@ -427,7 +436,7 @@ pub async fn get_profile(
     }
 }
 
-/// `PUT /admin/profile` — upserts the three whitelisted settings keys.
+/// `PUT /admin/profile` — upserts the whitelisted settings keys.
 pub async fn update_profile(
     req: Request<hyper::body::Incoming>,
     peer: SocketAddr,
@@ -439,7 +448,7 @@ pub async fn update_profile(
 
     let body: ProfileRequest = match response::read_json(
         req,
-        r#"expected a JSON body like {"intro_markdown": "…", "profile_image_url": "…", "github_url": "…"}"#,
+        r#"expected a JSON body like {"intro_markdown": "…", "profile_image_url": "…", "github_url": "…", "seo_title": "…", "seo_description": "…"}"#,
     )
     .await
     {
@@ -462,11 +471,30 @@ pub async fn update_profile(
         Err(err) => return ResponseBuilder::from(err).into(),
     };
 
+    // Collapsed to one line and trimmed: these go straight into `<meta>`
+    // content, where a newline is meaningless but survives a round trip through
+    // the editor and shows up in the rendered tag.
+    let seo_title = one_line(&body.seo_title);
+    let seo_description = one_line(&body.seo_description);
+    for (field, value, max) in [
+        ("seo title", &seo_title, MAX_SEO_TITLE_LEN),
+        ("seo description", &seo_description, MAX_SEO_DESCRIPTION_LEN),
+    ] {
+        if value.chars().count() > max {
+            return ResponseBuilder::from(ApiError::BadRequest(format!(
+                "the {field} must be at most {max} characters"
+            )))
+            .into();
+        }
+    }
+
     let pool = config.db.pool();
     let values = [
         ("intro_markdown", body.intro_markdown.as_str()),
         ("profile_image_url", image_url.as_str()),
         ("github_url", github_url.as_str()),
+        ("seo_title", seo_title.as_str()),
+        ("seo_description", seo_description.as_str()),
     ];
     for (key, value) in values {
         let result = sqlx::query(
@@ -487,6 +515,8 @@ pub async fn update_profile(
         intro_markdown: body.intro_markdown,
         profile_image_url: image_url,
         github_url,
+        seo_title,
+        seo_description,
     };
     ResponseBuilder::new(StatusCode::OK).json(&profile).into()
 }
@@ -887,16 +917,6 @@ mod tests {
         assert_eq!(keys, DETAILS.map(|(k, _)| k));
         assert_eq!(details[0].value, "A book");
         assert!(details[1].value.is_empty());
-    }
-
-    #[test]
-    fn format_uptime_is_human_readable() {
-        assert_eq!(format_uptime(0), "0s");
-        assert_eq!(format_uptime(45), "45s");
-        assert_eq!(format_uptime(90), "1m");
-        assert_eq!(format_uptime(3_600), "1h");
-        assert_eq!(format_uptime(3 * 86_400 + 4 * 3_600 + 12 * 60), "3d 4h 12m");
-        assert_eq!(format_uptime(86_400), "1d");
     }
 
     #[test]

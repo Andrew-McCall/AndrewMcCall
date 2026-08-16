@@ -4,7 +4,7 @@ use crate::{database::connection::DatabaseConnection, ip::IpSource};
 pub struct ApiConfig {
     pub ip_source: IpSource,
     pub db: DatabaseConnection,
-    /// When the process started, for the home-page "uptime" detail.
+    /// When the process started, for the admin-only uptime in `GET /admin/status`.
     pub started_at: std::time::Instant,
     /// How long an issued auth token stays valid. `None` means tokens never
     /// expire (`user_tokens.expires_at` is left null).
@@ -50,6 +50,8 @@ impl ApiConfig {
             pin_hash_key: non_empty_env("PIN_HASH_KEY"),
             admin_name: non_empty_env("ADMIN_NAME"),
             admin_pin: non_empty_env("ADMIN_PIN"),
+            // Optional: with it unset the sync falls back to the profile's
+            // GitHub URL, which the admin editor can set without a restart.
             github_username: non_empty_env("GITHUB_USERNAME"),
             github_token: non_empty_env("GITHUB_TOKEN"),
             github_sync_minutes: std::env::var("GITHUB_SYNC_MINUTES")

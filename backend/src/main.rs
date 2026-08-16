@@ -88,6 +88,7 @@ async fn route(
         (&Method::POST, "/auth/totp/enable") => auth::totp_enable(req, peer, &config).await,
         (&Method::POST, "/auth/totp/disable") => auth::totp_disable(req, peer, &config).await,
 
+        (&Method::GET, "/admin/status") => admin::status(req, peer, &config).await,
         (&Method::GET, "/admin/users") => admin::list_users(req, peer, &config).await,
         (&Method::POST, "/admin/users") => admin::create_user(req, peer, &config).await,
         (&Method::GET, "/admin/visits") => admin::list_visits(req, peer, &config).await,
@@ -113,9 +114,9 @@ async fn route(
             _,
             "/health" | "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
             | "/auth/logout" | "/auth/me" | "/auth/pin" | "/auth/totp/setup" | "/auth/totp/enable"
-            | "/auth/totp/disable" | "/admin/users" | "/admin/visits" | "/admin/posts"
-            | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home" | "/posts"
-            | "/notes" | "/meta" | "/meta/types",
+            | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
+            | "/admin/posts" | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home"
+            | "/posts" | "/notes" | "/meta" | "/meta/types",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
         // Step 2: parameterized routes. Own the id/slug before moving `req`,
