@@ -5,7 +5,14 @@
 // each once Pixel size asks for gaps between them.
 
 import { PAGE_CLASS, pageTitle, setMeta } from "./helpers";
-import { rowCountText, toPngBlob, toSvg, download } from "./pixels/export";
+import {
+  rowCountText,
+  rowStats,
+  spansOf,
+  toPngBlob,
+  toSvg,
+  download,
+} from "./pixels/export";
 import { GRID_BOLD, GRID_FINE, gridOffset, line } from "./pixels/grid";
 import { backingScale, cellRect } from "./pixels/render";
 import type { Mask, Mode } from "./pixels/mask";
@@ -136,9 +143,23 @@ export default (app: HTMLElement) => {
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <span class="text-green-600 uppercase tracking-widest text-xs font-bold">Rows</span>
-          <button id="px-copy" class="${BUTTON} py-1 text-xs">Copy</button>
+          <div class="flex items-center gap-3">
+            <span id="px-total" class="text-green-800 font-mono text-xs"></span>
+            <button id="px-copy" class="${BUTTON} py-1 text-xs">Copy</button>
+          </div>
         </div>
-        <pre id="px-rows" class="border border-green-900 bg-stone-900 p-3 max-h-72 overflow-auto text-green-300 font-mono text-xs"></pre>
+        <div class="border border-green-900 bg-stone-900 max-h-96 overflow-auto">
+          <table class="w-full font-mono text-xs">
+            <thead>
+              <tr class="sticky top-0 bg-stone-950 text-green-600 uppercase tracking-widest">
+                <th class="text-right px-3 py-2 w-12">y</th>
+                <th class="text-right px-3 py-2 w-16">Cells</th>
+                <th class="text-left px-3 py-2">Spans</th>
+              </tr>
+            </thead>
+            <tbody id="px-rows"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -169,7 +190,8 @@ export default (app: HTMLElement) => {
   const hoverLabel = $<HTMLSpanElement>("px-hover");
   const cellSize = $<HTMLInputElement>("px-cell");
   const transparent = $<HTMLInputElement>("px-transparent");
-  const rowsPanel = $<HTMLPreElement>("px-rows");
+  const rowsPanel = $<HTMLTableSectionElement>("px-rows");
+  const totalLabel = $<HTMLSpanElement>("px-total");
 
   let shape = SHAPES[0];
   let values: Values = defaultsFor(shape);
@@ -362,7 +384,18 @@ export default (app: HTMLElement) => {
       sizeLabel.textContent = current.cells.some((cell) => cell)
         ? `${current.w} × ${current.h}`
         : "nothing to draw";
-      rowsPanel.textContent = rowCountText(current);
+      const stats = rowStats(current);
+      rowsPanel.innerHTML = stats
+        .map(
+          (row) => `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
+            <td class="text-right px-3 py-1 text-green-700">${row.y}</td>
+            <td class="text-right px-3 py-1 text-lime-300">${row.total}</td>
+            <td class="px-3 py-1 text-green-400">${spansOf(row)}</td>
+          </tr>`,
+        )
+        .join("");
+      const cells = stats.reduce((sum, row) => sum + row.total, 0);
+      totalLabel.textContent = `${cells} cells, ${stats.length} rows`;
     });
   };
 
@@ -414,6 +447,16 @@ export default (app: HTMLElement) => {
     control.addEventListener("input", draw);
   }
 
+  // Lights up the row under the pointer, so the preview and the numbers point
+  // at each other rather than being two things to hold in your head at once.
+  // Set inline rather than by class, to win over the zebra striping.
+  let lit: HTMLElement | null = null;
+  const litRow = (y: number | null) => {
+    if (lit) lit.style.backgroundColor = "";
+    lit = y === null ? null : rowsPanel.querySelector(`tr[data-y="${y}"]`);
+    if (lit) lit.style.backgroundColor = "rgba(34,197,94,0.22)";
+  };
+
   canvas.addEventListener("mousemove", (event) => {
     const box = canvas.getBoundingClientRect();
     const cell = (along: number, of: number, count: number) =>
@@ -427,8 +470,12 @@ export default (app: HTMLElement) => {
       y - Math.floor((current.h - 1) / 2),
     )}`;
     hoverLabel.textContent = `x ${x}, y ${y}   ${fromCentre} from centre`;
+    litRow(y);
   });
-  canvas.addEventListener("mouseleave", () => (hoverLabel.textContent = ""));
+  canvas.addEventListener("mouseleave", () => {
+    hoverLabel.textContent = "";
+    litRow(null);
+  });
 
   const filename = (extension: string) =>
     `${shape.id}-${current.w}x${current.h}.${extension}`;

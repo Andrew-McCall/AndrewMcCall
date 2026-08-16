@@ -10,14 +10,16 @@ describe("cellRect", () => {
     expect(cellRect(12, 0.5)).toEqual({ size: 6, offset: 3 });
   });
 
-  test("keeps the drawn cell centred in its slot", () => {
-    for (const scale of [3, 4, 8, 12, 16]) {
-      for (const size of [0.2, 0.5, 0.75, 0.9, 1]) {
+  test("keeps the drawn cell exactly centred in its slot, always", () => {
+    for (let scale = 1; scale <= 16; scale++) {
+      for (let size = 0.1; size <= 1.0001; size += 0.05) {
         const rect = cellRect(scale, size);
         const after = scale - rect.size - rect.offset;
-        // A whole number of pixels cannot always split evenly, but the two
-        // margins must never differ by more than one.
-        expect(Math.abs(after - rect.offset), `${scale} @ ${size}`).toBeLessThanOrEqual(1);
+        // Equal margins on both sides — never a pixel more on one than the
+        // other, or the shape sits off centre in its own grid.
+        expect(after, `${scale} @ ${size.toFixed(2)}`).toBe(rect.offset);
+        expect(rect.size, `${scale} @ ${size.toFixed(2)}`).toBeGreaterThanOrEqual(1);
+        expect(rect.size, `${scale} @ ${size.toFixed(2)}`).toBeLessThanOrEqual(scale);
       }
     }
   });

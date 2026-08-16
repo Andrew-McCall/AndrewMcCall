@@ -57,17 +57,53 @@ export const toSvg = (mask: Mask, options: SvgOptions = {}): string => {
   ].join("\n");
 };
 
-export const rowCountText = (mask: Mask): string => {
-  const lines: string[] = [];
-  let total = 0;
+export interface RowStat {
+  y: number;
+  total: number;
+  runs: [number, number][];
+}
+
+// One entry per drawn row: how many cells it has and where they sit. Both the
+// table on the page and the text on the clipboard are built from this, so they
+// can never drift apart.
+export const rowStats = (mask: Mask): RowStat[] => {
+  const stats: RowStat[] = [];
 
   rows(mask).forEach((runs, y) => {
     if (runs.length === 0) return;
-    const counts = runs.map(([start, end]) => end - start + 1);
-    const spans = runs.map(([start, end]) => `x ${start}-${end}`);
-    total += counts.reduce((sum, count) => sum + count, 0);
-    lines.push(`y=${y}: ${counts.join(" + ")} (${spans.join(", ")})`);
+    stats.push({
+      y,
+      total: runs.reduce((sum, [start, end]) => sum + end - start + 1, 0),
+      runs,
+    });
   });
+
+  return stats;
+};
+
+// A single cell is written as its own number. Most rows of an outline are two
+// lone cells, and "1-1, 13-13" is a lot of punctuation to say "1 and 13".
+export const spansOf = (row: RowStat): string =>
+  row.runs
+    .map(([start, end]) => (start === end ? `${start}` : `${start}-${end}`))
+    .join(", ");
+
+// Columns padded to a common width, so the numbers stay in the same place from
+// row 9 to row 10 and the eye can run straight down them.
+export const rowCountText = (mask: Mask): string => {
+  const stats = rowStats(mask);
+  const total = stats.reduce((sum, row) => sum + row.total, 0);
+
+  const yWidth = Math.max(1, ...stats.map((row) => String(row.y).length));
+  const cellsWidth = Math.max(5, ...stats.map((row) => String(row.total).length));
+
+  const lines = [
+    `${"y".padStart(yWidth)}  ${"cells".padStart(cellsWidth)}  spans`,
+    ...stats.map(
+      (row) =>
+        `${String(row.y).padStart(yWidth)}  ${String(row.total).padStart(cellsWidth)}  ${spansOf(row)}`,
+    ),
+  ];
 
   return [...lines, "", `Total: ${total} cells`].join("\n");
 };

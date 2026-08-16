@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { rowCountText, toSvg } from "./export";
+import { rowCountText, rowStats, spansOf, toSvg } from "./export";
 import { fromRows } from "./test-helpers";
 
 const mask = fromRows(["##..##", "......", "..##.."]);
@@ -52,16 +52,72 @@ describe("toSvg with gaps between the pixels", () => {
   });
 });
 
+describe("rowStats", () => {
+  test("gives each drawn row its total and its runs", () => {
+    expect(rowStats(mask)).toEqual([
+      {
+        y: 0,
+        total: 4,
+        runs: [
+          [0, 1],
+          [4, 5],
+        ],
+      },
+      { y: 2, total: 2, runs: [[2, 3]] },
+    ]);
+  });
+
+  test("leaves out rows with nothing in them", () => {
+    expect(rowStats(mask).map((row) => row.y)).not.toContain(1);
+  });
+});
+
+describe("spansOf", () => {
+  test("writes a lone cell as one number, not a range of itself", () => {
+    expect(spansOf({ y: 0, total: 1, runs: [[7, 7]] })).toBe("7");
+  });
+
+  test("writes a real run as a range", () => {
+    expect(spansOf({ y: 0, total: 3, runs: [[4, 6]] })).toBe("4-6");
+  });
+
+  test("separates the runs of a row", () => {
+    expect(
+      spansOf({
+        y: 0,
+        total: 2,
+        runs: [
+          [1, 1],
+          [13, 13],
+        ],
+      }),
+    ).toBe("1, 13");
+  });
+});
+
 describe("rowCountText", () => {
-  test("counts each run in a row and totals the lot", () => {
+  test("lines the columns up under a header", () => {
     expect(rowCountText(mask)).toBe(
-      ["y=0: 2 + 2 (x 0-1, x 4-5)", "y=2: 2 (x 2-3)", "", "Total: 6 cells"].join(
-        "\n",
-      ),
+      [
+        "y  cells  spans",
+        "0      4  0-1, 4-5",
+        "2      2  2-3",
+        "",
+        "Total: 6 cells",
+      ].join("\n"),
     );
   });
 
-  test("skips empty rows", () => {
-    expect(rowCountText(mask)).not.toContain("y=1");
+  test("keeps the columns aligned once the numbers get wider", () => {
+    const tall = fromRows([
+      ...Array(10).fill("....."),
+      "#####",
+      ...Array(89).fill("....."),
+      "##...",
+    ]);
+    const lines = rowCountText(tall).split("\n");
+
+    // The counts end in the same column whether y is 10 or 99.
+    expect(lines[1].indexOf("5")).toBe(lines[2].indexOf("2"));
   });
 });
