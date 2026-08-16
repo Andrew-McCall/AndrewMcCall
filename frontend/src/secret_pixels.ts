@@ -12,6 +12,7 @@ import {
   toPngBlob,
   toSvg,
   download,
+  sizesOf,
 } from "./pixels/export";
 import { GRID_BOLD, GRID_FINE, gridOffset, line } from "./pixels/grid";
 import { backingScale, cellRect } from "./pixels/render";
@@ -383,17 +384,13 @@ export default (app: HTMLElement) => {
       rowsPanel.innerHTML = stats
         .map((row) => {
           const spans = spansOf(row);
-
-          const sizes = spans.map((span) => {
-            const [start, end] = span.split("-").map(Number);
-            return end - start + 1;
-          });
+          const sizes = sizesOf(row);
 
           return `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
             <td class="text-right px-3 py-1 text-green-700">${row.y}</td>
             <td class="text-right px-3 py-1 text-lime-300">${row.total}</td>
-            <td class="px-3 py-1 text-green-500">${sizes.join(", ")}</td>
-            <td class="px-3 py-1 text-green-400">${spans.join(", ")}</td>
+            <td class="px-3 py-1 text-green-500">${sizes}</td>
+            <td class="px-3 py-1 text-green-400">${spans}</td>
           </tr>`;
         })
         .join("");

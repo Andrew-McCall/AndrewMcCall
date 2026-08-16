@@ -83,9 +83,14 @@ export const rowStats = (mask: Mask): RowStat[] => {
 
 // A single cell is written as its own number. Most rows of an outline are two
 // lone cells, and "1-1, 13-13" is a lot of punctuation to say "1 and 13".
-export const spansOf = (row: RowStat): string[] =>
+export const spansOf = (row: RowStat): string =>
   row.runs
-    .map(([start, end]) => (start === end ? `${start}` : `${start}-${end}`))
+    .map(([start, end]) => (start === end ? `${start}` : `${start}-${end}`)).join(", ")
+    ;
+    
+export const sizesOf = (row: RowStat): string =>
+  row.runs
+    .map(([start, end]) => (start === end ? `1` : `${end - start + 1}`)).join(", ")
     ;
 
 // Columns padded to a common width, so the numbers stay in the same place from
@@ -101,7 +106,7 @@ export const rowCountText = (mask: Mask): string => {
     `${"y".padStart(yWidth)}  ${"cells".padStart(cellsWidth)}  spans`,
     ...stats.map(
       (row) =>
-        `${String(row.y).padStart(yWidth)}  ${String(row.total).padStart(cellsWidth)}  ${spansOf(row).join(", ")}`,
+        `${String(row.y).padStart(yWidth)}  ${String(row.total).padStart(cellsWidth)}  ${spansOf(row)}`,
     ),
   ];
 
