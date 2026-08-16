@@ -1,6 +1,36 @@
 import { describe, expect, test } from "vitest";
-import { closeDiagonals, rows, tidy } from "./mask";
+import { bounds, closeDiagonals, rows, tidy, trim } from "./mask";
 import { fromRows, toRows } from "./test-helpers";
+
+describe("bounds", () => {
+  test("measures the drawn shape, not the grid it sits in", () => {
+    const mask = fromRows([".....", ".###.", ".###.", "....."]);
+
+    expect(bounds(mask)).toEqual({ x0: 1, y0: 1, x1: 3, y1: 2 });
+  });
+
+  test("reaches the edges when the shape fills the grid", () => {
+    expect(bounds(fromRows(["##", "##"]))).toEqual({
+      x0: 0,
+      y0: 0,
+      x1: 1,
+      y1: 1,
+    });
+  });
+
+  test("is null when nothing is drawn", () => {
+    expect(bounds(fromRows(["..", ".."]))).toBeNull();
+  });
+
+  test("follows a single stray cell", () => {
+    expect(bounds(fromRows(["...", "...", "..#"]))).toEqual({
+      x0: 2,
+      y0: 2,
+      x1: 2,
+      y1: 2,
+    });
+  });
+});
 
 describe("closeDiagonals", () => {
   test("fills the gap cell that lies inside the solid shape", () => {
@@ -39,6 +69,32 @@ describe("closeDiagonals", () => {
     const ring = fromRows(["##", "##"]);
 
     expect(toRows(closeDiagonals(ring, ring))).toEqual(["##", "##"]);
+  });
+});
+
+describe("trim", () => {
+  test("cuts the empty margin off a shape", () => {
+    const mask = fromRows([".....", ".###.", ".#.#.", ".###.", "....."]);
+
+    expect(toRows(trim(mask))).toEqual(["###", "#.#", "###"]);
+  });
+
+  test("leaves a shape that already fills its grid alone", () => {
+    const mask = fromRows(["##", "##"]);
+
+    expect(trim(mask)).toBe(mask);
+  });
+
+  test("trims an off-centre shape to itself", () => {
+    const mask = fromRows(["....", "..##", "..##"]);
+
+    expect(toRows(trim(mask))).toEqual(["##", "##"]);
+  });
+
+  test("leaves an empty grid alone rather than returning nothing", () => {
+    const mask = fromRows(["..", ".."]);
+
+    expect(trim(mask)).toBe(mask);
   });
 });
 

@@ -311,7 +311,12 @@ export default (app: HTMLElement) => {
         tidy: tidy.checked,
       });
       paint(current);
-      sizeLabel.textContent = `${current.w} × ${current.h}`;
+      // The mask is trimmed to what it draws, so this is the size the shape
+      // came out at — which is not the size that was asked for once smoothing
+      // has moved the edge.
+      sizeLabel.textContent = current.cells.some((cell) => cell)
+        ? `${current.w} × ${current.h}`
+        : "nothing to draw";
       rowsPanel.textContent = rowCountText(current);
     });
   };

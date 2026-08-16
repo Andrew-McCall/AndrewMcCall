@@ -47,6 +47,28 @@ const expectAnnulus = (
   expect(wrong).toEqual([]);
 };
 
+// Counts the cells the ellipse covers over an area far bigger than the grid it
+// was asked for, so a cell pushed past the edge by a positive bias shows up as
+// a shortfall rather than as a quietly flattened side.
+const expectNothingClipped = (
+  mask: Mask,
+  w: number,
+  h: number,
+  bias: number,
+) => {
+  const a = w / 2 + bias;
+  const b = h / 2 + bias;
+  let want = 0;
+  for (let y = -8; y < h + 8; y++) {
+    for (let x = -8; x < w + 8; x++) {
+      const dx = x + 0.5 - w / 2;
+      const dy = y + 0.5 - h / 2;
+      if ((dx / a) ** 2 + (dy / b) ** 2 <= 1 + 1e-9) want++;
+    }
+  }
+  expect(filledCount(mask)).toBe(want);
+};
+
 describe("circles", () => {
   test("are symmetric on both axes at every size", () => {
     for (let size = 1; size <= 20; size++) {
@@ -71,6 +93,24 @@ describe("circles", () => {
         `size ${size} is ${width[1] - width[0] + 1} wide`,
       ).toBe(width[1] - width[0] + 1);
     }
+  });
+
+  test("keep every cell when a positive bias grows them past the asked size", () => {
+    for (const bias of [-0.5, 0, 0.25, 0.5, 1]) {
+      const { mask } = circle(21, "filled", 1, bias);
+      expectNothingClipped(mask, 21, 21, bias);
+    }
+  });
+
+  test("grow the grid to hold a bias, rather than squaring off the sides", () => {
+    const { mask } = circle(21, "filled", 1, 1);
+    expect(mask.w).toBeGreaterThan(21);
+    expect(mask.h).toBe(mask.w);
+    // A clipped circle has a wide flat chord across its first row; an intact
+    // one tapers to a few cells.
+    const top = rowSpan(mask, 0)!;
+    const middle = rowSpan(mask, Math.floor(mask.h / 2))!;
+    expect(top[1] - top[0] + 1).toBeLessThan((middle[1] - middle[0] + 1) / 2);
   });
 
   test("fill roughly pi r squared cells", () => {

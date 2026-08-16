@@ -1,7 +1,7 @@
 // The shape table. Every entry declares its own controls, so the page renders
 // them rather than hard-coding a block of markup per shape.
 
-import { closeDiagonals, tidy, type Mask, type Options } from "./mask";
+import { closeDiagonals, tidy, trim, type Mask, type Options } from "./mask";
 import * as ellipse from "./ellipse";
 import * as square from "./square";
 import * as star from "./star";
@@ -207,11 +207,13 @@ export const maxThicknessFor = (
   bias: number,
 ): number => shape.maxThickness(values, bias);
 
+// Trimmed last, after every pass that can change which cells are drawn, so the
+// mask that comes out is exactly the shape and nothing else.
 export const generate = (
   shape: Shape,
   values: Values,
   options: GenerateOptions,
 ): Mask => {
   const mask = shape.build(values, options);
-  return options.tidy ? tidy(mask) : mask;
+  return trim(options.tidy ? tidy(mask) : mask);
 };

@@ -109,15 +109,22 @@ export const raster = (params: Params, options: Options): Rastered => {
   const a = w / 2 + options.bias;
   const b = h / 2 + options.bias;
 
-  const solid = blank(w, h);
-  const ring = blank(w, h);
+  // A positive bias pushes the edge beyond the size that was asked for, so the
+  // grid grows to hold it. Without the margin the overflow is simply dropped,
+  // and the shape comes out with flat sides where it met the edge.
+  const pad = Math.max(0, Math.ceil(options.bias));
+  const gridW = w + pad * 2;
+  const gridH = h + pad * 2;
 
-  for (let y = 0; y < h; y++) {
-    const dy = y + 0.5 - h / 2;
+  const solid = blank(gridW, gridH);
+  const ring = blank(gridW, gridH);
+
+  for (let y = 0; y < gridH; y++) {
+    const dy = y + 0.5 - gridH / 2;
     const span = spanAt(dy, a, b);
     if (span < 0) continue;
 
-    const centre = w / 2 - 0.5;
+    const centre = gridW / 2 - 0.5;
     const lo = Math.ceil(centre - span - EPS);
     const hi = Math.floor(centre + span + EPS);
 
@@ -138,7 +145,7 @@ export const raster = (params: Params, options: Options): Rastered => {
     }
   }
 
-  const box = cropBox(params, w, h);
+  const box = cropBox(params, gridW, gridH);
   const cropped = crop(ring, box);
   const croppedSolid = crop(solid, box);
 

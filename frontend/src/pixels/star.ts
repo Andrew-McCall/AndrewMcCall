@@ -87,13 +87,18 @@ export const raster = (params: Params, options: Options): Rastered => {
   const depth = wallDepth(options);
   const shape = corners(params);
 
-  const solid = blank(n, n);
-  const ring = blank(n, n);
+  // Room for a positive bias, which pushes the points out past the size that
+  // was asked for. Without it the tips are clipped flat against the edge.
+  const pad = Math.max(0, Math.ceil(options.bias));
+  const grid = n + pad * 2;
 
-  for (let y = 0; y < n; y++) {
-    const py = y + 0.5 - n / 2;
-    for (let x = 0; x < n; x++) {
-      const px = x + 0.5 - n / 2;
+  const solid = blank(grid, grid);
+  const ring = blank(grid, grid);
+
+  for (let y = 0; y < grid; y++) {
+    const py = y + 0.5 - grid / 2;
+    for (let x = 0; x < grid; x++) {
+      const px = x + 0.5 - grid / 2;
       const distance = nearestEdge(px, py, shape);
       const signed = isInside(px, py, shape) ? -distance : distance;
       if (signed > options.bias) continue;

@@ -142,6 +142,54 @@ export const tidy = (mask: Mask): Mask => {
   return current;
 };
 
+// The box the drawn cells actually occupy, or null when nothing is drawn.
+//
+// This is not the same as the grid: a negative smoothing bias pulls the edge
+// in, and the tidy pass can take a speck off a corner, so the shape is often
+// smaller than the size that was asked for.
+export const bounds = (
+  mask: Mask,
+): { x0: number; y0: number; x1: number; y1: number } | null => {
+  let x0 = mask.w;
+  let y0 = mask.h;
+  let x1 = -1;
+  let y1 = -1;
+
+  for (let y = 0; y < mask.h; y++) {
+    for (let x = 0; x < mask.w; x++) {
+      if (!at(mask, x, y)) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+};
+
+// Cuts a mask down to the cells it actually draws.
+//
+// The grid a rasteriser works on is sized for the job — bigger than the shape
+// when a positive bias needs room, larger than the result when a negative one
+// pulls the edge in. Trimming at the end means the size on screen, the row
+// numbers and the exported files all describe the same rectangle.
+export const trim = (mask: Mask): Mask => {
+  const box = bounds(mask);
+  if (!box) return mask; // nothing drawn: leave it be rather than return 0x0
+  if (box.x0 === 0 && box.y0 === 0 && box.x1 === mask.w - 1 && box.y1 === mask.h - 1) {
+    return mask;
+  }
+
+  const out = blank(box.x1 - box.x0 + 1, box.y1 - box.y0 + 1);
+  for (let y = 0; y < out.h; y++) {
+    for (let x = 0; x < out.w; x++) {
+      setCell(out, x, y, at(mask, x + box.x0, y + box.y0));
+    }
+  }
+  return out;
+};
+
 // Filled runs per row as inclusive [start, end] pairs. Feeds both the row-count
 // panel and the SVG export, which is why it lives here rather than in either.
 export const rows = (mask: Mask): [number, number][][] => {
