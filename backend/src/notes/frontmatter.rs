@@ -85,6 +85,10 @@ impl Frontmatter {
             .map(|(k, v)| (k.as_str(), v.as_slice()))
     }
 
+    /// Whether the block carried no entries. Only the parser tests ask this —
+    /// nothing in the serving path branches on it — so it is compiled out of
+    /// the binary rather than carried as dead weight.
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -126,10 +130,10 @@ pub fn parse(text: &str) -> Frontmatter {
         if let Some(item) = line.trim_start().strip_prefix("- ") {
             if let Some(key) = &pending_key {
                 let value = unquote(item).to_string();
-                if !value.is_empty() {
-                    if let Some((_, values)) = entries.iter_mut().find(|(k, _)| k == key) {
-                        values.push(value);
-                    }
+                if !value.is_empty()
+                    && let Some((_, values)) = entries.iter_mut().find(|(k, _)| k == key)
+                {
+                    values.push(value);
                 }
             }
             offset = next;

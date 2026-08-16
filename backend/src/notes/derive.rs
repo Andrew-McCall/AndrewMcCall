@@ -230,26 +230,6 @@ pub fn derive(body: &str) -> Derived {
     }
 }
 
-/// A human-readable title from a slug, for a note whose text gives us nothing.
-pub fn title_from_slug(slug: &str) -> String {
-    let mut out = String::with_capacity(slug.len());
-    for (i, word) in slug.split('-').filter(|w| !w.is_empty()).enumerate() {
-        if i > 0 {
-            out.push(' ');
-        }
-        let mut chars = word.chars();
-        if let Some(first) = chars.next() {
-            out.extend(first.to_uppercase());
-            out.push_str(chars.as_str());
-        }
-    }
-    if out.is_empty() {
-        DEFAULT_TITLE.to_string()
-    } else {
-        out
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -413,12 +393,6 @@ mod tests {
         let first = derive(body);
         let second = derive(body);
         assert_eq!(first, second);
-    }
-
-    #[test]
-    fn title_from_slug_is_readable() {
-        assert_eq!(title_from_slug("deploy-pipeline"), "Deploy Pipeline");
-        assert_eq!(title_from_slug(""), "Untitled");
     }
 
     #[test]

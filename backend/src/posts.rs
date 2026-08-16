@@ -468,10 +468,8 @@ fn validate_book_review(req: &BookReviewRequest) -> Result<CleanBookReview, ApiE
             "an author must be at most {MAX_AUTHOR_LEN} characters"
         )));
     }
-    if let Some(r) = req.rating {
-        if !(1..=5).contains(&r) {
-            return Err(ApiError::BadRequest("a rating must be between 1 and 5".into()));
-        }
+    if let Some(r) = req.rating && !(1..=5).contains(&r) {
+        return Err(ApiError::BadRequest("a rating must be between 1 and 5".into()));
     }
     let read_date = match req.read_date.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {

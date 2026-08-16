@@ -40,11 +40,6 @@ pub fn find(haystack: &str, needle: &str) -> Option<usize> {
     memmem::find(haystack.as_bytes(), needle.as_bytes())
 }
 
-#[inline]
-pub fn contains(haystack: &str, needle: &str) -> bool {
-    find(haystack, needle).is_some()
-}
-
 /// Byte index of the first occurrence of an ASCII byte.
 #[inline]
 pub fn find_byte(haystack: &str, byte: u8) -> Option<usize> {
@@ -84,38 +79,6 @@ pub fn line_at(text: &str, from: usize) -> (&str, usize) {
         Some(i) => (rest[..i].strip_suffix('\r').unwrap_or(&rest[..i]), from + i + 1),
         None => (rest.strip_suffix('\r').unwrap_or(rest), text.len()),
     }
-}
-
-/// Case-insensitive substring test over ASCII.
-///
-/// Scans for candidate positions using the first byte in both cases before
-/// comparing, so a miss costs one SIMD pass rather than a per-position compare.
-pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
-    debug_assert!(needle.is_ascii());
-    if needle.is_empty() {
-        return true;
-    }
-    let (hay, ndl) = (haystack.as_bytes(), needle.as_bytes());
-    if ndl.len() > hay.len() {
-        return false;
-    }
-    let lower = ndl[0].to_ascii_lowercase();
-    let upper = ndl[0].to_ascii_uppercase();
-    let mut start = 0;
-    while start + ndl.len() <= hay.len() {
-        let Some(offset) = memchr::memchr2(lower, upper, &hay[start..]) else {
-            return false;
-        };
-        let at = start + offset;
-        if at + ndl.len() > hay.len() {
-            return false;
-        }
-        if hay[at..at + ndl.len()].eq_ignore_ascii_case(ndl) {
-            return true;
-        }
-        start = at + 1;
-    }
-    false
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +166,8 @@ pub fn query_value<'a>(query: &'a str, key: &str) -> Option<&'a str> {
             Some(i) => (&rest[..i], Some(&rest[i + 1..])),
             None => (rest, None),
         };
-        if let Some((k, v)) = split_once_byte(pair, b'=') {
-            if k == key {
-                return Some(v);
-            }
+        if let Some((k, v)) = split_once_byte(pair, b'=') && k == key {
+            return Some(v);
         }
         match next {
             Some(n) => rest = n,
@@ -220,11 +181,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn find_and_contains() {
+    fn find_locates_substrings() {
         assert_eq!(find("hello world", "world"), Some(6));
         assert_eq!(find("hello", "zzz"), None);
-        assert!(contains("abc", "b"));
-        assert!(contains("abc", ""));
     }
 
     #[test]
@@ -275,34 +234,6 @@ mod tests {
         let (line, next) = line_at("only\n", 0);
         assert_eq!(line, "only");
         assert_eq!(next, 5);
-    }
-
-    #[test]
-    fn case_insensitive_contains() {
-        assert!(contains_ignore_ascii_case("Hello World", "hello"));
-        assert!(contains_ignore_ascii_case("Hello World", "WORLD"));
-        assert!(contains_ignore_ascii_case("aAbB", "ab"));
-        assert!(!contains_ignore_ascii_case("hello", "xyz"));
-        assert!(!contains_ignore_ascii_case("ab", "abc"));
-        assert!(contains_ignore_ascii_case("anything", ""));
-    }
-
-    #[test]
-    fn case_insensitive_contains_matches_std_lowercasing() {
-        // Cross-check against the obvious-but-allocating implementation.
-        for (hay, needle) in [
-            ("The Quick Brown", "quick"),
-            ("The Quick Brown", "QUICK BROWN"),
-            ("aaaab", "ab"),
-            ("aaa", "aab"),
-            ("", "a"),
-        ] {
-            assert_eq!(
-                contains_ignore_ascii_case(hay, needle),
-                hay.to_ascii_lowercase().contains(&needle.to_ascii_lowercase()),
-                "mismatch for {hay:?} / {needle:?}"
-            );
-        }
     }
 
     #[test]

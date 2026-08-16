@@ -588,12 +588,11 @@ pub async fn update_note(
 
         // Only enforced when the client supplies a baseline, so a scripted
         // caller can still do a blind write.
-        if let Some(base) = payload.base_updated_at.as_deref() {
-            if let Ok(base) = DateTime::parse_from_rfc3339(base) {
-                if base.with_timezone(&Utc) != current_updated {
-                    return Ok(Outcome::Conflict);
-                }
-            }
+        if let Some(base) = payload.base_updated_at.as_deref()
+            && let Ok(base) = DateTime::parse_from_rfc3339(base)
+            && base.with_timezone(&Utc) != current_updated
+        {
+            return Ok(Outcome::Conflict);
         }
 
         let old_primary: Option<String> = sqlx::query_scalar(
@@ -607,11 +606,12 @@ pub async fn update_note(
         // rather than hidden server-side.
         let mut body = payload.body.clone();
         let mut derived = derive::derive(&body);
-        if let Some(old) = old_primary {
-            if !derived.primary.is_empty() && derived.primary != old {
-                body = preserve_old_name(&body, &old);
-                derived = derive::derive(&body);
-            }
+        if let Some(old) = old_primary
+            && !derived.primary.is_empty()
+            && derived.primary != old
+        {
+            body = preserve_old_name(&body, &old);
+            derived = derive::derive(&body);
         }
 
         sqlx::query("UPDATE notes SET title = $1, body = $2, updated_at = $3 WHERE id = $4")
