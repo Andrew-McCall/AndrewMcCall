@@ -101,7 +101,7 @@ export const rowCountText = (mask: Mask): string => {
     `${"y".padStart(yWidth)}  ${"cells".padStart(cellsWidth)}  spans`,
     ...stats.map(
       (row) =>
-        `${String(row.y).padStart(yWidth)}  ${String(row.total).padStart(cellsWidth)}  ${spansOf(row)}`,
+        `${String(row.y).padStart(yWidth)}  ${String(row.total).padStart(cellsWidth)}  ${spansOf(row).join(", ")}`,
     ),
   ];
 

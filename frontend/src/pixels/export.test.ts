@@ -74,11 +74,11 @@ describe("rowStats", () => {
 
 describe("spansOf", () => {
   test("writes a lone cell as one number, not a range of itself", () => {
-    expect(spansOf({ y: 0, total: 1, runs: [[7, 7]] })).toBe("7");
+    expect(spansOf({ y: 0, total: 1, runs: [[7, 7]] })).toStrictEqual(["7"]);
   });
 
   test("writes a real run as a range", () => {
-    expect(spansOf({ y: 0, total: 3, runs: [[4, 6]] })).toBe("4-6");
+    expect(spansOf({ y: 0, total: 3, runs: [[4, 6]] })).toStrictEqual(["4-6"]);
   });
 
   test("separates the runs of a row", () => {
@@ -91,7 +91,7 @@ describe("spansOf", () => {
           [13, 13],
         ],
       }),
-    ).toBe("1, 13");
+    ).toStrictEqual(["1", "13"]);
   });
 });
 
