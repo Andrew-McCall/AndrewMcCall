@@ -83,10 +83,10 @@ export const rowStats = (mask: Mask): RowStat[] => {
 
 // A single cell is written as its own number. Most rows of an outline are two
 // lone cells, and "1-1, 13-13" is a lot of punctuation to say "1 and 13".
-export const spansOf = (row: RowStat): string =>
+export const spansOf = (row: RowStat): string[] =>
   row.runs
     .map(([start, end]) => (start === end ? `${start}` : `${start}-${end}`))
-    .join(", ");
+    ;
 
 // Columns padded to a common width, so the numbers stay in the same place from
 // row 9 to row 10 and the eye can run straight down them.

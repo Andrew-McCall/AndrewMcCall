@@ -145,7 +145,7 @@ export default (app: HTMLElement) => {
             <button id="px-copy" class="${BUTTON} py-1 text-xs">Copy</button>
           </div>
         </div>
-        <div class="border border-green-900 bg-stone-900 max-h-96 overflow-auto">
+        <div class="border border-green-900 bg-stone-900 overflow-auto">
           <table class="w-full font-mono text-xs">
             <thead>
               <tr class="sticky top-0 bg-stone-950 text-green-600 uppercase tracking-widest">
@@ -381,11 +381,13 @@ export default (app: HTMLElement) => {
       const stats = rowStats(current);
       rowsPanel.innerHTML = stats
         .map(
-          (row) => `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
+          (row) => {
+            const span = spansOf(row);
+            return `<tr data-y="${row.y}" class="odd:bg-stone-950/40">
             <td class="text-right px-3 py-1 text-green-700">${row.y}</td>
-            <td class="text-right px-3 py-1 text-lime-300">${row.total}</td>
-            <td class="px-3 py-1 text-green-400">${spansOf(row)}</td>
-          </tr>`,
+            <td class="text-right px-3 py-1 text-lime-300">${span.length > 1 ? row.total: `${row.total} (${row.total/span.length})`}</td>
+            <td class="px-3 py-1 text-green-400">${span.join(", ")}</td>
+          </tr>`},
         )
         .join("");
       const cells = stats.reduce((sum, row) => sum + row.total, 0);
