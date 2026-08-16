@@ -5,6 +5,7 @@
 
 import { PAGE_CLASS, pageTitle, setMeta } from "./helpers";
 import { rowCountText, toPngBlob, toSvg, download } from "./pixels/export";
+import { GRID_BOLD, GRID_FINE, gridOffset, line } from "./pixels/grid";
 import type { Mask, Mode } from "./pixels/mask";
 import {
   SHAPES,
@@ -82,8 +83,13 @@ export default (app: HTMLElement) => {
         <label class="flex items-center gap-2 cursor-pointer select-none" title="Remove specks and fill pinholes">
           <input id="px-tidy" type="checkbox" class="accent-green-600" /> Tidy
         </label>
-        <label class="flex items-center gap-2 cursor-pointer select-none" title="Rule the preview every 5 cells">
+        <label class="flex items-center gap-2 cursor-pointer select-none" title="Rule the preview, centred on the shape">
           <input id="px-grid" type="checkbox" class="accent-green-600" /> Grid
+        </label>
+        <label class="flex items-center gap-2 select-none" title="Cells per grid square">
+          every
+          <input id="px-grid-step" type="number" min="1" max="64" value="5"
+            class="${FIELD} w-16 py-1" />
         </label>
         <label class="flex items-center gap-2 cursor-pointer select-none">
           Colour
@@ -96,7 +102,7 @@ export default (app: HTMLElement) => {
     <div class="flex-1 min-w-0 flex flex-col gap-4">
       <div class="relative border border-green-900 bg-stone-950 p-2">
         <canvas id="px-canvas" class="w-full block" style="image-rendering: pixelated;"></canvas>
-        <div id="px-overlay" class="absolute inset-2 pointer-events-none hidden"></div>
+        <div id="px-overlay" class="absolute top-2 left-2 right-2 pointer-events-none hidden"></div>
       </div>
 
       <div class="flex flex-wrap items-center gap-3 font-mono text-sm text-green-800">
@@ -144,6 +150,7 @@ export default (app: HTMLElement) => {
   const biasValue = $<HTMLSpanElement>("px-bias-value");
   const tidy = $<HTMLInputElement>("px-tidy");
   const gridToggle = $<HTMLInputElement>("px-grid");
+  const gridStep = $<HTMLInputElement>("px-grid-step");
   const colour = $<HTMLInputElement>("px-colour");
   const canvas = $<HTMLCanvasElement>("px-canvas");
   const overlay = $<HTMLDivElement>("px-overlay");
@@ -251,12 +258,44 @@ export default (app: HTMLElement) => {
     }
     context.putImageData(image, 0, 0);
 
-    // Ruled every 5 cells, as a share of the box so it holds at any zoom.
+    // The overlay takes the canvas's own aspect ratio rather than being pinned
+    // to the box, so the two are the same rectangle to the pixel and the lines
+    // sit on real cell boundaries.
     overlay.classList.toggle("hidden", !gridToggle.checked);
-    overlay.style.backgroundImage =
-      "linear-gradient(to right, rgba(34,197,94,0.35) 0 1px, transparent 1px)," +
-      "linear-gradient(to bottom, rgba(34,197,94,0.35) 0 1px, transparent 1px)";
-    overlay.style.backgroundSize = `${(500 / mask.w).toFixed(4)}% ${(500 / mask.h).toFixed(4)}%`;
+    overlay.style.aspectRatio = `${mask.w} / ${mask.h}`;
+    if (!gridToggle.checked) return;
+
+    const step = Math.min(
+      Math.max(1, Math.round(Number(gridStep.value) || 1)),
+      Math.max(mask.w, mask.h),
+    );
+    const layers: string[] = [];
+    const tiles: string[] = [];
+    const add = (layer: string, tile: string) => {
+      layers.push(layer);
+      tiles.push(tile);
+    };
+
+    // Everything is a share of the box, so the grid is measured in cells of the
+    // shape and stays put as the shape resizes or the page does.
+    //
+    // A line per cell as well, but only while the cells are big enough on
+    // screen for it to read as a grid instead of a wash.
+    if (mask.w <= 64 && mask.h <= 64 && step > 1) {
+      add(line("right", GRID_FINE, 0), `${100 / mask.w}% 100%`);
+      add(line("bottom", GRID_FINE, 0), `100% ${100 / mask.h}%`);
+    }
+    add(
+      line("right", GRID_BOLD, (gridOffset(mask.w, step) / step) * 100),
+      `${(100 * step) / mask.w}% 100%`,
+    );
+    add(
+      line("bottom", GRID_BOLD, (gridOffset(mask.h, step) / step) * 100),
+      `100% ${(100 * step) / mask.h}%`,
+    );
+
+    overlay.style.backgroundImage = layers.join(",");
+    overlay.style.backgroundSize = tiles.join(",");
   };
 
   let frame = 0;
@@ -313,15 +352,23 @@ export default (app: HTMLElement) => {
     draw();
   });
 
-  for (const control of [thickness, bias, tidy, gridToggle, colour]) {
+  for (const control of [thickness, bias, tidy, gridToggle, gridStep, colour]) {
     control.addEventListener("input", draw);
   }
 
   canvas.addEventListener("mousemove", (event) => {
     const box = canvas.getBoundingClientRect();
-    const x = Math.floor(((event.clientX - box.left) / box.width) * current.w);
-    const y = Math.floor(((event.clientY - box.top) / box.height) * current.h);
-    hoverLabel.textContent = `x ${x}, y ${y}`;
+    const cell = (along: number, of: number, count: number) =>
+      Math.min(count - 1, Math.max(0, Math.floor((along / of) * count)));
+    const x = cell(event.clientX - box.left, box.width, current.w);
+    const y = cell(event.clientY - box.top, box.height, current.h);
+
+    // Also from the middle, since the grid is ruled from there.
+    const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+    const fromCentre = `${signed(x - Math.floor((current.w - 1) / 2))}, ${signed(
+      y - Math.floor((current.h - 1) / 2),
+    )}`;
+    hoverLabel.textContent = `x ${x}, y ${y}   ${fromCentre} from centre`;
   });
   canvas.addEventListener("mouseleave", () => (hoverLabel.textContent = ""));
 
