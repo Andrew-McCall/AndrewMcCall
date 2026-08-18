@@ -4,6 +4,8 @@
 // Everything is plain DOM + the Intl APIs the browser already ships; nothing
 // is fetched or bundled. A single tab strip swaps between the panels.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
+
 type Tab = "unix" | "tz" | "relative" | "cron";
 
 // The relative-time tab runs a 1s ticker while it's on screen; this tears it
@@ -355,12 +357,8 @@ export default (app: HTMLElement) => {
     "border border-green-900 hover:border-green-600 text-green-300 font-bold px-4 py-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Time
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Time")}
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
     Timestamps, timezones, relative time, and cron — all in the browser,
     running in <span class="text-green-500">${esc(localZone)}</span>.

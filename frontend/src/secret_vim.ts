@@ -14,6 +14,7 @@
 // own Ex line — type `:snake`, `:motions`, `:quiz` (or `:games` for a menu) and
 // the game takes over the panel; Esc drops you back on the editor.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
 import { mountSnake } from "./secret_snake.ts";
 import { mountMotions } from "./secret_motion.ts";
 import { mountQuiz } from "./secret_vimquiz.ts";
@@ -63,6 +64,21 @@ type GameName = "snake" | "motions" | "quiz" | "games";
 // Set by the page each time it mounts; the Ex commands (defined once, below)
 // call through this so `:snake` etc. reach the live page's game panel.
 let gameLauncher: ((name: GameName) => void) | null = null;
+
+// Tears down whatever the last mount left running. Set on mount, called by the
+// router on the way out (see main.ts) — the same disposeX pattern as
+// secret_pi / secret_morse.
+//
+// Without this, navigating away with a game open left its `keydown` listener
+// attached: Snake's calls preventDefault on h/j/k/l/space, so those four
+// letters could no longer be typed into any input on the site, and space
+// stopped scrolling, until a full reload.
+let teardown: (() => void) | null = null;
+
+export function disposeVim(): void {
+  teardown?.();
+  teardown = null;
+}
 
 const buildEditor = async (doc: string): Promise<any> => {
   CSS.forEach(loadCss);
@@ -202,13 +218,11 @@ const normalize = (s: string): string =>
     .replace(/\n+$/, "");
 
 export default (app: HTMLElement) => {
+  disposeVim(); // drop anything a previous visit left running
+
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Vim
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Vim")}
 
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
     Real CodeMirror + Vim, fetched from a CDN on load — no bundled deps.
@@ -465,6 +479,18 @@ export default (app: HTMLElement) => {
   };
 
   gameLauncher = launchGame;
+
+  // Leaving the page has to do what `returnToEditor` does for the listeners,
+  // without touching DOM the router has already discarded.
+  teardown = () => {
+    if (disposeGame) {
+      disposeGame();
+      disposeGame = null;
+    }
+    window.removeEventListener("keydown", onGameEscape, true);
+    gameLauncher = null;
+  };
+
   app.querySelector<HTMLButtonElement>("#vg-back")!.onclick = returnToEditor;
 
   // Build the editor once and reuse it across navigations (preserves the

@@ -1,7 +1,7 @@
 // Admin blog editor: list of all posts (drafts included) beside a markdown
 // editor with live preview. Router gates this to admins.
 
-import { api, esc, errorText, fmtDate, jsonInit } from "./helpers";
+import { PAGE_CLASS, api, esc, errorText, fmtDate, jsonInit } from "./helpers";
 import { renderMarkdown } from "./markdown";
 
 type PostType = "article" | "book_review";
@@ -30,7 +30,7 @@ type Post = {
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <div class="w-full max-w-5xl flex items-center justify-between">
     <a href="/secret/admin" title="Back to admin">
       <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">
@@ -83,7 +83,7 @@ export default async (app: HTMLElement) => {
         <button id="preview-btn" class="text-green-600 hover:text-green-400 cursor-pointer text-sm">preview</button>
         <button id="delete-btn" class="hidden text-red-500 hover:text-red-400 cursor-pointer text-sm ml-auto">delete</button>
       </div>
-      <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4 select-text"></div>
+      <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4"></div>
     </div>
   </div>
 </div>`;

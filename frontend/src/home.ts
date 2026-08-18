@@ -11,41 +11,17 @@ import {
   esc,
   extLink,
   fmtDate,
+  setMeta,
   CARD_LIFT_CLASS,
   LINK_CLASS,
+  SITE_TITLE,
+  SITE_DESCRIPTION,
 } from "./helpers";
 import { postCard, type PostSummary } from "./post_card";
 import { renderMarkdown } from "./markdown";
 import { getMe } from "./session";
-
-type Home = {
-  profile: {
-    intro_markdown: string;
-    profile_image_url: string;
-    github_url: string;
-  };
-  projects: {
-    name: string;
-    description: string;
-    url: string | null;
-    repo: string | null;
-  }[];
-  commits: {
-    sha: string;
-    repo: string;
-    message: string;
-    url: string;
-    committed_at: string;
-  }[];
-  posts: PostSummary[];
-  book_reviews: PostSummary[];
-  details: {
-    key: string;
-    label: string;
-    value: string;
-    url: string | null;
-  }[];
-};
+// Generated from `HomeJson` in `backend/src/site.rs` — see `backend/build.rs`.
+import type { Home } from "@andrewmccall/api-types";
 
 const section = (title: string, inner: string) => `
   <section class="w-full max-w-3xl mx-auto px-6 py-10">
@@ -129,6 +105,17 @@ const githubSection = (profile: Home["profile"], commits: Home["commits"]) => {
   return section("GitHub", `${link}${table}`);
 };
 
+// Same chip as the notes browser, so a tag looks like a tag everywhere.
+const TAG_CHIP =
+  "text-green-600 bg-green-900/30 px-1.5 py-0.5 text-xs font-mono whitespace-nowrap";
+
+const tagChips = (tags: string[]) =>
+  tags.length > 0
+    ? `<div class="flex flex-wrap gap-1">${tags
+        .map((t) => `<span class="${TAG_CHIP}">${esc(t)}</span>`)
+        .join("")}</div>`
+    : "";
+
 const projectsSection = (projects: Home["projects"]) => {
   if (projects.length === 0) return "";
   const cards = projects
@@ -137,6 +124,7 @@ const projectsSection = (projects: Home["projects"]) => {
       <div class="border border-green-900 bg-stone-900 p-5 flex flex-col gap-2 ${CARD_LIFT_CLASS}">
         <h3 class="text-lg font-bold text-lime-300">${esc(p.name)}</h3>
         <p class="text-sm text-stone-300 leading-relaxed flex-1">${esc(p.description)}</p>
+        ${tagChips(p.tags)}
         <div class="flex gap-4 text-sm">
           ${p.url ? extLink(p.url, "visit ↗") : ""}
           ${p.repo ? extLink(`https://github.com/${p.repo}`, "source ↗") : ""}
@@ -169,10 +157,22 @@ const postSection = (
 const renderHome = (root: HTMLElement, home: Home) => {
   const { profile, projects, commits, posts, book_reviews, details } = home;
 
+  // Search-result copy, editable from the admin profile page. Blank there means
+  // "keep the build-time default", which index.html is already showing — so the
+  // tags stay correct even when this never runs because the API is down.
+  //
+  // Restoring it on every render matters for more than the first paint: a
+  // visitor who opens a post and clicks back reaches this page without a reload,
+  // and the head would otherwise still be describing the post.
+  setMeta(
+    profile.seo_title || SITE_TITLE,
+    profile.seo_description || SITE_DESCRIPTION,
+  );
+
   root.innerHTML = `
     ${aboutSection(profile)}
-    ${nowSection(details)}
     ${githubSection(profile, commits)}
+    ${nowSection(details)}
     ${postSection("Posts", posts, "all posts", "/posts")}
     ${postSection("Book Reviews", book_reviews, "all reviews", "/posts#reviews")}
     ${projectsSection(projects)}`;
@@ -193,7 +193,7 @@ const SECRET_BTN_DELAY_MS = 180_000;
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-    <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh] select-text"></main>`;
+    <main id="home-content" class="text-green-500 pt-[16vmin] pb-16 min-h-[150vh]"></main>`;
 
   // Signed-in visitors have already seen the erosion reveal, so bring the board
   // up cleared for them — as if the "clear" button had been pressed. Signed in

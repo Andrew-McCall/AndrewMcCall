@@ -1,6 +1,7 @@
 // Public blog: the /posts list and /posts/{slug} detail pages.
 
 import {
+  PAGE_CLASS,
   api,
   bareUrl,
   esc,
@@ -21,7 +22,7 @@ import { renderMarkdown } from "./markdown";
 const PAGE_SIZE = 8; // list entries shown before "load more"
 
 const shell = (inner: string) => `
-  <div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500 select-text">
+  <div class="${PAGE_CLASS}">
     <div class="w-full max-w-3xl">
       <a href="/" title="Home">
         <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">

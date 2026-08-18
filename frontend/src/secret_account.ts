@@ -5,6 +5,7 @@
 // the account from the session cookie, so this page can only ever change your
 // own PIN. A success signs every other session out, so we say so.
 
+import { PAGE_CLASS } from "./helpers";
 import type { Me } from "./session.ts";
 
 const api = (path: string, init?: RequestInit) =>
@@ -41,7 +42,7 @@ const inputClass =
 
 export default async (app: HTMLElement, me: Me) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <div class="w-full max-w-xl flex items-center justify-between">
     <a href="/secret" title="Back to the secret menu">
       <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">

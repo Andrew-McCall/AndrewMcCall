@@ -9,10 +9,11 @@
 use hyper::header::{CACHE_CONTROL, HeaderValue};
 use hyper::{Method, StatusCode};
 use sonic_rs::Serialize;
+use ts_typegen::Ts;
 use std::collections::HashMap;
 
 use crate::config::ApiConfig;
-use crate::database::models::{City, Country};
+use crate::database::models::{City as CityRow, Country as CountryRow};
 use crate::response::{ApiError, Body, ResponseBuilder};
 
 /// Where the country SVGs live, relative to the backend's working directory
@@ -27,8 +28,8 @@ const IMAGE_PREFIX: &str = "/api/countries";
 /// Flag CDN serving vector flags at `/{iso2}.svg`.
 const FLAG_CDN: &str = "https://flagcdn.com";
 
-#[derive(Serialize)]
-struct CityJson {
+#[derive(Serialize, Ts)]
+struct City {
     name: String,
     x: f64,
     y: f64,
@@ -36,14 +37,14 @@ struct CityJson {
     capital: bool,
 }
 
-#[derive(Serialize)]
-struct CountryJson {
+#[derive(Serialize, Ts)]
+struct Country {
     country: String,
     population: Option<i64>,
     gdp: Option<i64>,
     image: String,
     flag: Option<String>,
-    cities: Vec<CityJson>,
+    cities: Vec<City>,
 }
 
 /// The tables only change when the update tool runs, so let clients and
@@ -59,7 +60,7 @@ fn cacheable(status: StatusCode, max_age: &'static str) -> ResponseBuilder {
 /// viewBox space (the capital marked `capital: true`).
 pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
     let pool = config.db.pool();
-    let countries: Vec<Country> = match sqlx::query_as(
+    let countries: Vec<CountryRow> = match sqlx::query_as(
         "SELECT slug, name, population, iso2, gdp FROM countries ORDER BY name",
     )
     .fetch_all(&pool)
@@ -71,7 +72,7 @@ pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
             return ResponseBuilder::from(ApiError::Internal).into();
         }
     };
-    let cities: Vec<City> = match sqlx::query_as(
+    let cities: Vec<CityRow> = match sqlx::query_as(
         "SELECT country_slug, name, x, y, population, capital FROM cities \
          ORDER BY population DESC NULLS LAST, name",
     )
@@ -85,12 +86,12 @@ pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
         }
     };
 
-    let mut by_slug: HashMap<String, Vec<CityJson>> = HashMap::new();
+    let mut by_slug: HashMap<String, Vec<City>> = HashMap::new();
     for city in cities {
         by_slug
             .entry(city.country_slug)
             .or_default()
-            .push(CityJson {
+            .push(City {
                 name: city.name,
                 x: city.x,
                 y: city.y,
@@ -98,9 +99,9 @@ pub async fn list_response(config: &ApiConfig) -> hyper::Response<Body> {
                 capital: city.capital,
             });
     }
-    let list: Vec<CountryJson> = countries
+    let list: Vec<Country> = countries
         .into_iter()
-        .map(|c| CountryJson {
+        .map(|c| Country {
             image: image_url(&c.slug),
             flag: c.iso2.as_deref().map(flag_url),
             cities: by_slug.remove(&c.slug).unwrap_or_default(),
@@ -192,13 +193,13 @@ mod tests {
 
     #[test]
     fn listing_serializes_expected_shape() {
-        let entry = CountryJson {
+        let entry = Country {
             country: "United Kingdom".into(),
             population: Some(66_834_405),
             gdp: Some(2_827_113),
             image: image_url("united-kingdom"),
             flag: Some(flag_url("gb")),
-            cities: vec![CityJson {
+            cities: vec![City {
                 name: "London".into(),
                 x: 508.62,
                 y: 967.28,
@@ -212,7 +213,7 @@ mod tests {
             r#"{"country":"United Kingdom","population":66834405,"gdp":2827113,"image":"/api/countries/united-kingdom.svg","flag":"https://flagcdn.com/gb.svg","cities":[{"name":"London","x":508.62,"y":967.28,"population":10979000,"capital":true}]}"#
         );
         // Unknowns serialize as explicit nulls.
-        let bare = CountryJson {
+        let bare = Country {
             country: "Antarctica".into(),
             population: None,
             gdp: None,

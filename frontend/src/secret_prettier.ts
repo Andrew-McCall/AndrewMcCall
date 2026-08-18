@@ -4,6 +4,8 @@
 // it never blocks first paint, and each language plugin is fetched lazily
 // on first use (and cached) rather than all up front.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
+
 type Lang = "json" | "xml" | "html" | "css" | "babel";
 
 const PRETTIER_URL = "https://esm.sh/prettier@3/standalone";
@@ -89,12 +91,8 @@ export default (app: HTMLElement) => {
   warmUp();
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Prettier
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Prettier")}
 
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-4">
     <div class="flex flex-wrap gap-2 items-center">

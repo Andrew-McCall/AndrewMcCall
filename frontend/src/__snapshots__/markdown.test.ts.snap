@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderMarkdown formatting > a trailing backslash is a hard break 1`] = `"<p class="leading-relaxed">one<br />two three</p>"`;
+
+exports[`renderMarkdown formatting > blockquote 1`] = `
+"<blockquote class="border-l-2 border-green-700 pl-3 text-stone-400 italic">quoted line</blockquote>
+<blockquote class="border-l-2 border-green-700 pl-3 text-stone-400 italic">second line</blockquote>"
+`;
+
+exports[`renderMarkdown formatting > blockquote with markup 1`] = `"<blockquote class="border-l-2 border-green-700 pl-3 text-stone-400 italic"><strong>bold</strong> in a <code class="bg-stone-900 text-lime-300 px-1">quote</code></blockquote>"`;
+
+exports[`renderMarkdown formatting > bold and italic 1`] = `"<p class="leading-relaxed"><strong>bold</strong> and <em>italic</em> and <strong>both</strong> <em>mixed</em></p>"`;
+
+exports[`renderMarkdown formatting > bullet list with both markers 1`] = `"<ul class="list-disc pl-6 flex flex-col gap-1"><li>alpha</li><li>beta</li><li>gamma</li></ul>"`;
+
+exports[`renderMarkdown formatting > crlf line endings 1`] = `
+"<h2 id="title" class="group text-2xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#title" class="no-underline">Title<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h2>
+<p class="leading-relaxed">text</p>"
+`;
+
+exports[`renderMarkdown formatting > empty input 1`] = `""`;
+
+exports[`renderMarkdown formatting > everything at once 1`] = `
+"<h2 id="title" class="group text-2xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#title" class="no-underline">Title<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h2>
+<p class="leading-relaxed">Intro paragraph with <strong>bold</strong>, <em>italic</em>, <code class="bg-stone-900 text-lime-300 px-1">code</code> and a <a href="https://example.com" class="text-green-500 hover:text-green-400 underline" target="_blank" rel="noopener">link</a>.</p>
+<h3 id="section" class="group text-xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#section" class="no-underline">Section<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h3>
+<ul class="list-disc pl-6 flex flex-col gap-1"><li>one</li><li>two</li></ul>
+<ol class="list-decimal pl-6 flex flex-col gap-1"><li>first</li><li>second</li></ol>
+<blockquote class="border-l-2 border-green-700 pl-3 text-stone-400 italic">a quote</blockquote>
+<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">const x = 1;</code></pre>
+<hr class="border-green-900" />
+<p class="leading-relaxed">Closing words.</p>"
+`;
+
+exports[`renderMarkdown formatting > external link 1`] = `"<p class="leading-relaxed">see <a href="https://example.com" class="text-green-500 hover:text-green-400 underline" target="_blank" rel="noopener">the site</a> now</p>"`;
+
+exports[`renderMarkdown formatting > fenced code block 1`] = `
+"<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">let x = 1;
+&lt;b&gt;not html&lt;/b&gt;</code></pre>"
+`;
+
+exports[`renderMarkdown formatting > fenced code with language 1`] = `"<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">fn main() {}</code></pre>"`;
+
+exports[`renderMarkdown formatting > heading beyond h3 is a paragraph 1`] = `"<p class="leading-relaxed">#### Four ##### Five</p>"`;
+
+exports[`renderMarkdown formatting > heading id slugification 1`] = `"<h3 id="hello-world-v2" class="group text-xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#hello-world-v2" class="no-underline">Hello, World! (v2)<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h3>"`;
+
+exports[`renderMarkdown formatting > heading levels 1`] = `
+"<h2 id="one" class="group text-2xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#one" class="no-underline">One<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h2>
+<h3 id="two" class="group text-xl font-bold text-green-400 mt-4 scroll-mt-20"><a href="#two" class="no-underline">Two<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h3>
+<h4 id="three" class="group text-lg font-bold text-green-400 mt-4 scroll-mt-20"><a href="#three" class="no-underline">Three<span class="opacity-0 group-hover:opacity-100 text-green-700 ml-2">#</span></a></h4>"
+`;
+
+exports[`renderMarkdown formatting > horizontal rules 1`] = `
+"<p class="leading-relaxed">above</p>
+<hr class="border-green-900" />
+<p class="leading-relaxed">middle</p>
+<hr class="border-green-900" />
+<p class="leading-relaxed">below</p>"
+`;
+
+exports[`renderMarkdown formatting > indented list items 1`] = `"<ul class="list-disc pl-6 flex flex-col gap-1"><li>indented</li><li>also</li></ul>"`;
+
+exports[`renderMarkdown formatting > inline code 1`] = `"<p class="leading-relaxed">use <code class="bg-stone-900 text-lime-300 px-1">cargo test</code> here</p>"`;
+
+exports[`renderMarkdown formatting > link with disallowed scheme is literal 1`] = `"<p class="leading-relaxed">[x](mailto:a@b.c) [y](ftp://h/f)</p>"`;
+
+exports[`renderMarkdown formatting > list type transition 1`] = `
+"<ul class="list-disc pl-6 flex flex-col gap-1"><li>bullet</li></ul>
+<ol class="list-decimal pl-6 flex flex-col gap-1"><li>numbered</li></ol>
+<ul class="list-disc pl-6 flex flex-col gap-1"><li>bullet again</li></ul>"
+`;
+
+exports[`renderMarkdown formatting > numbered list 1`] = `"<ol class="list-decimal pl-6 flex flex-col gap-1"><li>first</li><li>second</li><li>tenth</li></ol>"`;
+
+exports[`renderMarkdown formatting > paragraph joins wrapped lines 1`] = `"<p class="leading-relaxed">one two three</p>"`;
+
+exports[`renderMarkdown formatting > paragraphs split on blank line 1`] = `
+"<p class="leading-relaxed">first para</p>
+<p class="leading-relaxed">second para</p>"
+`;
+
+exports[`renderMarkdown formatting > relative link 1`] = `"<p class="leading-relaxed">see <a href="/posts" class="text-green-500 hover:text-green-400 underline">posts</a> now</p>"`;
+
+exports[`renderMarkdown formatting > two trailing spaces are a hard break 1`] = `"<p class="leading-relaxed">one<br />two three</p>"`;
+
+exports[`renderMarkdown formatting > unclosed fence flushes at EOF 1`] = `"<pre class="bg-stone-900 border border-green-900 p-3 overflow-x-auto"><code class="text-lime-300 text-sm">never closed</code></pre>"`;
+
+exports[`renderMarkdown formatting > whitespace only 1`] = `""`;

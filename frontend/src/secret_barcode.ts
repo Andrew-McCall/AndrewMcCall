@@ -4,6 +4,8 @@
 // on first use (and cached), and a warm-up kicks the fetches off after the
 // page's `load` event so they never block first paint.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
+
 const QRCODE_URL = "https://esm.sh/qrcode@1.5.4";
 const JSBARCODE_URL = "https://esm.sh/jsbarcode@3.11.6";
 
@@ -49,12 +51,8 @@ export default (app: HTMLElement) => {
   warmUp();
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Barcodes
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Barcodes")}
 
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
     Generate a QR code or a 1D barcode, all in the browser. Type, hit

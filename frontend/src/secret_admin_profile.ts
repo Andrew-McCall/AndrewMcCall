@@ -1,18 +1,19 @@
-// Admin editor for the home page profile: intro markdown, image and GitHub
-// link. Router gates this to admins.
+// Admin editor for the home page profile: intro markdown, image, GitHub link
+// and the front page's search-result copy. Router gates this to admins.
 
-import { api, errorText, jsonInit } from "./helpers";
+import { PAGE_CLASS, api, errorText, jsonInit } from "./helpers";
 import { renderMarkdown } from "./markdown";
 
-type Profile = {
-  intro_markdown: string;
-  profile_image_url: string;
-  github_url: string;
-};
+import type { Profile } from "@andrewmccall/api-types";
+
+// What Google actually shows before truncating with an ellipsis. Advisory only —
+// the backend caps these higher (70 / 200), so a slightly long line still saves.
+const SEO_TITLE_IDEAL = 60;
+const SEO_DESCRIPTION_IDEAL = 155;
 
 export default async (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <div class="w-full max-w-3xl">
     <a href="/secret/admin" title="Back to admin">
       <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">
@@ -34,18 +35,35 @@ export default async (app: HTMLElement) => {
     <input id="github-url" type="text" spellcheck="false" autocomplete="off" placeholder="https://github.com/…"
       class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
 
+    <label class="text-green-600 font-mono text-sm uppercase tracking-widest mt-8">Search title</label>
+    <p class="text-green-800 text-xs -mt-2">
+      The front page's title in Google. Leave blank for the built-in default. Around ${SEO_TITLE_IDEAL} characters — longer gets cut off.
+    </p>
+    <input id="seo-title" type="text" spellcheck="false" autocomplete="off" placeholder="Andrew McCall — …"
+      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm" />
+
+    <label class="text-green-600 font-mono text-sm uppercase tracking-widest mt-4">Search description</label>
+    <p class="text-green-800 text-xs -mt-2">
+      The grey summary under the title. Leave blank for the built-in default. Around ${SEO_DESCRIPTION_IDEAL} characters — longer gets cut off.
+    </p>
+    <textarea id="seo-description" rows="3" spellcheck="true" placeholder="what should someone see before they click?"
+      class="bg-stone-900 border border-green-900 focus:border-green-600 outline-none px-3 py-2 text-green-300 placeholder-green-900 font-mono text-sm resize-y"></textarea>
+
     <div class="flex items-center gap-4 mt-4">
       <button id="save-btn" class="bg-transparent border border-green-500 hover:bg-green-500/10 disabled:opacity-60 disabled:cursor-not-allowed text-green-400 font-bold px-5 py-2 cursor-pointer transition-colors">Save</button>
       <button id="preview-btn" class="text-green-600 hover:text-green-400 cursor-pointer text-sm">preview</button>
       <span id="status" class="text-green-700 text-sm"></span>
     </div>
-    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4 select-text"></div>
+    <div id="preview" class="hidden flex-col gap-3 text-stone-300 border border-green-900 p-4"></div>
   </div>
 </div>`;
 
   const intro = app.querySelector<HTMLTextAreaElement>("#intro")!;
   const imageUrl = app.querySelector<HTMLInputElement>("#image-url")!;
   const githubUrl = app.querySelector<HTMLInputElement>("#github-url")!;
+  const seoTitle = app.querySelector<HTMLInputElement>("#seo-title")!;
+  const seoDescription =
+    app.querySelector<HTMLTextAreaElement>("#seo-description")!;
   const saveBtn = app.querySelector<HTMLButtonElement>("#save-btn")!;
   const previewBtn = app.querySelector<HTMLButtonElement>("#preview-btn")!;
   const preview = app.querySelector<HTMLDivElement>("#preview")!;
@@ -58,6 +76,8 @@ export default async (app: HTMLElement) => {
       intro.value = profile.intro_markdown;
       imageUrl.value = profile.profile_image_url;
       githubUrl.value = profile.github_url;
+      seoTitle.value = profile.seo_title;
+      seoDescription.value = profile.seo_description;
     } else {
       status.textContent = await errorText(res);
     }
@@ -83,6 +103,8 @@ export default async (app: HTMLElement) => {
             intro_markdown: intro.value,
             profile_image_url: imageUrl.value.trim(),
             github_url: githubUrl.value.trim(),
+            seo_title: seoTitle.value.trim(),
+            seo_description: seoDescription.value.trim(),
           },
           "PUT",
         ),

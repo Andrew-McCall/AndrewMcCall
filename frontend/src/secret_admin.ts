@@ -6,16 +6,9 @@
 // or disable).
 
 import type { Me } from "./session.ts";
-import { api, esc, errorText, jsonInit, setMeta } from "./helpers";
+import { PAGE_CLASS, api, esc, errorText, jsonInit, setMeta } from "./helpers";
 
-type AdminUser = {
-  id: string;
-  name: string;
-  role: string;
-  totp_enabled: boolean;
-  created_at: string;
-  last_login: string | null;
-};
+import type { AdminStatus, AdminUser } from "@andrewmccall/api-types";
 
 // Dates here are audit data, so unlike the public pages' `fmtDate` these keep
 // the time of day.
@@ -55,7 +48,7 @@ export default async (app: HTMLElement, me: Me) => {
   setMeta("Admin", "Site administration.");
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
+<div class="${PAGE_CLASS}">
   <header class="w-full max-w-3xl flex flex-col gap-4">
     <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
       <a href="/secret" title="Back to the secret menu" class="${RING} focus-visible:ring-green-500">
@@ -65,6 +58,7 @@ export default async (app: HTMLElement, me: Me) => {
       </a>
       <p class="font-mono text-sm text-green-700">
         signed in as <span class="text-green-400">${esc(me.name)}</span>
+        <span id="uptime"></span>
         <span aria-hidden="true" class="px-1 text-green-900">/</span>
         <button id="logout" class="${BTN_QUIET} underline underline-offset-2">log out</button>
       </p>
@@ -123,6 +117,7 @@ export default async (app: HTMLElement, me: Me) => {
 
 <div id="toasts" aria-live="polite" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 items-end pointer-events-none"></div>`;
 
+  const uptime = app.querySelector<HTMLSpanElement>("#uptime")!;
   const rows = app.querySelector<HTMLTableSectionElement>("#user-rows")!;
   const userCount = app.querySelector<HTMLSpanElement>("#user-count")!;
   const totpPanel = app.querySelector<HTMLDivElement>("#totp-panel")!;
@@ -218,6 +213,22 @@ export default async (app: HTMLElement, me: Me) => {
         actionCell.appendChild(del);
       }
       rows.appendChild(tr);
+    }
+  };
+
+  // How long the server has been up. It used to sit on the public home page as
+  // a "Now" detail, which told every visitor when the box was last restarted.
+  // Nothing here depends on it, so a failure leaves the line as it was.
+  const loadUptime = async () => {
+    try {
+      const res = await api("/admin/status");
+      if (!res.ok) return;
+      const status: AdminStatus = await res.json();
+      uptime.innerHTML =
+        `<span aria-hidden="true" class="px-1 text-green-900">/</span>` +
+        `up <span class="text-green-400">${esc(status.uptime)}</span>`;
+    } catch {
+      /* nothing to say if the server won't tell us */
     }
   };
 
@@ -503,5 +514,5 @@ export default async (app: HTMLElement, me: Me) => {
   };
 
   renderTotpPanel();
-  await loadUsers();
+  await Promise.all([loadUsers(), loadUptime()]);
 };

@@ -4,12 +4,10 @@
 // navigation to gate protected pages and hands the result to the page, so no
 // page has to re-implement the "am I signed in?" bounce.
 
-export type Me = {
-  id: string;
-  name: string;
-  role: string;
-  totp_enabled: boolean;
-};
+// Generated from `UserView` in `backend/src/auth.rs` — see `backend/build.rs`.
+import type { Me } from "@andrewmccall/api-types";
+
+export type { Me };
 
 // Resolves the current session, or `null` when signed out or the API is down.
 export async function getMe(): Promise<Me | null> {

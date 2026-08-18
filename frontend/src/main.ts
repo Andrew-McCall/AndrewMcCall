@@ -84,7 +84,10 @@ const routes: Record<string, Route> = {
     auth: "public",
     render: lazy(() => import("./secret_prettier.ts")),
   },
-  "/secret/vim": { auth: "public", render: lazy(() => import("./secret_vim.ts")) },
+  "/secret/vim": {
+    auth: "public",
+    render: disposable("vim", () => import("./secret_vim.ts")),
+  },
   "/secret/time": {
     auth: "public",
     render: disposable("time", () => import("./secret_time.ts")),
@@ -96,6 +99,10 @@ const routes: Record<string, Route> = {
   "/secret/barcode": {
     auth: "public",
     render: lazy(() => import("./secret_barcode.ts")),
+  },
+  "/secret/pixels": {
+    auth: "public",
+    render: lazy(() => import("./secret_pixels.ts")),
   },
   "/secret/cron": { auth: "public", render: lazy(() => import("./secret_cron.ts")) },
   "/secret/man": { auth: "public", render: lazy(() => import("./secret_man.ts")) },
@@ -147,12 +154,23 @@ const routes: Record<string, Route> = {
 const prefixRoutes: {
   prefix: string;
   auth: Auth;
+  name?: string; // stashed in `loaded` when the page owns a disposer
   render: (app: HTMLElement, param: string, me: Me | null) => void | Promise<void>;
 }[] = [
   {
     prefix: "/posts/",
     auth: "public",
     render: (app, slug) => import("./posts.ts").then((m) => m.postPage(app, slug)),
+  },
+  {
+    prefix: "/secret/notes/",
+    auth: "user",
+    name: "notes",
+    render: (app, slug) =>
+      import("./secret_notes.ts").then((m) => {
+        loaded.set("notes", m);
+        return m.default(app, decodeURIComponent(slug));
+      }),
   },
 ];
 
@@ -179,8 +197,16 @@ async function renderPage(): Promise<void> {
   if (page !== "/secret/time") {
     loaded.get("time")?.disposeTime(); // stop the relative-time tab's 1s ticker
   }
-  if (page !== "/secret/notes") {
-    loaded.get("notes")?.disposeNotes(); // detach the online/offline listeners
+  if (page !== "/secret/vim") {
+    // Tear down an open game: its keydown handler preventDefaults keys the rest
+    // of the site needs (Snake takes h/j/k/l and space).
+    loaded.get("vim")?.disposeVim();
+  }
+  // The notes page owns keyboard/connectivity listeners and a pending autosave,
+  // so it is only torn down when leaving the section entirely — navigating
+  // between two notes re-enters the same page.
+  if (!page.startsWith("/secret/notes")) {
+    loaded.get("notes")?.disposeNotes();
   }
 
   app.innerHTML = "";
@@ -197,8 +223,17 @@ async function renderPage(): Promise<void> {
       (r) => page.startsWith(r.prefix) && page.length > r.prefix.length,
     );
     if (prefixed) {
-      // Only public prefix routes exist today, so no session gate here.
-      return prefixed.render(app, page.slice(prefixed.prefix.length), null);
+      // Same gate as the exact table: resolve the session for protected
+      // prefixes and bounce anyone who isn't allowed.
+      let me: Me | null = null;
+      if (prefixed.auth !== "public") {
+        me = await getMe();
+        if (!me || (prefixed.auth === "admin" && me.role !== "admin")) {
+          return window.navigate("/secret");
+        }
+        if (window.location.pathname.toLowerCase() !== page) return;
+      }
+      return prefixed.render(app, page.slice(prefixed.prefix.length), me);
     }
     // 404 — send them home and render it.
     window.history.pushState({}, "", "/");

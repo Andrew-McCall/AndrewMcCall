@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use chrono::{DateTime, Utc};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::auth::{self, AuthUser};
@@ -31,6 +32,52 @@ pub async fn require_admin(
     }
 }
 
+/// A human-readable process uptime like `3d 4h 12m`, falling back to seconds
+/// under a minute so a freshly-restarted server still shows something.
+fn format_uptime(secs: u64) -> String {
+    let (days, hours, mins) = (secs / 86_400, (secs % 86_400) / 3_600, (secs % 3_600) / 60);
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if mins > 0 {
+        parts.push(format!("{mins}m"));
+    }
+    if parts.is_empty() {
+        parts.push(format!("{secs}s"));
+    }
+    parts.join(" ")
+}
+
+/// What the admin page shows about the server itself.
+#[derive(Serialize, Ts)]
+#[ts(rename = "AdminStatus")]
+struct AdminStatusJson {
+    uptime: String,
+}
+
+/// `GET /admin/status` — how long this process has been serving. Admin-only:
+/// the public pages used to carry it as a home-page detail, which told every
+/// visitor when the box was last restarted.
+pub async fn status(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    if let Err(err) = require_admin(&req, peer, config).await {
+        return ResponseBuilder::from(err).into();
+    }
+
+    ResponseBuilder::new(StatusCode::OK)
+        .json(&AdminStatusJson {
+            uptime: format_uptime(config.started_at.elapsed().as_secs()),
+        })
+        .into()
+}
+
 /// One row of the admin user listing, read from the database.
 #[derive(sqlx::FromRow)]
 struct AdminUser {
@@ -45,7 +92,8 @@ struct AdminUser {
 
 /// The JSON wire shape of an admin user listing row. `UserRole` has no serde
 /// impl (it's only a `sqlx::Type`), so we map to explicit string fields here.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "AdminUser")]
 struct AdminUserJson {
     id: String,
     name: String,
@@ -209,8 +257,8 @@ struct VisitRow {
 }
 
 /// The JSON wire shape of a detailed visit row.
-#[derive(Serialize)]
-struct VisitJson {
+#[derive(Serialize, Ts)]
+struct Visit {
     id: String,
     created_at: String,
     kind: String,
@@ -223,7 +271,7 @@ struct VisitJson {
     user_agent: String,
 }
 
-impl From<VisitRow> for VisitJson {
+impl From<VisitRow> for Visit {
     fn from(v: VisitRow) -> Self {
         Self {
             id: v.id.to_string(),
@@ -239,12 +287,12 @@ impl From<VisitRow> for VisitJson {
 
 /// A page of detailed visits plus the total matching the current filters, so the
 /// client can drive prev/next controls.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 struct VisitsPage {
     total: i64,
     limit: i64,
     offset: i64,
-    visits: Vec<VisitJson>,
+    visits: Vec<Visit>,
 }
 
 /// Largest page the admin visits endpoint will return in one request.
@@ -325,7 +373,7 @@ pub async fn list_visits(
         total,
         limit,
         offset,
-        visits: rows.into_iter().map(VisitJson::from).collect(),
+        visits: rows.into_iter().map(Visit::from).collect(),
     };
     ResponseBuilder::new(StatusCode::OK).json(&page).into()
 }
@@ -373,13 +421,10 @@ pub async fn delete_user(
 }
 
 /// Percent-decodes the first value of query parameter `key`, if present.
-fn query_param(query: Option<&str>, key: &str) -> Option<String> {
+pub fn query_param(query: Option<&str>, key: &str) -> Option<String> {
     query
-        .into_iter()
-        .flat_map(|q| q.split('&'))
-        .filter_map(|pair| pair.split_once('='))
-        .find(|(k, _)| *k == key)
-        .map(|(_, v)| {
+        .and_then(|q| crate::text::query_value(q, key))
+        .map(|v| {
             percent_encoding::percent_decode_str(v)
                 .decode_utf8_lossy()
                 .into_owned()
@@ -427,5 +472,15 @@ mod tests {
         assert!(!is_valid_route("secret"));
         assert!(!is_valid_route(&format!("/{}", "a".repeat(256))));
         assert!(!is_valid_route("/bad\nroute"));
+    }
+
+    #[test]
+    fn format_uptime_is_human_readable() {
+        assert_eq!(format_uptime(0), "0s");
+        assert_eq!(format_uptime(45), "45s");
+        assert_eq!(format_uptime(90), "1m");
+        assert_eq!(format_uptime(3_600), "1h");
+        assert_eq!(format_uptime(3 * 86_400 + 4 * 3_600 + 12 * 60), "3d 4h 12m");
+        assert_eq!(format_uptime(86_400), "1d");
     }
 }

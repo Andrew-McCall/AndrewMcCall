@@ -12,6 +12,8 @@ mod password;
 mod posts;
 mod response;
 mod site;
+mod slug;
+mod text;
 mod stats;
 mod visit_class;
 
@@ -86,6 +88,7 @@ async fn route(
         (&Method::POST, "/auth/totp/enable") => auth::totp_enable(req, peer, &config).await,
         (&Method::POST, "/auth/totp/disable") => auth::totp_disable(req, peer, &config).await,
 
+        (&Method::GET, "/admin/status") => admin::status(req, peer, &config).await,
         (&Method::GET, "/admin/users") => admin::list_users(req, peer, &config).await,
         (&Method::POST, "/admin/users") => admin::create_user(req, peer, &config).await,
         (&Method::GET, "/admin/visits") => admin::list_visits(req, peer, &config).await,
@@ -93,6 +96,7 @@ async fn route(
         (&Method::POST, "/admin/posts") => posts::create(req, peer, &config).await,
         (&Method::GET, "/admin/projects") => site::list_projects(req, peer, &config).await,
         (&Method::POST, "/admin/projects") => site::create_project(req, peer, &config).await,
+        (&Method::GET, "/admin/project-tags") => site::list_project_tags(req, peer, &config).await,
         (&Method::GET, "/admin/profile") => site::get_profile(req, peer, &config).await,
         (&Method::PUT, "/admin/profile") => site::update_profile(req, peer, &config).await,
         (&Method::GET, "/admin/details") => site::get_details(req, peer, &config).await,
@@ -103,17 +107,18 @@ async fn route(
 
         (&Method::GET, "/notes") => notes::list_notes(req, peer, &config).await,
         (&Method::POST, "/notes") => notes::create_note(req, peer, &config).await,
-        (&Method::GET, "/tags") => notes::list_tags(req, peer, &config).await,
-        (&Method::POST, "/tags") => notes::create_tag(req, peer, &config).await,
+        (&Method::GET, "/meta") => notes::list_meta(req, peer, &config).await,
+        (&Method::GET, "/meta/types") => notes::list_meta_types(req, peer, &config).await,
 
         // Known path, but the method above didn't match: 405 (not 404).
         (
             _,
             "/health" | "/password/types" | "/password" | "/countries" | "/stats" | "/auth/login"
             | "/auth/logout" | "/auth/me" | "/auth/pin" | "/auth/totp/setup" | "/auth/totp/enable"
-            | "/auth/totp/disable" | "/admin/users" | "/admin/visits" | "/admin/posts"
-            | "/admin/projects" | "/admin/profile" | "/admin/details" | "/home" | "/posts"
-            | "/notes" | "/tags",
+            | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
+            | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
+            | "/admin/details" | "/home"
+            | "/posts" | "/notes" | "/meta" | "/meta/types",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
         // Step 2: parameterized routes. Own the id/slug before moving `req`,
@@ -151,19 +156,22 @@ async fn route(
                     ResponseBuilder::from(ApiError::MethodNotAllowed).into()
                 };
             }
-            if let Some(id) = path.strip_prefix("/notes/") {
-                let id = id.to_string();
+            if let Some(rest) = path.strip_prefix("/notes/") {
+                // `/notes/{id}/restore` before the bare-id forms, so the suffix
+                // isn't parsed as part of the uuid.
+                if let Some(id) = rest.strip_suffix("/restore") {
+                    let id = id.to_string();
+                    return if method == Method::POST {
+                        notes::restore_note(req, peer, &config, &id).await
+                    } else {
+                        ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                    };
+                }
+                let id = rest.to_string();
                 return match method {
+                    Method::GET => notes::get_note(req, peer, &config, &id).await,
                     Method::PUT => notes::update_note(req, peer, &config, &id).await,
                     Method::DELETE => notes::delete_note(req, peer, &config, &id).await,
-                    _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
-                };
-            }
-            if let Some(id) = path.strip_prefix("/tags/") {
-                let id = id.to_string();
-                return match method {
-                    Method::PUT => notes::update_tag(req, peer, &config, &id).await,
-                    Method::DELETE => notes::delete_tag(req, peer, &config, &id).await,
                     _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
                 };
             }
@@ -232,6 +240,27 @@ where
     }
 }
 
+/// Parses `RUST_LOG` into a target filter.
+///
+/// [`tracing_subscriber::filter::Targets`] understands the directive syntax
+/// this project actually uses — `info`, `backend=debug`, `info,sqlx=warn` —
+/// without `EnvFilter`, which drags in a regex engine to support span-field
+/// predicates nothing here writes. An unparseable value falls back to `info`
+/// rather than failing startup over a typo in an env var.
+fn log_filter() -> tracing_subscriber::filter::Targets {
+    use std::str::FromStr;
+    let raw = std::env::var("RUST_LOG").unwrap_or_default();
+    if raw.trim().is_empty() {
+        return tracing_subscriber::filter::Targets::new()
+            .with_default(tracing::level_filters::LevelFilter::INFO);
+    }
+    tracing_subscriber::filter::Targets::from_str(&raw).unwrap_or_else(|err| {
+        eprintln!("ignoring unparseable RUST_LOG ({err}); defaulting to info");
+        tracing_subscriber::filter::Targets::new()
+            .with_default(tracing::level_filters::LevelFilter::INFO)
+    })
+}
+
 /// Initializes tracing, emitting to stderr (filtered by `RUST_LOG`) and to a
 /// daily-rotated file under `logs/`. The returned guard must be kept alive for
 /// the lifetime of the process so the non-blocking file writer is flushed.
@@ -245,10 +274,7 @@ fn init_tracing() -> WorkerGuard {
     let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_filter(tracing_subscriber::EnvFilter::from_default_env()),
-        )
+        .with(tracing_subscriber::fmt::layer().with_filter(log_filter()))
         .with(
             tracing_subscriber::fmt::layer()
                 .with_ansi(false)
@@ -286,6 +312,13 @@ fn main() {
             .expect("failed to apply database migrations");
 
         ensure_admin(&config).await;
+
+        // Brings the note index up to date: gives pre-refactor notes the
+        // frontmatter they never had, and re-derives anything indexed by an
+        // older ruleset. Deliberately not part of the SQL migration — a failure
+        // here logs and leaves the work for the next boot, where a failed
+        // migration would `.expect()` the whole site down.
+        notes::index::reindex_all(&config.db.pool()).await;
 
         github::spawn_sync(Arc::clone(&config));
 

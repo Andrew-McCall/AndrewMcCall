@@ -6,6 +6,8 @@
 // #rrggbbaa, rgb()/rgba(), hsl()/hsla(), and the CSS named colours), the
 // format conversions, and the HSL-space maths the palettes are derived from.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
+
 const CHROMA_URL = "https://esm.sh/chroma-js@3";
 
 let chromaPromise: Promise<any> | null = null;
@@ -70,12 +72,8 @@ export default (app: HTMLElement) => {
   warmUp();
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Colour Picker
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Colour Picker")}
 
   <p class="mt-3 text-green-800 font-mono text-sm text-center max-w-xl">
     Type a colour any way you like — <span class="text-green-500">#3cb371</span>,

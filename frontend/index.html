@@ -5,11 +5,39 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/chip.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Andrew McCall</title>
+
+  <!--
+    Search and social metadata. The `%VITE_…%` values are substituted at build
+    time from `frontend/.env`, so they ship in the HTML itself rather than being
+    written by JavaScript — a crawler that does not render the page still gets a
+    real title and description instead of leaving Google to write its own
+    summary from the About blurb and the "Now" table.
+
+    These describe the front page, which is what nearly every search result
+    points at. `setMeta()` in `src/helpers.ts` rewrites the title, description,
+    `og:url` and canonical for the pages that have their own copy (`/posts` and
+    each post), so the canonical below is a default, not a claim about every
+    route.
+  -->
+  <title>%VITE_SITE_TITLE%</title>
+  <meta name="description" content="%VITE_SITE_DESCRIPTION%" />
+  <meta name="author" content="Andrew McCall" />
+  <link rel="canonical" href="%VITE_SITE_URL%/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Andrew McCall" />
+  <meta property="og:title" content="%VITE_SITE_TITLE%" />
+  <meta property="og:description" content="%VITE_SITE_DESCRIPTION%" />
+  <meta property="og:url" content="%VITE_SITE_URL%/" />
+  <meta property="og:image" content="%VITE_SITE_IMAGE%" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#0c0a09" />
+
   <link href="/src/style.css" rel="stylesheet">
 </head>
 
-<body class="select-none">
+<body>
   <div id="app"></div>
   <noscript>
     <style>

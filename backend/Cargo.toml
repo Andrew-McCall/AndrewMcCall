@@ -10,6 +10,9 @@ bytes = "1.12.0"
 dotenvy = "0.15.7"
 futures-rustls = "0.26"
 http-body = "1.0.1"
+# SIMD byte search behind src/text.rs. Already in the tree via sqlx, so this
+# only makes the existing dependency explicit.
+memchr = "2.8"
 http-body-util = "0.1"
 hyper = { version = "1.10.1", features = ["full"] }
 hyper-util = { version = "0.1.20", features = ["server", "server-auto", "http1", "http2"] }
@@ -25,9 +28,19 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2.0.18"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+# `registry` rather than `env-filter`: the latter pulls in `matchers` and with
+# it a full regex engine, purely to parse RUST_LOG. `filter::Targets` parses the
+# same `info,backend=debug` syntax with no regex. See init_tracing in main.rs.
+tracing-subscriber = { version = "0.3.19", features = ["registry"] }
+# The `Ts` derive itself, which expands to nothing — all the work happens in
+# build.rs. Marks which serialized views the frontend gets bindings for.
+ts-typegen = "1"
 uuid = { version = "1", features = ["v4"] }
 webpki-roots = "1"
 argon2 = "0.5.3"
 totp-rs = { version = "5.7.2", default-features = false, features = ["otpauth"] }
 sha2 = "0.10"
+
+[build-dependencies]
+# Scans src/ for `#[derive(Ts)]` and writes bindings/. See build.rs.
+ts-typegen-build = "1"

@@ -3,37 +3,19 @@
 
 import { esc, fmtDate, CARD_LIFT_CLASS } from "./helpers";
 
-export type PostType = "article" | "book_review";
+// Generated from the Rust types in `backend/src/posts.rs` — see
+// `backend/build.rs`. Re-exported so the home page and /posts keep importing
+// their shapes from here. `Post` now carries the admin-only fields the backend
+// has always sent (`id`, `is_published`, `created_at`, `updated_at`); the card
+// simply doesn't read them.
+import type {
+  BookReview,
+  Post,
+  PostSummary,
+  PostType,
+} from "@andrewmccall/api-types";
 
-// The full review, as returned by /posts/{slug}. Summaries carry only the
-// card fields (book_title, author, rating, cover_url); the rest arrive null.
-export type BookReview = {
-  book_title: string;
-  author: string;
-  rating: number | null;
-  cover_url: string | null;
-  isbn: string | null;
-  read_date: string | null;
-  link: string | null;
-};
-
-export type PostSummary = {
-  slug: string;
-  title: string;
-  excerpt: string;
-  published_at: string | null;
-  post_type: PostType;
-  book_review?: BookReview;
-};
-
-export type Post = {
-  slug: string;
-  title: string;
-  body: string;
-  published_at: string | null;
-  post_type: PostType;
-  book_review?: BookReview;
-};
+export type { BookReview, Post, PostSummary, PostType };
 
 // A ★★★☆☆ rating out of 5, or empty for an unrated review.
 export const stars = (rating: number | null | undefined): string => {

@@ -181,7 +181,7 @@ class="text-4xl h-12 text-yellow-500 mt-2 font-bold tracking-widest"></div>
 
 <button id="keyer"
 aria-label="Morse keyer press and hold"
-class="w-full h-44 border border-green-500/20 hover:border-green-500/40 flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+class="w-full h-44 border border-green-500/20 hover:border-green-500/40 flex items-center justify-center cursor-pointer transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
 
 <div id="light" class="w-10 h-10 bg-green-900"></div>
 

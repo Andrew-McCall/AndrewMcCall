@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use chrono::{DateTime, NaiveDate, Utc};
 use hyper::{Request, StatusCode};
 use sonic_rs::{Deserialize, Serialize};
+use ts_typegen::Ts;
 use uuid::Uuid;
 
 use crate::admin;
@@ -72,9 +73,9 @@ fn clean_slug(raw: &str, title: &str) -> Result<String, ApiError> {
 // ---------------------------------------------------------------------------
 
 /// The kind of a post. `Article` is a plain markdown post; `BookReview` carries
-/// an extra [`BookReviewJson`] payload from the `book_reviews` side table. A new
+/// an extra [`BookReview`] payload from the `book_reviews` side table. A new
 /// type slots in here plus, optionally, its own side table and payload struct.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, Ts)]
 #[serde(rename_all = "snake_case")]
 pub enum PostType {
     #[default]
@@ -149,8 +150,8 @@ struct BaseRow {
 }
 
 /// The type-specific fields of a `book_review` post.
-#[derive(Serialize)]
-struct BookReviewJson {
+#[derive(Serialize, Ts)]
+struct BookReview {
     book_title: String,
     author: String,
     rating: Option<i16>,
@@ -160,7 +161,7 @@ struct BookReviewJson {
     link: Option<String>,
 }
 
-impl BookReviewJson {
+impl BookReview {
     fn from_clean(c: CleanBookReview) -> Self {
         Self {
             book_title: c.book_title,
@@ -175,7 +176,8 @@ impl BookReviewJson {
 }
 
 /// The full JSON wire shape of a post (admin views and the public detail page).
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
+#[ts(rename = "Post")]
 struct PostJson {
     id: String,
     slug: String,
@@ -187,13 +189,13 @@ struct PostJson {
     updated_at: String,
     post_type: PostType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    book_review: Option<BookReviewJson>,
+    book_review: Option<BookReview>,
 }
 
 impl From<PostRow> for PostJson {
     fn from(row: PostRow) -> Self {
         let post_type = PostType::from_db(&row.post_type);
-        let book_review = (post_type == PostType::BookReview).then(|| BookReviewJson {
+        let book_review = (post_type == PostType::BookReview).then(|| BookReview {
             book_title: row.br_book_title.unwrap_or_default(),
             author: row.br_author.unwrap_or_default(),
             rating: row.br_rating,
@@ -230,13 +232,13 @@ fn post_json(base: BaseRow, post_type: PostType, review: Option<CleanBookReview>
         created_at: base.created_at.to_rfc3339(),
         updated_at: base.updated_at.to_rfc3339(),
         post_type,
-        book_review: review.map(BookReviewJson::from_clean),
+        book_review: review.map(BookReview::from_clean),
     }
 }
 
 /// A public list entry: no body, just a raw-markdown excerpt for the card, plus
 /// the type and a light book-review summary so cards can style reviews.
-#[derive(Serialize)]
+#[derive(Serialize, Ts)]
 pub struct PostSummary {
     slug: String,
     title: String,
@@ -244,7 +246,7 @@ pub struct PostSummary {
     published_at: Option<String>,
     post_type: PostType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    book_review: Option<BookReviewJson>,
+    book_review: Option<BookReview>,
 }
 
 /// The `book_reviews` columns needed for a list card (cover, author, rating).
@@ -320,7 +322,7 @@ async fn published_summaries_filtered(
         .into_iter()
         .map(|row| {
             let post_type = PostType::from_db(&row.post_type);
-            let book_review = (post_type == PostType::BookReview).then(|| BookReviewJson {
+            let book_review = (post_type == PostType::BookReview).then(|| BookReview {
                 book_title: row.br_book_title.unwrap_or_default(),
                 author: row.br_author.unwrap_or_default(),
                 rating: row.br_rating,
@@ -466,10 +468,8 @@ fn validate_book_review(req: &BookReviewRequest) -> Result<CleanBookReview, ApiE
             "an author must be at most {MAX_AUTHOR_LEN} characters"
         )));
     }
-    if let Some(r) = req.rating {
-        if !(1..=5).contains(&r) {
-            return Err(ApiError::BadRequest("a rating must be between 1 and 5".into()));
-        }
+    if let Some(r) = req.rating && !(1..=5).contains(&r) {
+        return Err(ApiError::BadRequest("a rating must be between 1 and 5".into()));
     }
     let read_date = match req.read_date.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {

@@ -3,6 +3,8 @@
 // runtime loads after the page's `load` event so it never blocks first paint,
 // and it's fetched only once and cached for the life of the page.
 
+import { PAGE_CLASS, pageTitle } from "./helpers";
+
 const PYODIDE_VERSION = "0.28.3";
 const PYODIDE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.mjs`;
 
@@ -41,12 +43,8 @@ export default (app: HTMLElement) => {
   warmUp();
 
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Python 3
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Python 3")}
 
   <div class="w-full max-w-3xl mt-8 flex flex-col gap-4">
     <div class="flex flex-wrap gap-2 items-center">

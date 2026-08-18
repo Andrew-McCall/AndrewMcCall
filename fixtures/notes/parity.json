@@ -1,0 +1,127 @@
+{
+  "_comment": [
+    "Shared by backend/src/notes/frontmatter.rs (include_str!) and",
+    "frontend/src/notes/parity.test.ts (?raw). Two implementations of the same",
+    "grammar exist because the server owns the index and the editor needs to",
+    "read properties live; this corpus is what stops them drifting.",
+    "Add a case here and BOTH suites pick it up."
+  ],
+  "frontmatter": [
+    {
+      "name": "scalar, inline list and block list",
+      "text": "---\ntitle: Deploy\ntags: [a, b]\naliases:\n  - x\n  - y\n---\nbody",
+      "entries": [["title", ["Deploy"]], ["tags", ["a", "b"]], ["aliases", ["x", "y"]]],
+      "content": "body"
+    },
+    {
+      "name": "no block at all",
+      "text": "# Just a heading\n",
+      "entries": [],
+      "content": "# Just a heading\n"
+    },
+    {
+      "name": "leading rule without a terminator is not frontmatter",
+      "text": "---\njust prose\n",
+      "entries": [],
+      "content": "---\njust prose\n"
+    },
+    {
+      "name": "colon inside a value is kept",
+      "text": "---\ntitle: Ratio 3:1 study\n---\n",
+      "entries": [["title", ["Ratio 3:1 study"]]],
+      "content": ""
+    },
+    {
+      "name": "keys lowercased, values unquoted",
+      "text": "---\nTitle: \"Quoted\"\nCLIENT: 'acme'\n---\nx",
+      "entries": [["title", ["Quoted"]], ["client", ["acme"]]],
+      "content": "x"
+    },
+    {
+      "name": "duplicate key: last wins, original position kept",
+      "text": "---\ntitle: first\ntags: [x]\ntitle: second\n---\n",
+      "entries": [["title", ["second"]], ["tags", ["x"]]],
+      "content": ""
+    },
+    {
+      "name": "empty value yields no values",
+      "text": "---\ntags:\n---\n",
+      "entries": [["tags", []]],
+      "content": ""
+    },
+    {
+      "name": "junk lines are skipped, not fatal",
+      "text": "---\nnot a key line\ntitle: T\n---\nbody\n",
+      "entries": [["title", ["T"]]],
+      "content": "body\n"
+    },
+    {
+      "name": "unknown keys preserved",
+      "text": "---\nclient: acme\nproject: apollo\n---\n",
+      "entries": [["client", ["acme"]], ["project", ["apollo"]]],
+      "content": ""
+    },
+    {
+      "name": "content after a blank line",
+      "text": "---\ntitle: T\n---\n\nreal body\n",
+      "entries": [["title", ["T"]]],
+      "content": "\nreal body\n"
+    }
+  ],
+  "patch": [
+    {
+      "name": "replace a scalar with a list",
+      "text": "---\ntitle: T\ntags: old\n---\nbody",
+      "key": "tags",
+      "values": ["a", "b"],
+      "out": "---\ntitle: T\ntags:\n  - a\n  - b\n---\nbody"
+    },
+    {
+      "name": "replace a block list, dropping old items",
+      "text": "---\ntags:\n  - old1\n  - old2\nclient: acme\n---\nbody",
+      "key": "tags",
+      "values": ["new"],
+      "out": "---\ntags: new\nclient: acme\n---\nbody"
+    },
+    {
+      "name": "insert a missing key before the terminator",
+      "text": "---\ntitle: T\n---\nbody",
+      "key": "tags",
+      "values": ["a"],
+      "out": "---\ntitle: T\ntags: a\n---\nbody"
+    },
+    {
+      "name": "create a block when there is none",
+      "text": "# Heading\n",
+      "key": "tags",
+      "values": ["a"],
+      "out": "---\ntags: a\n---\n\n# Heading\n"
+    },
+    {
+      "name": "no values removes the key",
+      "text": "---\ntitle: T\ntags:\n  - a\n---\nbody",
+      "key": "tags",
+      "values": [],
+      "out": "---\ntitle: T\n---\nbody"
+    },
+    {
+      "name": "no block and no values is a no-op",
+      "text": "plain\n",
+      "key": "tags",
+      "values": [],
+      "out": "plain\n"
+    }
+  ],
+  "slugs": [
+    { "in": "Deploy Pipeline", "out": "deploy-pipeline" },
+    { "in": "Hello,   World!! (v2)", "out": "hello-world-v2" },
+    { "in": "  --- hello ---  ", "out": "hello" },
+    { "in": "!!!", "out": "" },
+    { "in": "", "out": "" },
+    { "in": "café über", "out": "caf-ber" },
+    { "in": "already-a-slug", "out": "already-a-slug" },
+    { "in": "Infra/Prod", "out": "infra-prod" },
+    { "in": "  spaced  out  ", "out": "spaced-out" },
+    { "in": "123 numbers 456", "out": "123-numbers-456" }
+  ]
+}

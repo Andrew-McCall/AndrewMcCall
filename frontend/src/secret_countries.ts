@@ -3,22 +3,9 @@
 // one of its cities) plus distinct distractors drawn from the same fetched
 // pool, so no further network calls happen once the page has loaded.
 
-type City = {
-  name: string;
-  x: number;
-  y: number;
-  population: number | null;
-  capital: boolean;
-};
+import { PAGE_CLASS, pageTitle } from "./helpers";
 
-type Country = {
-  country: string;
-  population: number | null;
-  gdp: number | null;
-  image: string;
-  flag: string | null;
-  cities: City[];
-};
+import type { Country } from "@andrewmccall/api-types";
 
 type FlatCity = { name: string; country: string; population: number | null };
 
@@ -220,12 +207,8 @@ function buildQuestion(
 
 export default (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen py-10 px-4 text-green-500">
-  <a href="/secret" title="Back to the secret menu">
-    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
-      Countries Quiz
-    </h1>
-  </a>
+<div class="${PAGE_CLASS}">
+  ${pageTitle("Countries Quiz")}
 
   <div class="w-full max-w-xl mt-8 flex flex-col gap-4">
     <div id="cq-status" class="text-center text-green-800 italic">Loading countries…</div>

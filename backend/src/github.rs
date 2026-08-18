@@ -5,6 +5,9 @@
 //! `site_settings` so an unchanged feed costs a `304` (which doesn't count
 //! against GitHub's rate limit). Rows are upserted by sha and pruned to the
 //! newest [`KEEP_COMMITS`].
+//!
+//! Which account to follow comes from `GITHUB_USERNAME`, or failing that from
+//! the GitHub URL on the profile, so the admin editor alone can turn this on.
 
 use std::time::Duration;
 
@@ -106,17 +109,70 @@ fn parse_events(json: &[u8]) -> Result<Vec<CommitRow>, sonic_rs::Error> {
 // Sync loop.
 // ---------------------------------------------------------------------------
 
-/// Spawns the detached sync loop: one fetch at startup, then one per interval.
-/// A no-op when `GITHUB_USERNAME` is unset.
-pub fn spawn_sync(config: SharedConfig) {
-    let Some(username) = config.github_username.clone() else {
-        tracing::debug!("GITHUB_USERNAME unset; github sync disabled");
-        return;
-    };
+/// Pulls `Andrew-McCall` out of `https://github.com/Andrew-McCall`, so the
+/// profile link the admin editor already stores is enough to name the account
+/// to follow. The segment is checked against GitHub's own username rules
+/// rather than trusted, because it goes straight into a request path.
+fn username_from_url(url: &str) -> Option<String> {
+    let rest = url.trim().trim_end_matches('/');
+    let rest = rest
+        .strip_prefix("https://")
+        .or_else(|| rest.strip_prefix("http://"))
+        .unwrap_or(rest);
+    let rest = rest.strip_prefix("www.").unwrap_or(rest);
 
+    let (host, path) = rest.split_once('/')?;
+    if !host.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+
+    // The first segment is the account even when the link points at one of its
+    // repos, which is the same account either way.
+    let name = path.split('/').next()?;
+    let valid = !name.is_empty()
+        && name.len() <= 39
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    valid.then(|| name.to_string())
+}
+
+/// The account to follow: `GITHUB_USERNAME` when set, otherwise the profile's
+/// GitHub URL. Read fresh each cycle so setting the link in the admin editor
+/// starts the sync without a restart.
+async fn resolve_username(config: &SharedConfig) -> Option<String> {
+    if let Some(name) = config.github_username.clone() {
+        return Some(name);
+    }
+
+    let url: Option<String> =
+        sqlx::query_scalar("SELECT value FROM site_settings WHERE key = 'github_url'")
+            .fetch_optional(&config.db.pool())
+            .await
+            .unwrap_or_else(|err| {
+                tracing::warn!(error = %err, "github url load");
+                None
+            });
+    url.as_deref().and_then(username_from_url)
+}
+
+/// How long to wait before looking again when no account is configured. Short,
+/// because this only reads one row locally — the point is that saving the
+/// profile link takes effect in minutes rather than at the next full interval.
+const IDLE_RECHECK: Duration = Duration::from_secs(60);
+
+/// Spawns the detached sync loop: one fetch at startup, then one per interval.
+/// Idles harmlessly while there is no account to follow.
+pub fn spawn_sync(config: SharedConfig) {
     let interval = Duration::from_secs(config.github_sync_minutes.max(1) * 60);
     smol::spawn(async move {
         loop {
+            let Some(username) = resolve_username(&config).await else {
+                tracing::debug!(
+                    "no github account (GITHUB_USERNAME unset, no profile github_url); sync idle"
+                );
+                smol::Timer::after(IDLE_RECHECK).await;
+                continue;
+            };
+
             if let Err(err) = sync_once(&config, &username).await {
                 tracing::warn!(error = %err, "github sync failed");
             }
@@ -219,6 +275,37 @@ mod tests {
         {"type": "PushEvent", "created_at": "2026-07-16T12:00:00Z"},
         {"type": "PushEvent", "repo": {"name": "a/b"}, "payload": {"commits": [{"sha": "", "message": "no sha"}]}, "created_at": "2026-07-16T12:00:00Z"}
     ]"#;
+
+    #[test]
+    fn username_from_url_reads_the_account_segment() {
+        // Empty stands in for "refused" here; the next test covers that.
+        let name = |u| username_from_url(u).unwrap_or_default();
+        assert_eq!(name("https://github.com/Andrew-McCall"), "Andrew-McCall");
+        assert_eq!(name("https://github.com/Andrew-McCall/"), "Andrew-McCall");
+        assert_eq!(name("http://www.github.com/Andrew-McCall"), "Andrew-McCall");
+        assert_eq!(name("github.com/Andrew-McCall"), "Andrew-McCall");
+        // A repo link still names the account that owns it.
+        let repo = "https://github.com/Andrew-McCall/AndrewMcCall";
+        assert_eq!(name(repo), "Andrew-McCall");
+    }
+
+    #[test]
+    fn username_from_url_refuses_anything_else() {
+        for url in [
+            "",
+            "https://github.com",
+            "https://github.com/",
+            "https://gitlab.com/someone",
+            // Nothing that would steer the request path somewhere else.
+            "https://github.com/../users/other",
+            "https://github.com/name?tab=repositories",
+        ] {
+            assert_eq!(username_from_url(url), None, "{url}");
+        }
+
+        let too_long = format!("https://github.com/{}", "a".repeat(40));
+        assert_eq!(username_from_url(&too_long), None);
+    }
 
     #[test]
     fn parse_events_extracts_push_commits_only() {
