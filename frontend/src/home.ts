@@ -205,16 +205,20 @@ export default async (app: HTMLElement) => {
   const secretBtn = document.createElement("button");
   secretBtn.textContent = ">_ enter the secret menu →";
   secretBtn.className =
-    "relative z-[60] block w-full max-w-3xl mx-auto mb-24 px-8 py-8 " +
-    "text-2xl font-bold tracking-widest uppercase text-lime-300 " +
+    "relative z-[60] flex items-center justify-center flex-wrap gap-2 text-center " +
+    "w-full max-w-3xl mx-auto mb-24 px-4 py-6 sm:px-8 sm:py-8 " +
+    "text-lg sm:text-2xl font-bold tracking-wide sm:tracking-widest uppercase text-lime-300 " +
     "border-2 border-green-600 bg-stone-900 cursor-pointer ease-out " +
     "hover:bg-stone-800 hover:border-green-500 hover:text-lime-200 " +
     "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
     "active:translate-y-0 active:shadow-none";
   secretBtn.addEventListener("click", () => window.navigate("/secret"));
+  // `translate` is its own CSS property (not folded into `transform`), so the
+  // hover/active lift needs to be listed by that name or it jumps instantly
+  // instead of animating.
   secretBtn.style.cssText +=
     "opacity:0;pointer-events:none;" +
-    "transition:opacity 1s,transform .15s,box-shadow .15s,background-color .15s,border-color .15s,color .15s";
+    "transition:opacity 1s,translate .15s,box-shadow .15s,background-color .15s,border-color .15s,color .15s";
   app.appendChild(secretBtn);
   setTimeout(async () => {
     if (!secretBtn.isConnected) return; // left the front page before it fired

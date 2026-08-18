@@ -18,23 +18,36 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
   const mobile = isMobile();
   if (mobile) canvas.style.touchAction = "none"; // drags drive the effect, not scroll
 
-  const CSS = 176; // matches the w-44 frame
+  // The frame's CSS size comes from its container (w-full/aspect-square on
+  // mobile, w-44/h-44 from sm: up — see home.ts) rather than a fixed guess, so
+  // the drawn circle always fills whatever box the layout actually gives it.
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const N = Math.round(CSS * dpr);
-  const r = N / 2;
-  const r2 = r * r;
-  const MAX_BLOCK = Math.max(2, Math.round(12 * dpr));
+  let N = 0;
+  let r = 0;
+  let r2 = 0;
+  let MAX_BLOCK = 2;
 
-  canvas.width = N;
-  canvas.height = N;
-  canvas.style.width = canvas.style.height = `${CSS}px`;
   canvas.style.opacity = "0";
   canvas.style.transition = "opacity 0.25s";
 
   let base: ImageData | null = null;
   const img = new Image();
   img.crossOrigin = "anonymous";
-  img.onload = () => {
+
+  // Re-measures the container and redraws at that size. Called once the image
+  // is ready, and again whenever the box is resized (breakpoint change,
+  // orientation change) so the canvas never gets stuck at a stale size.
+  const draw = () => {
+    const cssSize = Math.round(canvas.getBoundingClientRect().width);
+    if (!cssSize || !img.complete || img.naturalWidth === 0) return;
+    N = Math.round(cssSize * dpr);
+    r = N / 2;
+    r2 = r * r;
+    MAX_BLOCK = Math.max(2, Math.round(12 * dpr));
+    canvas.width = N;
+    canvas.height = N;
+    canvas.style.width = canvas.style.height = `${cssSize}px`;
+
     // Draw object-cover into the square, then cache it as the untinted source.
     const scale = Math.max(N / img.width, N / img.height);
     const dw = img.width * scale;
@@ -48,7 +61,9 @@ export const initProfilePhoto = (canvas: HTMLCanvasElement, src: string) => {
     }
     rest(); // show the resting state on mobile once the source is cached
   };
+  img.onload = draw;
   img.src = src;
+  new ResizeObserver(draw).observe(canvas);
 
   // g in [0,1]: 0 at centre (true colour, sharp), 1 at rim (full green, blocky).
   const render = (g: number) => {
