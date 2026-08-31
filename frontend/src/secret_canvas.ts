@@ -9,6 +9,7 @@
 // see-through pixel is forwarded to whatever link or button it revealed.
 
 import { float_alert } from "./float_alert";
+import { btnHtml, type IconName } from "./icons";
 import { backendHealthy } from "./helpers";
 import { isMobile } from "./mobile.ts";
 
@@ -125,25 +126,34 @@ export default (signedIn?: Promise<boolean>) => {
   const controls = document.createElement("div");
   controls.style.cssText =
     "position:absolute;left:0;right:0;top:8vmin;pointer-events:none;" +
-    "display:flex;justify-content:center;gap:10px";
+    "padding:0 12px;display:flex;justify-content:center;gap:10px";
   // The buttons live in their own shrink-to-fit group so the cover can span
-  // exactly them (inset:0) rather than the full-width row.
+  // exactly them (inset:0) rather than the full-width row. The group wraps:
+  // five buttons overrun a narrow phone, and squashing them there rewrapped
+  // the labels raggedly mid-word. Wrapping keeps whole buttons together, and
+  // the cover follows the taller group on its own through `inset:0`.
   const group = document.createElement("div");
-  group.style.cssText = "position:relative;display:flex;gap:10px";
+  group.style.cssText =
+    "position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:10px";
   controls.appendChild(group);
-  const mkBtn = (label: string) => {
+  // `inline-flex` centres the icon against the label by box rather than by
+  // text baseline — trusting the baseline is exactly what broke when these
+  // labels were font glyphs (see icons.ts). `nowrap` keeps each label on one
+  // line once the group starts wrapping.
+  const mkBtn = (name: IconName) => {
     const b = document.createElement("button");
-    b.textContent = label;
+    b.innerHTML = btnHtml(name);
     b.style.cssText =
       "position:relative;z-index:40;pointer-events:auto;" +
+      "display:inline-flex;align-items:center;gap:6px;line-height:1;white-space:nowrap;" +
       "padding:6px 14px;font:12px ui-monospace,monospace;letter-spacing:.08em;" +
       "color:#4ade80;background:rgba(12,10,9,.6);border:1px solid #14532d;cursor:pointer";
     return b;
   };
-  const clearBtn = mkBtn("○ clear");
-  const resetBtn = mkBtn("↺ reset");
-  const staticBtn = mkBtn("▓ static");
-  const powerBtn = mkBtn("✕ disable");
+  const clearBtn = mkBtn("clear");
+  const resetBtn = mkBtn("reset");
+  const staticBtn = mkBtn("static");
+  const powerBtn = mkBtn("disable");
   group.append(clearBtn, resetBtn, staticBtn, powerBtn);
   document.body.appendChild(controls);
 
@@ -161,7 +171,7 @@ export default (signedIn?: Promise<boolean>) => {
   let disabled = false;
   powerBtn.addEventListener("click", () => {
     disabled = !disabled;
-    powerBtn.textContent = disabled ? "▶ enable" : "✕ disable";
+    powerBtn.innerHTML = btnHtml(disabled ? "enable" : "disable");
     for (const b of liveBtns) {
       b.disabled = disabled;
       b.style.opacity = disabled ? "0.4" : "1";
