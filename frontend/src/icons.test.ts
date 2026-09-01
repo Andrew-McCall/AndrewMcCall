@@ -19,6 +19,8 @@ const NAMES: IconName[] = [
   "disable",
   "enable",
   "secret",
+  "pencil",
+  "eye",
 ];
 
 describe("icon", () => {
@@ -42,11 +44,24 @@ describe("icon", () => {
 
   it("renders at the label's 12px, so the two line up", () => {
     expect(icon("clear")).toContain('width="12" height="12"');
+    expect(icon("clear")).toContain('stroke-width="2"');
+  });
+
+  // The notes toggle asks for 20px. The stroke scales with it, so the line
+  // stays 1px on screen rather than thickening with the icon.
+  it("keeps the stroke a pixel wide at any size", () => {
+    const svg = icon("pencil", 20);
+    expect(svg).toContain('width="20" height="20"');
+    expect(svg).toContain('stroke-width="1.2"');
   });
 });
 
 describe("btnHtml", () => {
-  it.each(NAMES)("%s carries both the icon and the label", (name) => {
+  // Only the control row pairs an icon with a written label; the notes toggle
+  // is the icon alone.
+  const CONTROLS = NAMES.filter((n) => n !== "pencil" && n !== "eye");
+
+  it.each(CONTROLS)("%s carries both the icon and the label", (name) => {
     const html = btnHtml(name);
     expect(html).toContain("<svg");
     expect(html).toContain(`<span>${name}</span>`);

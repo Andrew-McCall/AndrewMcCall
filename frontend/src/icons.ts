@@ -1,4 +1,5 @@
-// Inline SVG icons for the canvas control row.
+// Inline SVG icons. The canvas control row is where they started, and the
+// notes mode toggle has since joined it for the same reason.
 //
 // These buttons used to label themselves with text glyphs — ○ clear, ↺ reset,
 // ▓ static, ✕ disable, ▶ enable. None of those code points live in a normal
@@ -13,8 +14,8 @@
 // SVG has no fallback path. The size, the baseline and the colour are ours on
 // every device, which is the whole point of the change.
 
-// Drawn on a 24x24 grid and rendered at 12px, so stroke-width 2 lands on
-// exactly 1px — crisp at the size these actually appear.
+// Drawn on a 24x24 grid. The stroke is scaled to the rendered size, so it
+// lands on exactly 1px whatever that size is — crisp wherever these appear.
 const ICONS = {
   clear: `<circle cx="12" cy="12" r="8"/>`,
   reset: `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>`,
@@ -29,6 +30,9 @@ const ICONS = {
   enable: `<path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none"/>`,
   // A terminal prompt, matching the `>_` on the front page's secret-menu button.
   secret: `<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>`,
+  // The notes mode toggle: the pencil offers editing, the eye offers reading.
+  pencil: `<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
+  eye: `<path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"/><circle cx="12" cy="12" r="3"/>`,
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -37,9 +41,11 @@ export type IconName = keyof typeof ICONS;
 // -out `opacity` applied to disabled buttons then carry through on their own,
 // without the icon having to know about either. `aria-hidden` because the
 // label beside it already says what the button does.
-export const icon = (name: IconName): string =>
-  `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"` +
-  ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"` +
+// `size` is the rendered edge in px: 12 to sit beside a control-row label, more
+// where the icon is the whole button, as on the notes toggle.
+export const icon = (name: IconName, size = 12): string =>
+  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"` +
+  ` stroke-width="${24 / size}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"` +
   ` style="flex:none">${ICONS[name]}</svg>`;
 
 // Icon and label are always built together. The power button used to retitle

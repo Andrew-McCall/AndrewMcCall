@@ -4,6 +4,7 @@
 // keyboard. The browser is a slide-over drawer below `lg` and a permanent
 // sidebar above it — one component, placed by CSS.
 
+import { icon } from "../icons";
 import { getMe, type Me } from "../session";
 import * as api from "./api";
 import { NotesStore, type Note, type NoteIndexEntry } from "./api";
@@ -17,6 +18,13 @@ const AUTOSAVE_MS = 1500;
 /// Short enough that a crash loses at most a few words, long enough that a
 /// burst of typing is one storage write rather than one per character.
 const DRAFT_MS = 400;
+
+/// The mode toggle's two faces. As text they were ✎ and 👁, so the platform's
+/// font substitution decided their weight and baseline — and on iOS pulled the
+/// eye into Apple Color Emoji, painting it in colour at its own size. Drawn
+/// instead (see icons.ts), at 20px because here the icon is the whole button.
+const PENCIL = icon("pencil", 20);
+const EYE = icon("eye", 20);
 
 let teardown: (() => void) | null = null;
 
@@ -66,9 +74,9 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
     <span class="text-green-900" aria-hidden="true">/</span>
     <h1 id="nx-title" class="flex-1 min-w-0 truncate text-green-300 font-mono text-sm"></h1>
     <span id="nx-status" role="status" aria-live="polite" class="text-xs text-green-700 whitespace-nowrap"></span>
-    <button id="nx-mode" aria-label="Toggle editing"
-      class="min-w-11 min-h-11 border border-green-700 text-green-300 hover:bg-green-900/30 cursor-pointer
-             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500">✎</button>
+    <button id="nx-mode" aria-label="Edit note"
+      class="hidden min-w-11 min-h-11 items-center justify-center border border-green-700 text-green-300 hover:bg-green-900/30 cursor-pointer
+             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500">${PENCIL}</button>
   </header>
 
   <div id="nx-offline" class="hidden border-b border-yellow-700/60 bg-yellow-900/20 text-yellow-500 font-mono text-xs px-3 py-2">
@@ -172,6 +180,9 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
     modeBtn.disabled = v;
     modeBtn.classList.toggle("opacity-40", v);
     if (v && mode === "edit") setMode("read");
+    // The empty state offers its own create button, which is equally unusable
+    // offline; re-render so it agrees with the browser's.
+    else if (!note && !buffer) render();
   };
 
   // --- saving --------------------------------------------------------------
@@ -183,6 +194,7 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
     // What we're sending, captured so we can tell whether the user typed while
     // the request was in flight.
     const sent = buffer;
+    const creating = note === null;
     try {
       const saved = note
         ? await api.updateNote(note.id, sent, note.updated_at)
@@ -190,6 +202,10 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
 
       note = saved;
       store.cacheNote(saved);
+      // The draft for an unsaved note lives under "new"; from here it belongs
+      // to a real id. Left behind, it would offer to "restore" this note's text
+      // into the next blank one, every time.
+      if (creating) store.clearDraft("new");
 
       // The server may have rewritten the text itself — a rename records the
       // superseded name in `aliases:`. Adopt its version only when nothing was
@@ -305,18 +321,56 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
   // --- views ---------------------------------------------------------------
   const setMode = (next: Mode) => {
     mode = next;
-    modeBtn.textContent = next === "read" ? "✎" : "👁";
+    modeBtn.innerHTML = next === "read" ? PENCIL : EYE;
     modeBtn.setAttribute("aria-label", next === "read" ? "Edit note" : "Read note");
     render();
   };
 
+  /// Approximates the server's title derivation (frontmatter `title:`, else the
+  /// first H1) over unsaved text, so the header and the reader's heading track
+  /// what you typed. Fenced blocks are skipped, or a `# comment` in a shell
+  /// example would rename the note for as long as the save is in flight.
+  const previewTitle = (text: string): string | undefined => {
+    const parsed = fm.parse(text);
+    const stated = fm.first(parsed, "title")?.trim();
+    if (stated) return stated;
+    let fenced = false;
+    for (const line of fm.contentOf(text, parsed).split("\n")) {
+      if (/^\s{0,3}(```|~~~)/.test(line)) fenced = !fenced;
+      else if (!fenced) {
+        const heading = /^#\s+(.+?)\s*$/.exec(line);
+        if (heading) return heading[1];
+      }
+    }
+    return undefined;
+  };
+
+  /// The note as it currently reads, not as it was last stored: the saved
+  /// record wearing the editor buffer. Links, backlinks and the properties
+  /// table stay at their saved values because the server derives those; the
+  /// autosave a beat later resyncs them.
+  const pending = (saved: Note): Note =>
+    dirty
+      ? { ...saved, body: buffer, title: previewTitle(buffer) ?? saved.title }
+      : saved;
+
   const render = () => {
-    titleEl.textContent = note?.title ?? (buffer ? "New note" : "");
-    if (!note && !buffer) {
+    const empty = !note && !buffer;
+    titleEl.textContent = empty ? "" : note ? pending(note).title : "New note";
+    // Nothing is open, so the toggle has nothing to toggle between.
+    modeBtn.classList.toggle("hidden", empty);
+    modeBtn.classList.toggle("inline-flex", !empty);
+    if (empty) {
       main.innerHTML = `
-        <div class="text-green-800 font-mono text-sm py-16 text-center">
-          Select a note, or create one.
+        <div class="flex flex-col items-center gap-4 py-16 text-center">
+          <p class="text-green-800 font-mono text-sm">No note open.</p>
+          <button id="nx-empty-new" ${offline ? "disabled" : ""}
+            class="border border-green-700 text-green-300 hover:bg-green-900/30 px-6 min-h-11 font-mono cursor-pointer
+                   disabled:opacity-40 disabled:cursor-not-allowed
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500">+ new note</button>
+          <p class="text-green-900 font-mono text-xs">or pick one from the browser</p>
         </div>`;
+      $<HTMLButtonElement>("#nx-empty-new").onclick = () => startNew("");
       return;
     }
 
@@ -362,7 +416,7 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
       setMode("edit");
       return;
     }
-    renderReader(main, note, index, {
+    renderReader(main, pending(note), index, {
       onTag: (tag) => {
         browserState.tag = tag;
         browserState.trash = false;
@@ -424,10 +478,11 @@ export default async function notesPage(app: HTMLElement, slug?: string) {
       if (confirm("You have unsaved changes to this note. Restore them?")) {
         buffer = draft.body;
         dirty = true;
-        setMode("edit");
-        return;
+        // Still read mode: the reader renders the buffer, so the restored draft
+        // is what you see, and ⌘E is one press away if you want to keep typing.
+      } else {
+        store.clearDraft(note.id);
       }
-      store.clearDraft(note.id);
     }
     setMode("read");
     paintBrowser();
