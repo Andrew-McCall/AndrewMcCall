@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apply, type Room } from "./roster";
+import { apply, labels, type Room } from "./roster";
 
 const silent = { mic: false, app: false, camera: false, screen: false };
 
@@ -105,5 +105,26 @@ describe("the room roster", () => {
 
     expect(next!.peers).toHaveLength(1);
     expect(next!.peers[0]!.sources).toEqual(silent);
+  });
+});
+
+describe("tile labels", () => {
+  it("leaves distinct names alone", () => {
+    const out = labels([peer("a", "Alice", 0), peer("b", "Bob", 1)]);
+
+    expect(out.get("a")).toBe("Alice");
+    expect(out.get("b")).toBe("Bob");
+  });
+
+  it("numbers one account signed in twice, in join order", () => {
+    const out = labels([
+      peer("phone", "Andrew", 3),
+      peer("laptop", "Andrew", 1),
+      peer("b", "Bob", 2),
+    ]);
+
+    expect(out.get("laptop")).toBe("Andrew (1)");
+    expect(out.get("phone")).toBe("Andrew (2)");
+    expect(out.get("b")).toBe("Bob");
   });
 });

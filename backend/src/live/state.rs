@@ -396,8 +396,10 @@ impl Live {
         let room = registry.rooms.get(room_id).ok_or(ApiError::Forbidden)?;
 
         // The peer id was minted server-side and handed only to that client's
-        // own stream, but a second session of the same user must not be able to
-        // borrow it either: the claim is checked against the account behind it.
+        // own stream, and the claim is checked against the account behind it —
+        // so nobody else's session can sign as this peer. Two tabs of the *same*
+        // account can, which is fine: they are one person, and they are
+        // deliberately two separate participants in the room.
         let sender = room.peers.get(&from).ok_or(ApiError::Forbidden)?;
         if sender.user_id != user_id {
             return Err(ApiError::Forbidden);
@@ -767,5 +769,33 @@ mod tests {
         assert!(frame.contains("\"mic\":true"), "{frame}");
         assert!(frame.contains("\"camera\":true"), "{frame}");
         assert!(frame.contains("\"screen\":false"), "{frame}");
+    }
+
+    #[test]
+    fn one_account_can_be_two_people_in_a_room() {
+        let live = Live::new();
+        let andrew = Uuid::new_v4();
+
+        // The same account, signed in twice — a laptop and a phone.
+        let laptop = join_as(&live, "blue-otter-lamp", andrew, "Andrew");
+        let phone = join_as(&live, "blue-otter-lamp", andrew, "Andrew");
+
+        assert_ne!(laptop.peer_id, phone.peer_id, "each connection is its own peer");
+        assert_ne!(laptop.seq, phone.seq, "and takes its own place in the order");
+        assert_eq!(live.open()[0].people, 2);
+
+        // And they can connect to each other like any other pair.
+        drain(&phone);
+        live.relay(
+            "blue-otter-lamp",
+            andrew,
+            laptop.peer_id,
+            &phone.peer_id.to_string(),
+            "offer",
+            &payload("v=0"),
+        )
+        .expect("one account's two connections may signal each other");
+
+        assert!(next_frame(&phone).starts_with("event: signal\n"));
     }
 }

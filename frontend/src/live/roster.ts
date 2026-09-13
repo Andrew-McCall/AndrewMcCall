@@ -59,3 +59,28 @@ export function apply(room: Room | null, event: LiveEvent): Room | null {
     peers: room.peers.filter((peer) => peer.peer_id !== event.peer_id),
   };
 }
+
+// Names as shown on tiles.
+//
+// One account signed in twice is two participants with one name, which is
+// allowed on purpose — a laptop and a phone are two seats in the room. Two
+// identical tiles are useless though, so repeats are numbered in join order.
+export function labels(peers: PeerSummary[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  peers.forEach((peer) => counts.set(peer.name, (counts.get(peer.name) ?? 0) + 1));
+
+  const seen = new Map<string, number>();
+  const out = new Map<string, string>();
+
+  for (const peer of [...peers].sort(byJoinOrder)) {
+    if ((counts.get(peer.name) ?? 0) < 2) {
+      out.set(peer.peer_id, peer.name);
+      continue;
+    }
+    const nth = (seen.get(peer.name) ?? 0) + 1;
+    seen.set(peer.name, nth);
+    out.set(peer.peer_id, `${peer.name} (${nth})`);
+  }
+
+  return out;
+}

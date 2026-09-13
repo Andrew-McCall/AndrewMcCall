@@ -12,7 +12,7 @@ import { iceServers, joinRoom, setSources } from "./live/api";
 import { roomPath, titleFrom } from "./live/link";
 import * as media from "./live/media";
 import { createMesh, noTracks, type Tracks } from "./live/mesh";
-import { apply, type Room } from "./live/roster";
+import { apply, labels, type Room } from "./live/roster";
 import { watchSpeaking } from "./live/speaking";
 import type { SourceName } from "./live/negotiation";
 import type { Sources } from "@andrewmccall/api-types";
@@ -186,13 +186,19 @@ export default (app: HTMLElement, id: string) => {
     heading.textContent = room.title;
 
     tileFor(room.self, "you").label.textContent = "you";
+
+    // One account signed in twice is two participants with one name; numbering
+    // them is the difference between two tiles and two identical tiles.
+    const names = labels(room.peers);
+
     room.peers.forEach((peer) => {
-      const tile = tileFor(peer.peer_id, peer.name);
+      const name = names.get(peer.peer_id) ?? peer.name;
+      const tile = tileFor(peer.peer_id, name);
       const off = [
         peer.sources.mic ? "" : "mic off",
         peer.sources.camera ? "" : "camera off",
       ].filter(Boolean);
-      tile.label.textContent = peer.name;
+      tile.label.textContent = name;
       tile.state.textContent = off.join(" · ");
       tile.camera.classList.toggle("hidden", !peer.sources.camera);
     });
