@@ -6,6 +6,7 @@
 
 import { esc, LINK_CLASS, PAGE_CLASS } from "./helpers";
 import { joinRoom } from "./live/api";
+import { roomPath, titleFrom } from "./live/link";
 import { apply, type Room } from "./live/roster";
 
 let leave: (() => void) | null = null;
@@ -28,7 +29,9 @@ const render = (app: HTMLElement, room: Room | null, status: string) => {
 };
 
 export default (app: HTMLElement, id: string) => {
-  const link = `${location.origin}/secret/live/${encodeURIComponent(id)}`;
+  // Deliberately without the title: a shared link joins a room that already
+  // exists and already has one.
+  const link = location.origin + roomPath(id);
 
   app.innerHTML = `
 <div class="${PAGE_CLASS}">
@@ -61,7 +64,7 @@ export default (app: HTMLElement, id: string) => {
   const update = (status: string) => render(app, room, status);
 
   leave?.();
-  leave = joinRoom(id, id, {
+  leave = joinRoom(id, titleFrom(location.search), {
     hello: (data) => {
       room = apply(room, { kind: "hello", ...data });
       update("Here now");

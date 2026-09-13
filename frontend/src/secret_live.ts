@@ -6,6 +6,7 @@
 
 import { esc, LINK_CLASS, PAGE_CLASS, pageTitle } from "./helpers";
 import { createRoom, watchLobby } from "./live/api";
+import { roomPath } from "./live/link";
 import type { RoomSummary } from "@andrewmccall/api-types";
 
 const inputClass =
@@ -17,7 +18,7 @@ const buttonClass =
 let stopWatching: (() => void) | null = null;
 
 const roomRow = (room: RoomSummary): string => `
-  <a href="/secret/live/${encodeURIComponent(room.id)}"
+  <a href="${roomPath(room.id)}"
      class="block border border-green-900 hover:border-green-500 px-4 py-3">
     <div class="flex items-center justify-between gap-4">
       <span class="text-green-300">${esc(room.title)}</span>
@@ -57,7 +58,9 @@ export default (app: HTMLElement) => {
     error.textContent = "";
     try {
       const room = await createRoom(title.value);
-      window.navigate(`/secret/live/${encodeURIComponent(room.id)}`);
+      // The title travels in the link: the room does not exist yet, and the
+      // stream that opens it is what names it.
+      window.navigate(roomPath(room.id, room.title));
     } catch (err) {
       error.textContent = err instanceof Error ? err.message : "Could not start a room.";
       start.disabled = false;
