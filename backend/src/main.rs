@@ -314,6 +314,18 @@ fn main() {
     dotenvy::dotenv().ok();
     let _guard = init_tracing();
 
+    // Both rustls crypto providers are compiled in — `ring` through sqlx,
+    // `aws-lc-rs` through futures-rustls — and rustls refuses to guess between
+    // them, panicking the first time anything opens a TLS connection. Choosing
+    // one here covers every outbound connection in the process: the database,
+    // the GitHub sync and the ntfy push a live room sends.
+    if futures_rustls::rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .is_err()
+    {
+        tracing::debug!("a rustls crypto provider was already installed");
+    }
+
     smol::block_on(async {
         let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
         let addr = std::env::var("ADDR").unwrap_or_else(|_| "0.0.0.0".to_string());
