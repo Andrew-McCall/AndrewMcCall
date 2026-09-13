@@ -6,6 +6,7 @@ mod database;
 mod github;
 mod http_client;
 mod ip;
+mod live;
 mod logs;
 mod notes;
 mod password;
@@ -110,6 +111,10 @@ async fn route(
         (&Method::GET, "/meta") => notes::list_meta(req, peer, &config).await,
         (&Method::GET, "/meta/types") => notes::list_meta_types(req, peer, &config).await,
 
+        (&Method::GET, "/live/rooms") => live::list_rooms(req, peer, &config).await,
+        (&Method::POST, "/live/rooms") => live::create_room(req, peer, &config).await,
+        (&Method::GET, "/live/events") => live::lobby_events(req, peer, &config).await,
+
         // Known path, but the method above didn't match: 405 (not 404).
         (
             _,
@@ -118,7 +123,7 @@ async fn route(
             | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
             | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
             | "/admin/details" | "/home"
-            | "/posts" | "/notes" | "/meta" | "/meta/types",
+            | "/posts" | "/notes" | "/meta" | "/meta/types" | "/live/rooms" | "/live/events",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
         // Step 2: parameterized routes. Own the id/slug before moving `req`,
@@ -174,6 +179,25 @@ async fn route(
                     Method::DELETE => notes::delete_note(req, peer, &config, &id).await,
                     _ => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
                 };
+            }
+            if let Some(rest) = path.strip_prefix("/live/rooms/") {
+                // A room id is one path segment; anything deeper is not a room.
+                let room = |id: &str| (!id.contains('/')).then(|| id.to_string());
+
+                if let Some(id) = rest.strip_suffix("/events").and_then(room) {
+                    return if method == Method::GET {
+                        live::room_events(req, peer, &config, &id).await
+                    } else {
+                        ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                    };
+                }
+                if let Some(id) = rest.strip_suffix("/signal").and_then(room) {
+                    return if method == Method::POST {
+                        live::signal(req, peer, &config, &id).await
+                    } else {
+                        ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                    };
+                }
             }
             if let Some(file) = path.strip_prefix("/countries/") {
                 return countries::svg_response(&method, file).await;
@@ -321,6 +345,7 @@ fn main() {
         notes::index::reindex_all(&config.db.pool()).await;
 
         github::spawn_sync(Arc::clone(&config));
+        live::spawn_keepalive(Arc::clone(&config));
 
         loop {
             let (stream, peer) = match listener.accept().await {

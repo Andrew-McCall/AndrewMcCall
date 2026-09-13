@@ -306,6 +306,31 @@ pub async fn authenticate(
     peer: SocketAddr,
     config: &ApiConfig,
 ) -> Result<AuthUser, ApiError> {
+    let user = authenticate_quiet(req, config).await?;
+
+    let client_ip = resolve_client_ip(config.ip_source, req, peer)
+        .map(|ip| ip.0)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let user_agent = req
+        .headers()
+        .get(USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    record_auth(config, user.id, req.uri().path(), client_ip, user_agent);
+
+    Ok(user)
+}
+
+/// Resolves a token to its user *without* recording the request in `auth_log`.
+///
+/// For endpoints called many times per user action — trickle ICE posts a
+/// candidate at a time — where a row per call would bury the log in noise
+/// nobody reads. Anything a person does once keeps [`authenticate`].
+pub async fn authenticate_quiet(
+    req: &Request<hyper::body::Incoming>,
+    config: &ApiConfig,
+) -> Result<AuthUser, ApiError> {
     let token = extract_token(req).ok_or(ApiError::Unauthorized)?;
     let token_hash = sha256_hex(&token);
 
@@ -324,17 +349,6 @@ pub async fn authenticate(
     })?;
 
     let (id, name, role) = row.ok_or(ApiError::Unauthorized)?;
-
-    let client_ip = resolve_client_ip(config.ip_source, req, peer)
-        .map(|ip| ip.0)
-        .unwrap_or_else(|_| "unknown".to_string());
-    let user_agent = req
-        .headers()
-        .get(USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    record_auth(config, id, req.uri().path(), client_ip, user_agent);
 
     Ok(AuthUser { id, name, role })
 }

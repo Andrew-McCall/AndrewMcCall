@@ -1,4 +1,4 @@
-use crate::{database::connection::DatabaseConnection, ip::IpSource};
+use crate::{database::connection::DatabaseConnection, ip::IpSource, live::state::Live};
 
 #[derive(Debug)]
 pub struct ApiConfig {
@@ -30,6 +30,14 @@ pub struct ApiConfig {
     pub github_token: Option<String>,
     /// Minutes between GitHub sync fetches.
     pub github_sync_minutes: u64,
+    /// ntfy topic to publish to when a live room opens. Unset disables the
+    /// notification entirely.
+    pub ntfy_topic: Option<String>,
+    /// Host serving that topic.
+    pub ntfy_host: String,
+    /// Every live room and everyone in one. In memory, and deliberately not in
+    /// the database: a call does not survive a restart.
+    pub live: Live,
 }
 
 pub type SharedConfig = std::sync::Arc<ApiConfig>;
@@ -58,6 +66,10 @@ impl ApiConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),
+            ntfy_topic: non_empty_env("NTFY_TOPIC"),
+            ntfy_host: non_empty_env("NTFY_HOST")
+                .unwrap_or_else(|| "ntfy.andrewmccall.uk".to_string()),
+            live: Live::new(),
         }
     }
 }

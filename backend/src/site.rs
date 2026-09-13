@@ -498,7 +498,7 @@ pub async fn home(
 }
 
 /// The canonical origin every sitemap URL is built from.
-const SITE_ORIGIN: &str = "https://www.andrewmccall.uk";
+pub(crate) const SITE_ORIGIN: &str = "https://www.andrewmccall.uk";
 
 /// The fixed public routes that always belong in the sitemap, independent of
 /// the database. Blog post detail pages (`/posts/{slug}`) are appended from the
