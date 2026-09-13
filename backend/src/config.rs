@@ -35,6 +35,14 @@ pub struct ApiConfig {
     pub ntfy_topic: Option<String>,
     /// Host serving that topic.
     pub ntfy_host: String,
+    /// STUN server handed to clients so they can learn their public address.
+    pub stun_url: String,
+    /// `host:port` of the TURN relay. Unset means STUN only — which works on
+    /// most home broadband and fails on the networks that need a relay most.
+    pub turn_host: Option<String>,
+    /// Shared secret for TURN's REST credentials. Both this and `turn_host`
+    /// must be set before a relay is offered at all.
+    pub turn_secret: Option<String>,
     /// Every live room and everyone in one. In memory, and deliberately not in
     /// the database: a call does not survive a restart.
     pub live: Live,
@@ -69,6 +77,10 @@ impl ApiConfig {
             ntfy_topic: non_empty_env("NTFY_TOPIC"),
             ntfy_host: non_empty_env("NTFY_HOST")
                 .unwrap_or_else(|| "ntfy.andrewmccall.uk".to_string()),
+            stun_url: non_empty_env("STUN_URL")
+                .unwrap_or_else(|| "stun:stun.l.google.com:19302".to_string()),
+            turn_host: non_empty_env("TURN_HOST"),
+            turn_secret: non_empty_env("TURN_SECRET"),
             live: Live::new(),
         }
     }

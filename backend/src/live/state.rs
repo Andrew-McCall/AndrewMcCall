@@ -33,6 +33,20 @@ pub const ROOM_CAPACITY: usize = 6;
 /// person joining from two tabs is two peers.
 pub type PeerId = Uuid;
 
+/// What a peer is currently publishing. Four flags for the four fixed
+/// transceivers, so a tile can say "camera off" rather than show a black
+/// rectangle and hope.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Default, sonic_rs::Serialize, sonic_rs::Deserialize,
+    ts_typegen::Ts,
+)]
+pub struct Sources {
+    pub mic: bool,
+    pub app: bool,
+    pub camera: bool,
+    pub screen: bool,
+}
+
 /// A room as the lobby sees it. Timestamps are stringified here, at the
 /// serialization boundary, as everywhere else in the API.
 #[derive(Debug, Clone, PartialEq, sonic_rs::Serialize, ts_typegen::Ts)]
@@ -84,6 +98,13 @@ struct Hello<'a> {
     roster: &'a [PeerSummary],
 }
 
+/// A peer's source state, as the rest of the room sees it.
+#[derive(sonic_rs::Serialize)]
+struct SourcesOut {
+    from: String,
+    sources: Sources,
+}
+
 /// A signalling message as the receiving peer sees it.
 #[derive(sonic_rs::Serialize)]
 struct SignalOut<'a> {
@@ -106,6 +127,7 @@ pub struct PeerSummary {
     pub peer_id: String,
     pub name: String,
     pub seq: u64,
+    pub sources: Sources,
 }
 
 /// A cloneable handle to the registry. Cloning shares the same rooms.
@@ -155,6 +177,7 @@ struct Peer {
     user_id: Uuid,
     name: String,
     seq: u64,
+    sources: Sources,
     events: Sender<Bytes>,
 }
 
@@ -192,6 +215,7 @@ impl Room {
                 peer_id: peer_id.to_string(),
                 name: peer.name.clone(),
                 seq: peer.seq,
+                sources: peer.sources,
             })
             .collect();
         roster.sort_by_key(|peer| peer.seq);
@@ -258,6 +282,7 @@ impl Live {
                 user_id,
                 name: name.to_string(),
                 seq,
+                sources: Sources::default(),
                 events,
             },
         );
@@ -269,6 +294,7 @@ impl Live {
                     peer_id: peer_id.to_string(),
                     name: name.to_string(),
                     seq,
+                    sources: Sources::default(),
                 },
             ),
             peer_id,
@@ -301,6 +327,37 @@ impl Live {
         let _ = events.try_send(frame("rooms", &registry.summaries()));
         registry.lobby.push(events);
         rx
+    }
+
+    /// Records what `from` is publishing and tells the rest of the room.
+    pub fn set_sources(
+        &self,
+        room_id: &str,
+        user_id: Uuid,
+        from: PeerId,
+        sources: Sources,
+    ) -> Result<(), ApiError> {
+        let mut registry = self.0.lock().unwrap();
+        let room = registry.rooms.get_mut(room_id).ok_or(ApiError::Forbidden)?;
+
+        let peer = room.peers.get_mut(&from).ok_or(ApiError::Forbidden)?;
+        if peer.user_id != user_id {
+            return Err(ApiError::Forbidden);
+        }
+        peer.sources = sources;
+
+        room.announce(
+            frame(
+                "sources",
+                &SourcesOut {
+                    from: from.to_string(),
+                    sources,
+                },
+            ),
+            from,
+        );
+
+        Ok(())
     }
 
     /// Sends a comment frame to every open stream.
@@ -686,5 +743,29 @@ mod tests {
 
         assert!(alice.created, "alice opened the room");
         assert!(!bob.created, "bob walked into a room already running");
+    }
+
+    #[test]
+    fn the_room_is_told_what_a_peer_is_publishing() {
+        let live = Live::new();
+        let alice_user = Uuid::new_v4();
+        let alice = join_as(&live, "blue-otter-lamp", alice_user, "Alice");
+        let bob = join_as(&live, "blue-otter-lamp", Uuid::new_v4(), "Bob");
+        drain(&bob);
+
+        live.set_sources(
+            "blue-otter-lamp",
+            alice_user,
+            alice.peer_id,
+            Sources { mic: true, app: false, camera: true, screen: false },
+        )
+        .expect("alice may say what she is publishing");
+
+        let frame = next_frame(&bob);
+        assert!(frame.starts_with("event: sources\n"), "{frame}");
+        assert!(frame.contains(&alice.peer_id.to_string()), "{frame}");
+        assert!(frame.contains("\"mic\":true"), "{frame}");
+        assert!(frame.contains("\"camera\":true"), "{frame}");
+        assert!(frame.contains("\"screen\":false"), "{frame}");
     }
 }

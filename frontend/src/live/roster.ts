@@ -2,7 +2,7 @@
 // browser. The page renders whatever this returns; nothing here touches the DOM
 // or a peer connection.
 
-import type { PeerSummary } from "@andrewmccall/api-types";
+import type { PeerSummary, Sources } from "@andrewmccall/api-types";
 
 export interface Room {
   // This tab's own peer id, as minted by the server.
@@ -18,7 +18,8 @@ export interface Room {
 export type LiveEvent =
   | { kind: "hello"; peer_id: string; seq: number; title: string; roster: PeerSummary[] }
   | { kind: "peer-joined"; peer: PeerSummary }
-  | { kind: "peer-left"; peer_id: string };
+  | { kind: "peer-left"; peer_id: string }
+  | { kind: "sources"; from: string; sources: Sources };
 
 const byJoinOrder = (a: PeerSummary, b: PeerSummary) => a.seq - b.seq;
 
@@ -42,6 +43,15 @@ export function apply(room: Room | null, event: LiveEvent): Room | null {
       return room;
     }
     return { ...room, peers: [...room.peers, event.peer].sort(byJoinOrder) };
+  }
+
+  if (event.kind === "sources") {
+    return {
+      ...room,
+      peers: room.peers.map((peer) =>
+        peer.peer_id === event.from ? { ...peer, sources: event.sources } : peer,
+      ),
+    };
   }
 
   return {

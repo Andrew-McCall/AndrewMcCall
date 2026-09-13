@@ -4,7 +4,13 @@
 // room and closing it leaves, so nothing here has a "leave" call — dropping the
 // EventSource is the goodbye, which also covers the tab being closed.
 
-import type { CreatedRoom, PeerSummary, RoomSummary } from "@andrewmccall/api-types";
+import type {
+  CreatedRoom,
+  IceServers,
+  PeerSummary,
+  RoomSummary,
+  Sources,
+} from "@andrewmccall/api-types";
 import { api, errorText, jsonInit } from "../helpers";
 
 // The payload of a relayed signalling message. `payload` is an SDP or an ICE
@@ -26,6 +32,7 @@ export interface RoomHandlers {
   joined: (peer: PeerSummary) => void;
   left: (peer_id: string) => void;
   signal: (signal: Signal) => void;
+  sources: (from: string, sources: Sources) => void;
   // Called when the stream drops. EventSource reconnects by itself, and a
   // reconnect re-joins with a fresh peer id and a fresh hello.
   dropped: () => void;
@@ -69,9 +76,37 @@ export function joinRoom(
   on("peer-joined", handlers.joined);
   on("peer-left", (data) => handlers.left(data.peer_id));
   on("signal", handlers.signal);
+  on("sources", (data) => handlers.sources(data.from, data.sources));
   stream.addEventListener("error", () => handlers.dropped());
 
   return () => stream.close();
+}
+
+// Where to send media through. Fetched once per join: the TURN credential in
+// it is minted per request and lasts an hour, which outlives any call that
+// needs it.
+export async function iceServers(): Promise<RTCIceServer[]> {
+  const res = await api("/live/ice");
+  if (!res.ok) throw new Error(await errorText(res));
+  const body: IceServers = await res.json();
+  return body.ice_servers.map((server) => ({
+    urls: server.urls,
+    username: server.username ?? undefined,
+    credential: server.credential ?? undefined,
+  }));
+}
+
+// Tells the room what this peer is publishing, so a tile can say "camera off"
+// rather than show a black rectangle.
+export async function setSources(
+  roomId: string,
+  from: string,
+  sources: Sources,
+): Promise<void> {
+  await api(
+    `/live/rooms/${encodeURIComponent(roomId)}/sources`,
+    jsonInit({ from, sources }),
+  );
 }
 
 // Hands one offer, answer or candidate to one other peer.

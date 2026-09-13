@@ -40,6 +40,10 @@ webpki-roots = "1"
 argon2 = "0.5.3"
 totp-rs = { version = "5.7.2", default-features = false, features = ["otpauth"] }
 sha2 = "0.10"
+# TURN's REST credentials are specified as HMAC-SHA1 — not a choice, and the
+# only reason sha1 appears anywhere in this tree.
+sha1 = "0.10"
+hmac = "0.12"
 
 [build-dependencies]
 # Scans src/ for `#[derive(Ts)]` and writes bindings/. See build.rs.

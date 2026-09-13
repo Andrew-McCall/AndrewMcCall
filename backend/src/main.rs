@@ -114,6 +114,7 @@ async fn route(
         (&Method::GET, "/live/rooms") => live::list_rooms(req, peer, &config).await,
         (&Method::POST, "/live/rooms") => live::create_room(req, peer, &config).await,
         (&Method::GET, "/live/events") => live::lobby_events(req, peer, &config).await,
+        (&Method::GET, "/live/ice") => live::ice(req, peer, &config).await,
 
         // Known path, but the method above didn't match: 405 (not 404).
         (
@@ -123,7 +124,8 @@ async fn route(
             | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
             | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
             | "/admin/details" | "/home"
-            | "/posts" | "/notes" | "/meta" | "/meta/types" | "/live/rooms" | "/live/events",
+            | "/posts" | "/notes" | "/meta" | "/meta/types" | "/live/rooms" | "/live/events"
+            | "/live/ice",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
         // Step 2: parameterized routes. Own the id/slug before moving `req`,
@@ -187,6 +189,13 @@ async fn route(
                 if let Some(id) = rest.strip_suffix("/events").and_then(room) {
                     return if method == Method::GET {
                         live::room_events(req, peer, &config, &id).await
+                    } else {
+                        ResponseBuilder::from(ApiError::MethodNotAllowed).into()
+                    };
+                }
+                if let Some(id) = rest.strip_suffix("/sources").and_then(room) {
+                    return if method == Method::POST {
+                        live::sources(req, peer, &config, &id).await
                     } else {
                         ResponseBuilder::from(ApiError::MethodNotAllowed).into()
                     };

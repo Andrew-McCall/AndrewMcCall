@@ -12,6 +12,7 @@
 
 pub mod event;
 pub mod state;
+pub mod turn;
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -26,7 +27,7 @@ use ts_typegen::Ts;
 
 use crate::auth;
 use crate::config::{ApiConfig, SharedConfig};
-use crate::live::state::{Live, PeerId};
+use crate::live::state::{Live, PeerId, Sources};
 use crate::response::{self, ApiError, Body, ResponseBuilder, event_stream};
 
 /// How often every open stream is pinged. Long enough to be invisible, short
@@ -40,6 +41,11 @@ const MAX_TITLE: usize = 60;
 
 /// Shown when a room is opened without a title.
 const UNTITLED: &str = "Untitled room";
+
+/// How long a TURN credential lasts. Long enough that a call never has to
+/// re-fetch one mid-connection, short enough that a leaked one is worthless by
+/// the time anybody finds it.
+const TURN_TTL: i64 = 60 * 60;
 
 /// Pings every open stream on a timer, for as long as the process runs.
 pub fn spawn_keepalive(config: SharedConfig) {
@@ -69,12 +75,34 @@ pub struct CreatedRoom {
 }
 
 #[derive(Deserialize)]
+struct SourcesIn {
+    from: String,
+    sources: Sources,
+}
+
+/// One entry of an `RTCConfiguration`'s `iceServers`.
+#[derive(Serialize, Ts)]
+pub struct IceServer {
+    pub urls: Vec<String>,
+    pub username: Option<String>,
+    pub credential: Option<String>,
+}
+
+#[derive(Serialize, Ts)]
+pub struct IceServers {
+    pub ice_servers: Vec<IceServer>,
+}
+
+#[derive(Deserialize)]
 struct SignalIn {
     from: String,
     to: String,
     kind: String,
     payload: Value,
 }
+
+const SOURCES_HINT: &str =
+    r#"expected a JSON body like {"from": "…", "sources": {"mic": true, "app": false, "camera": false, "screen": false}}"#;
 
 const NEW_ROOM_HINT: &str = r#"expected a JSON body like {"title": "…"}"#;
 const SIGNAL_HINT: &str =
@@ -213,6 +241,76 @@ pub async fn signal(
     }
 
     ResponseBuilder::new(StatusCode::NO_CONTENT).empty().into()
+}
+
+/// `POST /live/rooms/{id}/sources` — says what this peer is publishing.
+pub async fn sources(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+    room_id: &str,
+) -> hyper::Response<Body> {
+    let user = match auth::authenticate(&req, peer, config).await {
+        Ok(user) => user,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let body: SourcesIn = match response::read_json(req, SOURCES_HINT).await {
+        Ok(body) => body,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let Ok(from) = body.from.parse::<PeerId>() else {
+        return ResponseBuilder::from(ApiError::Forbidden).into();
+    };
+
+    if let Err(err) = config
+        .live
+        .set_sources(room_id, user.id, from, body.sources)
+    {
+        return ResponseBuilder::from(err).into();
+    }
+
+    ResponseBuilder::new(StatusCode::NO_CONTENT).empty().into()
+}
+
+/// `GET /live/ice` — where to send media through when a direct path cannot be
+/// found. The TURN credential is minted per request and expires by itself.
+pub async fn ice(
+    req: Request<hyper::body::Incoming>,
+    peer: SocketAddr,
+    config: &ApiConfig,
+) -> hyper::Response<Body> {
+    let user = match auth::authenticate(&req, peer, config).await {
+        Ok(user) => user,
+        Err(err) => return ResponseBuilder::from(err).into(),
+    };
+
+    let mut ice_servers = vec![IceServer {
+        urls: vec![config.stun_url.clone()],
+        username: None,
+        credential: None,
+    }];
+
+    if let (Some(host), Some(secret)) = (&config.turn_host, &config.turn_secret) {
+        let expires_at = chrono::Utc::now().timestamp() + TURN_TTL;
+        let (username, credential) =
+            turn::credential(secret, &user.id.to_string(), expires_at);
+        ice_servers.push(IceServer {
+            // Both transports: UDP is the one that performs, TCP is the one
+            // that gets through a network which blocks everything else.
+            urls: vec![
+                format!("turn:{host}?transport=udp"),
+                format!("turn:{host}?transport=tcp"),
+            ],
+            username: Some(username),
+            credential: Some(credential),
+        });
+    }
+
+    ResponseBuilder::new(StatusCode::OK)
+        .json(&IceServers { ice_servers })
+        .into()
 }
 
 // ---------------------------------------------------------------------------

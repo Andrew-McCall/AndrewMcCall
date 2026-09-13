@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { apply, type Room } from "./roster";
 
+const silent = { mic: false, app: false, camera: false, screen: false };
+
 const peer = (id: string, name: string, seq: number) => ({
   peer_id: id,
   name,
   seq,
+  sources: silent,
 });
 
 describe("the room roster", () => {
@@ -62,5 +65,45 @@ describe("the room roster", () => {
     const next = apply(room, { kind: "peer-joined", peer: peer("a", "Alice", 1) });
 
     expect(next!.peers).toHaveLength(1);
+  });
+
+  it("records what a peer is publishing", () => {
+    const room: Room = {
+      self: "me",
+      seq: 0,
+      title: "Friday music",
+      peers: [peer("a", "Alice", 1)],
+    };
+
+    const next = apply(room, {
+      kind: "sources",
+      from: "a",
+      sources: { mic: true, app: true, camera: false, screen: false },
+    });
+
+    expect(next!.peers[0]!.sources).toEqual({
+      mic: true,
+      app: true,
+      camera: false,
+      screen: false,
+    });
+  });
+
+  it("ignores what someone who is not here is publishing", () => {
+    const room: Room = {
+      self: "me",
+      seq: 0,
+      title: "Friday music",
+      peers: [peer("a", "Alice", 1)],
+    };
+
+    const next = apply(room, {
+      kind: "sources",
+      from: "ghost",
+      sources: { mic: true, app: false, camera: false, screen: false },
+    });
+
+    expect(next!.peers).toHaveLength(1);
+    expect(next!.peers[0]!.sources).toEqual(silent);
   });
 });
