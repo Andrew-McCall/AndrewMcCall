@@ -51,6 +51,7 @@ const groups: MenuGroup[] = [
     glyph: "~",
     items: [
       { href: "/secret/visits", label: "Visits" },
+      { href: "/secret/live", label: "Live", auth: true },
       { href: "/secret/account", label: "Account", auth: true },
       { href: "/secret/soon", label: "coming soon", disabled: true },
     ],

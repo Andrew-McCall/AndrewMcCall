@@ -118,6 +118,10 @@ const routes: Record<string, Route> = {
     auth: "user",
     render: disposable("notes", () => import("./secret_notes.ts")),
   },
+  "/secret/live": {
+    auth: "user",
+    render: disposable("live", () => import("./secret_live.ts")),
+  },
   "/secret/account": {
     auth: "user",
     render: (app, me) =>
@@ -163,6 +167,16 @@ const prefixRoutes: {
     render: (app, slug) => import("./posts.ts").then((m) => m.postPage(app, slug)),
   },
   {
+    prefix: "/secret/live/",
+    auth: "user",
+    name: "liveRoom",
+    render: (app, id) =>
+      import("./secret_live_room.ts").then((m) => {
+        loaded.set("liveRoom", m);
+        return m.default(app, decodeURIComponent(id));
+      }),
+  },
+  {
     prefix: "/secret/notes/",
     auth: "user",
     name: "notes",
@@ -201,6 +215,14 @@ async function renderPage(): Promise<void> {
     // Tear down an open game: its keydown handler preventDefaults keys the rest
     // of the site needs (Snake takes h/j/k/l and space).
     loaded.get("vim")?.disposeVim();
+  }
+  if (page !== "/secret/live") {
+    loaded.get("live")?.disposeLive(); // stop listening to the lobby
+  }
+  // Leaving the page closes the room's event stream, which is what tells the
+  // others you left — so this teardown is the goodbye, not tidying.
+  if (!page.startsWith("/secret/live/")) {
+    loaded.get("liveRoom")?.disposeLiveRoom();
   }
   // The notes page owns keyboard/connectivity listeners and a pending autosave,
   // so it is only torn down when leaving the section entirely — navigating
