@@ -10,6 +10,7 @@
 import type { PeerSummary } from "@andrewmccall/api-types";
 import { sendSignal, type Signal } from "./api";
 import {
+  adoptTransceivers,
   MIDS,
   sourceOfMid,
   weOffer,
@@ -100,14 +101,13 @@ export function createMesh(
     handlers.state(peerId, connection.pc.connectionState, await path(connection.pc));
   };
 
-  // Adopts the transceivers an offer created, in mid order, so index 0 is the
-  // microphone on both ends.
+  // Adopts the transceivers an offer created: mid order, and each switched to
+  // sendrecv so this end can actually send on them. Done before createAnswer,
+  // so the answer advertises them as sendrecv and nothing needs renegotiating.
   const adopt = (connection: Connection) => {
-    connection.senders = connection.pc
-      .getTransceivers()
-      .slice()
-      .sort((a, b) => Number(a.mid) - Number(b.mid))
-      .map((transceiver) => transceiver.sender);
+    connection.senders = adoptTransceivers(connection.pc.getTransceivers()).map(
+      (transceiver) => transceiver.sender,
+    );
   };
 
   const drain = async (connection: Connection) => {

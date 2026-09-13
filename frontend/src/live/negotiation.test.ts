@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  adoptTransceivers,
+  type Adoptable,
   MIDS,
   midOfSource,
   sourceOfMid,
@@ -73,5 +75,26 @@ describe("application audio", () => {
   it("leaves an sdp with no application audio alone", () => {
     const plain = "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n";
     expect(withStereoAppAudio(plain)).toBe(plain);
+  });
+});
+
+describe("adopting the transceivers an offer created", () => {
+  const made = (): Adoptable[] => [
+    { mid: "2", direction: "recvonly" },
+    { mid: "0", direction: "recvonly" },
+    { mid: "3", direction: "recvonly" },
+    { mid: "1", direction: "recvonly" },
+  ];
+
+  it("puts them in mid order, so index 0 is the microphone on both ends", () => {
+    expect(adoptTransceivers(made()).map((t) => t.mid)).toEqual(["0", "1", "2", "3"]);
+  });
+
+  it("switches every one to sendrecv", () => {
+    // A transceiver a remote offer created is recvonly, and replaceTrack does
+    // not change that: without this the answering side sends nothing at all.
+    const directions = adoptTransceivers(made()).map((t) => t.direction);
+
+    expect(directions).toEqual(["sendrecv", "sendrecv", "sendrecv", "sendrecv"]);
   });
 });

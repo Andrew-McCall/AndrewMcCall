@@ -56,3 +56,24 @@ export function withStereoAppAudio(sdp: string): string {
     })
     .join("");
 }
+
+// The shape of a transceiver this module needs to reason about.
+export interface Adoptable {
+  mid: string | null;
+  direction: RTCRtpTransceiverDirection;
+}
+
+// Takes the transceivers a remote offer created and makes them usable for
+// sending: mid order, and every one switched to sendrecv.
+//
+// Applying a remote offer creates transceivers with a direction of "recvonly"
+// — the spec says so outright — and replaceTrack() does not change that. Attach
+// a camera to one and it is simply never sent, while everything the far end
+// sends arrives normally, so the call looks half-working rather than broken.
+export function adoptTransceivers<T extends Adoptable>(transceivers: T[]): T[] {
+  const ordered = [...transceivers].sort((a, b) => Number(a.mid) - Number(b.mid));
+  for (const transceiver of ordered) {
+    transceiver.direction = "sendrecv";
+  }
+  return ordered;
+}
