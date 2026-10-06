@@ -90,7 +90,7 @@ const SPAWN_START: f32 = 2.0;
 /// step interval is `1.0 / target_tps`.
 const INIT_TPS: f32 = 12.0;
 /// Floor the adaptive rate never drops below — one generation per second.
-const MIN_TPS: f32 = 1.0;
+const MIN_TPS: f32 = 0.5;
 /// Seconds of sustained overload that buy one tick/sec off the target rate.
 const SLOW_WINDOW: f32 = 5.0;
 /// Seconds of sustained headroom that win one tick/sec back — deliberately far
@@ -101,7 +101,7 @@ const MAX_METROIDS: usize = 5;
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 = 3;
+const DECAY: u8 = 5;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
@@ -1162,7 +1162,18 @@ pub extern "C" fn tick(width: usize, height: usize, dt: f32) {
 
     sim.update_metroids(dt, cells);
 
-    render_frame(width, height, gw, gh, pitch, ox as usize, oy as usize, cells, tile_a, stars);
+    render_frame(
+        width,
+        height,
+        gw,
+        gh,
+        pitch,
+        ox as usize,
+        oy as usize,
+        cells,
+        tile_a,
+        stars,
+    );
 }
 
 /// Blit the current grid, cell and star state into the RGBA framebuffer.
