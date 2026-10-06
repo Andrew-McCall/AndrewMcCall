@@ -101,13 +101,13 @@ const MAX_METROIDS: usize = 5;
 /// Base alpha a live cell's tile loses per generation. Interior cells —
 /// ringed by live neighbours — lose up to 3x this, on a quadratic ramp, so
 /// colony edges dissolve at the base rate while their cores burn through.
-const DECAY: u8 = 5;
+const DECAY: u8 = 6;
 /// Alpha a mouse hold adds (heal) or removes (erode) per generation at the
 /// brush centre; erasing bites harder than repairing restores.
 const HOLD_HEAL: u8 = 48;
 const HOLD_ERODE: u8 = 96;
 /// Brush radius in tiles; strength falls off non-linearly to ~0 at the rim.
-const HOLD_R: i32 = 3;
+const HOLD_R: i32 = 4;
 
 /// The outer 1/20th (5%) of the grid on every side self-heals each
 /// generation.

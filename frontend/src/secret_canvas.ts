@@ -1,6 +1,7 @@
 // Fullscreen Game of Life, rendered by wasm into an RGBA framebuffer that we
 // blit each frame. Left-drag draws cells, right-drag erases; ten clean clicks
-// (or Escape) leads to /secret.
+// (or Escape) leads to /secret — on the page itself too, once the board is
+// disabled.
 //
 // Live cells erode their tile's alpha over time, dissolving the board into
 // the home page rendered beneath the canvas. Holding left erodes the ground
@@ -483,9 +484,9 @@ export default (signedIn?: Promise<boolean>) => {
     { passive: false },
   );
 
-  overlay.addEventListener("click", (ev) => {
-    if (dragged) return;
-    if (alphaAt(ev) < CLICK_THROUGH_ALPHA && forwardClick(ev)) return;
+  // One click towards /secret: the last five each float a countdown, and the
+  // one after that navigates.
+  const countSecretClick = (ev: MouseEvent) => {
     if (!secretsEnabled) return; // no counting towards /secret while it's dead
     if (secret_counter < 6) {
       if (secret_counter < 1) return window.navigate("/secret");
@@ -499,7 +500,28 @@ export default (signedIn?: Promise<boolean>) => {
       }, 5000);
     }
     secret_counter -= 1;
+  };
+
+  overlay.addEventListener("click", (ev) => {
+    if (dragged) return;
+    if (alphaAt(ev) < CLICK_THROUGH_ALPHA && forwardClick(ev)) return;
+    countSecretClick(ev);
   });
+
+  // With the board disabled the overlay is display:none, so its click handler
+  // never fires — count clicks on the bare page instead. Clicks on anything
+  // interactive do their own thing, just as the overlay forwards them.
+  const onDocClick = (ev: MouseEvent) => {
+    if (!disabled) return;
+    const t = ev.target;
+    if (
+      t instanceof Element &&
+      t.closest("a, button, input, textarea, select, label, [data-url]")
+    )
+      return;
+    countSecretClick(ev);
+  };
+  document.addEventListener("click", onDocClick);
 
   // The OS scrollbar paints on top of the canvas at the very edge, where the
   // board's outer band always heals shut — so hide it and draw our own. This
@@ -601,6 +623,7 @@ export default (signedIn?: Promise<boolean>) => {
     window.removeEventListener("resize", resize);
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("scroll", onScroll);
+    document.removeEventListener("click", onDocClick);
     scrollbarRO.disconnect();
     scrollbarHide.remove();
     scrollbar.remove();
