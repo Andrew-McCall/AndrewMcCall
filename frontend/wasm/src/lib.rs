@@ -116,7 +116,7 @@ const MARGIN_FRAC: usize = 20;
 /// quadratically to ~0 at the band's inner line. Beats even 3x interior
 /// decay right at the edge but loses to it midway in, so the erosion
 /// frontier never settles there — it keeps wiggling inside the band.
-const MARGIN_HEAL: u8 = 16;
+const MARGIN_HEAL: u8 = 20;
 
 const BG: [u8; 3] = [0x0c, 0x0a, 0x09]; // stone-950
 const GRID_LINE: [u8; 3] = [0x1c, 0x19, 0x17]; // stone-900
@@ -1514,9 +1514,9 @@ mod tests {
         let mut tile_a = vec![255u8; gw * gh];
         decay_tiles(&cells, &mut tile_a, gw, gh, 100);
         // Centre has 8 live neighbours: 3x decay. Corners (3 neighbours) take
-        // just the base rate — the quadratic ramp still rounds to zero there.
+        // roughly the base rate (the quadratic ramp adds one step at DECAY=6).
         assert_eq!(255 - tile_a[4], 3 * DECAY);
-        assert_eq!(255 - tile_a[0], DECAY);
+        assert_eq!(255 - tile_a[0], DECAY + 1);
         // Side cells (5 neighbours) land between the two.
         assert!(tile_a[0] > tile_a[1] && tile_a[1] > tile_a[4]);
     }
@@ -1531,9 +1531,9 @@ mod tests {
         assert_eq!(255 - full[4], 3 * DECAY);
         let mut half = vec![255u8; gw * gh];
         decay_tiles(&cells, &mut half, gw, gh, 50);
-        // Full centre loss is 9; halved and rounded to nearest gives 5, still
-        // strictly gentler than the unscaled rate.
-        assert_eq!(255 - half[4], 5);
+        // Full centre loss is 18; halved gives 9, still strictly gentler than
+        // the unscaled rate.
+        assert_eq!(255 - half[4], 9);
         assert!(255 - half[4] < 255 - full[4]);
         // A live tile always loses at least one step, however low the percent.
         let mut trickle = vec![255u8; gw * gh];
@@ -1570,26 +1570,26 @@ mod tests {
 
     #[test]
     fn hold_brush_heals_erodes_and_clips() {
-        let (gw, gh) = (9, 9);
+        let (gw, gh) = (11, 11);
         let mut tile_a = vec![100u8; gw * gh];
-        hold_brush(&mut tile_a, gw, gh, 4, 4, true);
+        hold_brush(&mut tile_a, gw, gh, 5, 5, true);
         let at = |t: &[u8], x: usize, y: usize| t[y * gw + x];
         // Full strength under the cursor, fading with distance out to HOLD_R;
         // beyond the rim nothing changes.
-        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_HEAL);
-        let ring: Vec<u8> = (4..=8).map(|x| at(&tile_a, x, 4)).collect();
+        assert_eq!(at(&tile_a, 5, 5), 100 + HOLD_HEAL);
+        let ring: Vec<u8> = (5..=10).map(|x| at(&tile_a, x, 5)).collect();
         assert!(ring.windows(2).all(|w| w[0] > w[1]), "falloff monotonic");
-        assert_eq!(ring[4], 100, "tile beyond radius untouched");
+        assert_eq!(ring[5], 100, "tile beyond radius untouched");
         // Non-linear: the drop from centre to 1 out is gentler than 1 to 2.
         assert!(ring[0] - ring[1] < ring[1] - ring[2]);
         // Erasing bites harder than repairing: one erode outweighs one heal.
-        hold_brush(&mut tile_a, gw, gh, 4, 4, false);
-        assert_eq!(at(&tile_a, 4, 4), 100 + HOLD_HEAL - HOLD_ERODE);
+        hold_brush(&mut tile_a, gw, gh, 5, 5, false);
+        assert_eq!(at(&tile_a, 5, 5), 100 + HOLD_HEAL - HOLD_ERODE);
         // Erode undoes the heal and saturates at fully transparent.
         for _ in 0..20 {
-            hold_brush(&mut tile_a, gw, gh, 4, 4, false);
+            hold_brush(&mut tile_a, gw, gh, 5, 5, false);
         }
-        assert_eq!(at(&tile_a, 4, 4), 0);
+        assert_eq!(at(&tile_a, 5, 5), 0);
         // A corner hold clips its out-of-bounds tiles; healing caps at 255.
         for _ in 0..20 {
             hold_brush(&mut tile_a, gw, gh, 0, 0, true);

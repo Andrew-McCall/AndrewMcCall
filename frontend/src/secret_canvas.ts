@@ -486,6 +486,7 @@ export default (signedIn?: Promise<boolean>) => {
 
   // One click towards /secret: the last five each float a countdown, and the
   // one after that navigates.
+  const counterTimers = new Set<number>();
   const countSecretClick = (ev: MouseEvent) => {
     if (!secretsEnabled) return; // no counting towards /secret while it's dead
     if (secret_counter < 6) {
@@ -495,9 +496,11 @@ export default (signedIn?: Promise<boolean>) => {
         ev.y,
         `You are ${secret_counter} clicks away from becoming a nerd`,
       );
-      setTimeout(() => {
+      const id = window.setTimeout(() => {
+        counterTimers.delete(id);
         secret_counter += 1;
       }, 5000);
+      counterTimers.add(id);
     }
     secret_counter -= 1;
   };
@@ -512,11 +515,17 @@ export default (signedIn?: Promise<boolean>) => {
   // never fires — count clicks on the bare page instead. Clicks on anything
   // interactive do their own thing, just as the overlay forwards them.
   const onDocClick = (ev: MouseEvent) => {
-    if (!disabled) return;
+    if (!disabled || !ev.isTrusted || ev.defaultPrevented) return;
+    // A text-selection drag ends in a click too; it isn't a secret click.
+    if (window.getSelection()?.isCollapsed === false) return;
     const t = ev.target;
     if (
       t instanceof Element &&
-      t.closest("a, button, input, textarea, select, label, [data-url]")
+      t.closest(
+        "a, button, input, textarea, select, label, summary, dialog, " +
+          "[data-url], [role], [onclick], [tabindex], [contenteditable], " +
+          "[aria-modal], [popover]",
+      )
     )
       return;
     countSecretClick(ev);
@@ -624,6 +633,13 @@ export default (signedIn?: Promise<boolean>) => {
     window.removeEventListener("keydown", onKey);
     window.removeEventListener("scroll", onScroll);
     document.removeEventListener("click", onDocClick);
+    // Pending restores would mutate the module-level counter after we're gone;
+    // apply them now so the count survives re-mounts intact.
+    for (const id of counterTimers) {
+      clearTimeout(id);
+      secret_counter += 1;
+    }
+    counterTimers.clear();
     scrollbarRO.disconnect();
     scrollbarHide.remove();
     scrollbar.remove();
