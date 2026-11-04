@@ -208,9 +208,6 @@ async fn route(
                     };
                 }
             }
-            if let Some(file) = path.strip_prefix("/countries/") {
-                return countries::svg_response(&method, file).await;
-            }
             ResponseBuilder::from(ApiError::NotFound(path.to_string())).into()
         }
     }

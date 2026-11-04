@@ -1,6 +1,6 @@
 //! Regenerates the backend's country data from Natural Earth:
 //!
-//!   * `backend/assets/countries/<slug>.svg` — one Web Mercator outline per
+//!   * `frontend/public/countries/<slug>.svg` — one Web Mercator outline per
 //!     territory, rendered with `am-shapefile` from the 10m admin-0 countries
 //!     shapefile (Ukraine-POV variant).
 //!   * the `countries` and `cities` Postgres tables — display name,
@@ -882,7 +882,7 @@ fn main() {
             m
         });
 
-    let svg_dir = root.join("backend/assets/countries");
+    let svg_dir = root.join("frontend/public/countries");
     if svg_dir.exists() {
         std::fs::remove_dir_all(&svg_dir).unwrap();
     }

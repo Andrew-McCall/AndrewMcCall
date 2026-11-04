@@ -48,7 +48,7 @@ impl UserRole {
 }
 
 /// A territory from Natural Earth admin-0 (`countries` table). `slug` also
-/// names the SVG outline under `assets/countries/`. The capital isn't stored
+/// names the SVG outline under `frontend/public/countries/`. The capital isn't stored
 /// here — it's the [`City`] with `capital` set.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Country {
