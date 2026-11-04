@@ -2,6 +2,9 @@
 // entirely client-side: each question type samples a subject (a country or
 // one of its cities) plus distinct distractors drawn from the same fetched
 // pool, so no further network calls happen once the page has loaded.
+//
+// Registers a window `keydown` listener (1–6 answer, Enter moves on), so it
+// exports `disposeCountries` for the router to call on navigation away.
 
 import { PAGE_CLASS, pageTitle } from "./helpers";
 
@@ -20,9 +23,8 @@ type QuestionType =
 type Question = {
   prompt: string;
   image: string | null;
-  // Map outlines are served as a near-white light-grey (#ccc) fill by the
-  // generator, which is invisible on the light image panel. Flag it so the UI
-  // renders it as a solid dark silhouette; flags must keep their real colours.
+  // Map outlines are a pale grey fill, so the UI uses them as a mask over the
+  // theme colour; flags must keep their real colours.
   imageIsMap?: boolean;
   subject: string | null; // the country/city name shown as text, if any
   choices: string[];
@@ -43,14 +45,11 @@ const ALL_TYPES = Object.keys(TYPE_LABELS) as QuestionType[];
 // Choice-button styles: unanswered, then the revealed correct/wrong states
 // (disabled after answering, so no hover/cursor affordance). Kept here so the
 // answered states stay in sync across every button.
-const CHOICE_BASE =
-  "border border-green-900 hover:bg-green-900/40 text-green-300 px-4 py-3 text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950";
-const CHOICE_CORRECT =
-  "border border-green-500 bg-green-900/60 text-green-300 px-4 py-3 text-left transition-colors";
-const CHOICE_WRONG =
-  "border border-red-500 bg-red-900/60 text-red-300 px-4 py-3 text-left transition-colors";
-// Reserved-height feedback line under the choices; colour is added per result.
-const FEEDBACK_BASE = "h-6 text-center font-mono text-sm";
+const CHOICE_LAYOUT = "flex items-center gap-3 border px-4 py-3 text-left transition-colors";
+const CHOICE_BASE = `${CHOICE_LAYOUT} border-green-900 hover:bg-green-900/40 text-green-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-950`;
+const CHOICE_CORRECT = `${CHOICE_LAYOUT} border-green-500 bg-green-900/60 text-green-300`;
+const CHOICE_WRONG = `${CHOICE_LAYOUT} border-red-500 bg-red-900/60 text-red-300`;
+const FEEDBACK_BASE = "font-mono text-sm";
 
 type Settings = { choices: number; types: QuestionType[] };
 
@@ -114,7 +113,12 @@ function shuffleChoices(correct: string, distractors: string[]): { choices: stri
 
 const pickRandom = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-const formatGdp = (gdpMillions: number) => `$${Math.round(gdpMillions / 1000).toLocaleString()} billion`;
+export const formatGdp = (gdpMillions: number) => {
+  const millions = Math.round(gdpMillions);
+  return millions < 1000
+    ? `$${millions.toLocaleString()} million`
+    : `$${Math.round(millions / 1000).toLocaleString()} billion`;
+};
 const formatPopulation = (pop: number) => pop.toLocaleString();
 
 function buildQuestion(
@@ -205,7 +209,17 @@ function buildQuestion(
   }
 }
 
+// Module-scoped so the router can detach the listener and pending advance.
+let dispose: (() => void) | null = null;
+
+export function disposeCountries(): void {
+  dispose?.();
+  dispose = null;
+}
+
 export default (app: HTMLElement) => {
+  disposeCountries(); // drop anything left from a previous visit
+
   app.innerHTML = `
 <div class="${PAGE_CLASS}">
   ${pageTitle("Countries Quiz")}
@@ -216,21 +230,27 @@ export default (app: HTMLElement) => {
     <div id="cq-game" class="hidden flex-col gap-4">
       <div class="flex justify-between text-sm font-mono text-green-800">
         <div>Score: <span id="cq-score" class="text-green-400">0</span> / <span id="cq-total" class="text-green-400">0</span></div>
-        <div>Best streak: <span id="cq-best" class="text-green-400">${readBestStreak()}</span></div>
+        <div>Streak: <span id="cq-streak" class="text-green-400">0</span> · Best: <span id="cq-best" class="text-green-400">${readBestStreak()}</span></div>
       </div>
 
-      <div id="cq-prompt" class="text-center text-lg text-green-300"></div>
+      <div class="text-center">
+        <div id="cq-type" class="text-xs uppercase tracking-widest text-green-800"></div>
+        <div id="cq-prompt" class="mt-1 text-lg text-green-300"></div>
+      </div>
 
-      <div id="cq-image-wrap" class="hidden justify-center">
-        <div class="bg-stone-100 p-4 w-full max-w-lg">
-          <img id="cq-image" class="max-h-72 w-full object-contain" />
-        </div>
+      <div id="cq-stage" hidden class="flex h-48 sm:h-64 items-center justify-center">
+        <div id="cq-map" role="img" hidden class="h-full w-full bg-green-500"></div>
+        <img id="cq-flag" hidden class="max-h-full max-w-full border border-green-900" />
       </div>
 
       <div id="cq-choices" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
 
       <!-- Fixed height so the layout doesn't jump when feedback appears. -->
-      <div id="cq-feedback" class="h-6 text-center font-mono text-sm"></div>
+      <div class="h-10 flex items-center justify-center gap-4">
+        <div id="cq-feedback" class="${FEEDBACK_BASE}"></div>
+        <button id="cq-next" hidden class="border border-green-700 hover:bg-green-900/40 text-green-300 px-3 py-1 font-mono text-sm cursor-pointer">Next ↵</button>
+      </div>
+      <div class="hidden sm:block text-center text-xs font-mono text-green-900">Keys 1–6 answer · Enter for next</div>
     </div>
 
     <details class="text-green-700 text-sm">
@@ -251,12 +271,16 @@ export default (app: HTMLElement) => {
   const gameEl = app.querySelector<HTMLDivElement>("#cq-game")!;
   const scoreEl = app.querySelector<HTMLSpanElement>("#cq-score")!;
   const totalEl = app.querySelector<HTMLSpanElement>("#cq-total")!;
+  const streakEl = app.querySelector<HTMLSpanElement>("#cq-streak")!;
   const bestEl = app.querySelector<HTMLSpanElement>("#cq-best")!;
+  const typeEl = app.querySelector<HTMLDivElement>("#cq-type")!;
   const promptEl = app.querySelector<HTMLDivElement>("#cq-prompt")!;
-  const imageWrap = app.querySelector<HTMLDivElement>("#cq-image-wrap")!;
-  const imageEl = app.querySelector<HTMLImageElement>("#cq-image")!;
+  const stageEl = app.querySelector<HTMLDivElement>("#cq-stage")!;
+  const mapEl = app.querySelector<HTMLDivElement>("#cq-map")!;
+  const flagEl = app.querySelector<HTMLImageElement>("#cq-flag")!;
   const choicesEl = app.querySelector<HTMLDivElement>("#cq-choices")!;
   const feedbackEl = app.querySelector<HTMLDivElement>("#cq-feedback")!;
+  const nextBtn = app.querySelector<HTMLButtonElement>("#cq-next")!;
   const choiceCountInput = app.querySelector<HTMLInputElement>("#cq-choice-count")!;
   const typesEl = app.querySelector<HTMLDivElement>("#cq-types")!;
 
@@ -280,6 +304,7 @@ export default (app: HTMLElement) => {
   let bestStreak = readBestStreak();
   let streak = 0;
   let answered = false;
+  let advance: number | undefined;
   let countries: Country[] = [];
   let cities: FlatCity[] = [];
 
@@ -292,44 +317,54 @@ export default (app: HTMLElement) => {
   };
 
   const nextQuestion = () => {
+    clearTimeout(advance);
+    nextBtn.hidden = true;
+    answered = false;
+    feedbackEl.textContent = "";
+    feedbackEl.className = FEEDBACK_BASE;
     const { choices: numChoices, types } = currentSettings();
     let question: Question | null = null;
+    let type: QuestionType = types[0];
     // A handful of tries in case the randomly picked type's pool is too
     // small at very high choice counts — falls through rather than stalling.
     for (let attempt = 0; attempt < 20 && !question; attempt++) {
-      const type = pickRandom(types);
+      type = pickRandom(types);
       question = buildQuestion(type, countries, cities, numChoices);
     }
     if (!question) {
+      typeEl.textContent = "";
       promptEl.textContent = "Not enough data for the current settings — lower the choice count.";
       choicesEl.innerHTML = "";
-      imageWrap.classList.add("hidden");
+      stageEl.hidden = true;
       return;
     }
 
-    answered = false;
+    typeEl.textContent = TYPE_LABELS[type];
     promptEl.textContent = question.prompt;
-    feedbackEl.textContent = "";
-    feedbackEl.className = FEEDBACK_BASE;
-    if (question.image) {
-      imageEl.src = question.image;
-      // Generic, non-spoiling alt text — anything more specific would give the
-      // answer away to screen reader users before they can guess.
-      imageEl.alt = question.imageIsMap ? "Country outline to identify" : "Flag to identify";
-      // brightness(0) collapses the pale map fill to a solid black silhouette
-      // that reads clearly on the light panel; flags render with true colour.
-      imageEl.style.filter = question.imageIsMap ? "brightness(0)" : "";
-      imageWrap.classList.remove("hidden");
-      imageWrap.classList.add("flex");
-    } else {
-      imageWrap.classList.add("hidden");
-      imageWrap.classList.remove("flex");
+    // Generic, non-spoiling labels — anything more specific would give the
+    // answer away to screen reader users before they can guess.
+    if (question.image && question.imageIsMap) {
+      const mask = `url("${question.image}") center / contain no-repeat`;
+      mapEl.style.mask = mask;
+      mapEl.style.setProperty("-webkit-mask", mask);
+      mapEl.ariaLabel = "Country outline to identify";
+    } else if (question.image) {
+      flagEl.src = question.image;
+      flagEl.alt = "Flag to identify";
     }
+    stageEl.hidden = !question.image;
+    mapEl.hidden = !question.imageIsMap;
+    flagEl.hidden = !question.image || !!question.imageIsMap;
 
     choicesEl.innerHTML = "";
     question.choices.forEach((choice, i) => {
       const btn = document.createElement("button");
-      btn.textContent = choice;
+      const key = document.createElement("kbd");
+      key.className = "text-xs text-green-700";
+      key.textContent = String(i + 1);
+      const label = document.createElement("span");
+      label.textContent = choice;
+      btn.append(key, label);
       btn.className = CHOICE_BASE;
       btn.onclick = () => {
         if (answered) return;
@@ -348,6 +383,7 @@ export default (app: HTMLElement) => {
           score++;
           streak++;
           scoreEl.textContent = score.toString();
+          streakEl.textContent = streak.toString();
           feedbackEl.textContent = streak >= 3 ? `🔥 Correct — ${streak} in a row!` : "Correct!";
           feedbackEl.className = `${FEEDBACK_BASE} text-green-400`;
           if (streak > bestStreak) {
@@ -361,6 +397,7 @@ export default (app: HTMLElement) => {
           }
         } else {
           streak = 0;
+          streakEl.textContent = "0";
           btn.className = CHOICE_WRONG;
           feedbackEl.textContent = `Answer: ${answerText}`;
           feedbackEl.className = `${FEEDBACK_BASE} text-red-400`;
@@ -374,12 +411,38 @@ export default (app: HTMLElement) => {
           if (b !== btn && b !== correctBtn) b.classList.add("opacity-40");
         });
 
-        // Linger on wrong answers so the revealed answer is readable; move on
-        // quicker when correct to keep the pace up.
-        setTimeout(nextQuestion, correct ? 900 : 1800);
+        // Keep the pace up when correct; on a miss, wait for Next so the
+        // revealed answer can be read.
+        if (correct) {
+          advance = window.setTimeout(nextQuestion, 900);
+        } else {
+          nextBtn.hidden = false;
+          nextBtn.focus();
+        }
       };
       choicesEl.appendChild(btn);
     });
+  };
+
+  nextBtn.onclick = nextQuestion;
+
+  const onKey = (e: KeyboardEvent) => {
+    if (gameEl.classList.contains("hidden") || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Leave keys alone while focus is on anything but the page or the quiz,
+    // so links, settings and the choice-count field keep working.
+    if (e.target !== document.body && !choicesEl.contains(e.target as Node) && e.target !== nextBtn) return;
+    if (e.key === "Enter" && answered) {
+      e.preventDefault(); // stop a focused Next button also firing its click
+      nextQuestion();
+      return;
+    }
+    const pick = choicesEl.children[parseInt(e.key) - 1] as HTMLButtonElement | undefined;
+    if (!answered && pick) pick.click();
+  };
+  window.addEventListener("keydown", onKey);
+  dispose = () => {
+    window.removeEventListener("keydown", onKey);
+    clearTimeout(advance);
   };
 
   choiceCountInput.addEventListener("change", () => {
@@ -404,6 +467,7 @@ export default (app: HTMLElement) => {
       const res = await fetch("/api/countries");
       if (!res.ok) throw new Error(`status ${res.status}`);
       countries = await res.json();
+      if (countries.length === 0) throw new Error("no countries");
       cities = countries.flatMap((c) =>
         c.cities.map((city) => ({ name: city.name, country: c.country, population: city.population })),
       );
@@ -412,7 +476,7 @@ export default (app: HTMLElement) => {
       gameEl.classList.add("flex");
       nextQuestion();
     } catch {
-      statusEl.textContent = "Network error — is the API up?";
+      statusEl.textContent = "Couldn't load the countries — try again later.";
     }
   };
 

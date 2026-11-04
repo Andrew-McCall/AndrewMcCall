@@ -74,7 +74,7 @@ const routes: Record<string, Route> = {
   },
   "/secret/countries": {
     auth: "public",
-    render: lazy(() => import("./secret_countries.ts")),
+    render: disposable("countries", () => import("./secret_countries.ts")),
   },
   "/secret/visits": {
     auth: "public",
@@ -207,6 +207,9 @@ async function renderPage(): Promise<void> {
   }
   if (page !== "/secret/pi") {
     loaded.get("pi")?.disposePi(); // detach the keypad's window keydown listener
+  }
+  if (page !== "/secret/countries") {
+    loaded.get("countries")?.disposeCountries(); // detach the answer keys
   }
   if (page !== "/secret/time") {
     loaded.get("time")?.disposeTime(); // stop the relative-time tab's 1s ticker
