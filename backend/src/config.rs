@@ -1,4 +1,6 @@
-use crate::{database::connection::DatabaseConnection, ip::IpSource, live::state::Live};
+use crate::{
+    database::connection::DatabaseConnection, ip::IpSource, live::state::Live, message::Senders,
+};
 
 #[derive(Debug)]
 pub struct ApiConfig {
@@ -46,6 +48,7 @@ pub struct ApiConfig {
     /// Every live room and everyone in one. In memory, and deliberately not in
     /// the database: a call does not survive a restart.
     pub live: Live,
+    pub senders: Senders,
 }
 
 pub type SharedConfig = std::sync::Arc<ApiConfig>;
@@ -82,6 +85,7 @@ impl ApiConfig {
             turn_host: non_empty_env("TURN_HOST"),
             turn_secret: non_empty_env("TURN_SECRET"),
             live: Live::new(),
+            senders: Senders::default(),
         }
     }
 }

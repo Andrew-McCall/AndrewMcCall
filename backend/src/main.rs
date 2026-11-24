@@ -8,6 +8,7 @@ mod http_client;
 mod ip;
 mod live;
 mod logs;
+mod message;
 mod notes;
 mod password;
 mod posts;
@@ -104,6 +105,7 @@ async fn route(
         (&Method::PUT, "/admin/details") => site::update_details(req, peer, &config).await,
 
         (&Method::GET, "/home") => site::home(req, peer, &config).await,
+        (&Method::POST, "/message") => message::send(req, peer, &config).await,
         (&Method::GET, "/posts") => posts::list_published(&config).await,
 
         (&Method::GET, "/notes") => notes::list_notes(req, peer, &config).await,
@@ -123,7 +125,7 @@ async fn route(
             | "/auth/logout" | "/auth/me" | "/auth/pin" | "/auth/totp/setup" | "/auth/totp/enable"
             | "/auth/totp/disable" | "/admin/status" | "/admin/users" | "/admin/visits"
             | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
-            | "/admin/details" | "/home"
+            | "/admin/details" | "/home" | "/message"
             | "/posts" | "/notes" | "/meta" | "/meta/types" | "/live/rooms" | "/live/events"
             | "/live/ice",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
