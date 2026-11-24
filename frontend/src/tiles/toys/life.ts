@@ -16,7 +16,7 @@ const MARKUP = `
     <button class="btn" id="life-clear" type="button">Clear</button>
     <span class="tag" id="life-gen">gen 0</span>
   </div>
-  <div class="life" id="life" role="img"
+  <div class="life field" id="life" role="img"
     aria-label="Game of Life grid. Click or drag to draw cells.">
     <div class="life-grid" id="life-grid"></div>
   </div>`;

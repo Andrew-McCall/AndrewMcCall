@@ -28,7 +28,7 @@ const MARKUP = `
     </div>
     <span class="tag" id="bj-bank"></span>
   </div>
-  <div class="bj">
+  <div class="bj field">
     <div class="bj-deck" aria-hidden="true"></div>
     <div class="bj-hand">
       <span class="tag" id="bj-dl">dealer</span>

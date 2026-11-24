@@ -12,21 +12,21 @@
     border: 0;
     display: grid;
     place-items: center;
-    background: var(--on-win);
-    color: var(--w);
     transition:
       transform 0.06s,
       background-color 0.12s;
   }
   .nana-btn:hover {
-    background: color-mix(in oklch, var(--on-win) 86%, var(--w));
+    background-color: color-mix(in oklch, var(--on-win) 86%, var(--w));
   }
   .nana-btn:active {
     transform: scale(0.96);
   }
   .nana-btn.gold {
-    color: var(--paper);
-    background: color-mix(in oklch, var(--on-win) 62%, var(--w-about));
+    background-color: color-mix(in oklch, var(--on-win) 62%, var(--w-about));
+  }
+  .nana-btn.gold .px {
+    --c: var(--paper);
   }
   .nana-btn .px {
     --cols: 12;

@@ -1,5 +1,6 @@
 import "./noughts.css";
 import { $, $$ } from "../dom";
+import { pixelHtml } from "../pixels";
 import { rng, type Rng, type Toy } from "../toy";
 
 interface BoardNode {
@@ -51,11 +52,17 @@ const MARKUP = `
     <button class="btn" type="button" data-restart>Restart</button>
     <span class="tag" id="ttt-status" aria-live="polite"></span>
   </div>
-  <div class="ttt-wrap"><div class="ttt" id="ttt"></div></div>
+  <div class="ttt-wrap field"><div class="ttt" id="ttt"></div></div>
 `;
 
 const other = (player: number): number => X + O - player;
 const letter = (player: number): string => (player === X ? "X" : "O");
+
+const CROSS = ["##...##", "###.###", ".#####.", "..###..", ".#####.", "###.###", "##...##"];
+const NOUGHT = [".#####.", "#######", "##...##", "##...##", "##...##", "#######", ".#####."];
+
+const markHtml = (player: number): string =>
+  `<span class="px">${pixelHtml(player === X ? CROSS : NOUGHT)}</span>`;
 
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
@@ -226,11 +233,15 @@ const toy: Toy = (host) => {
 
   const mark = (node: BoardNode): void => {
     if (node.el instanceof HTMLButtonElement) {
-      node.el.textContent = letter(node.winner);
+      node.el.innerHTML = markHtml(node.winner);
+      node.el.setAttribute("aria-label", letter(node.winner));
       node.el.classList.add(node.winner === X ? "x" : "o");
       node.el.disabled = true;
     } else if (node !== root) {
-      node.el.dataset.w = node.winner === DRAWN ? "" : letter(node.winner);
+      const cover = document.createElement("div");
+      cover.className = node.winner === X ? "b-won x" : node.winner === DRAWN ? "b-won" : "b-won o";
+      if (node.winner !== DRAWN) cover.innerHTML = markHtml(node.winner);
+      node.el.append(cover);
       node.el.classList.add("done");
     }
   };

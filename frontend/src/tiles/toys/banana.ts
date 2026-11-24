@@ -1,5 +1,6 @@
 import "./banana.css";
 import { $ } from "../dom";
+import { pixelHtml } from "../pixels";
 import { rng, type Rng, type Toy } from "../toy";
 
 interface ShopItem {
@@ -40,7 +41,7 @@ const MARKUP = `
     <span class="tag" id="nana-rate"></span>
   </div>
   <div class="nana">
-    <button class="nana-btn" id="nana" type="button" aria-label="Pick a banana">
+    <button class="nana-btn field" id="nana" type="button" aria-label="Pick a banana">
       <span class="px"></span>
     </button>
     <div class="nana-side">
@@ -51,18 +52,13 @@ const MARKUP = `
 
 const format = (amount: number): string => Math.floor(amount).toLocaleString("en-GB");
 
-const pixels = (rows: string[]): string =>
-  rows
-    .join("")
-    .replace(/./g, (cell) => `<i${cell === "#" ? ' class="on"' : ""}></i>`);
-
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
   const banana = $<HTMLButtonElement>("#nana", host.body);
   const shop = $("#nana-shop", host.body);
   const count = $("#nana-count", host.body);
   const rate = $("#nana-rate", host.body);
-  $(".px", banana).innerHTML = pixels(ART);
+  $(".px", banana).innerHTML = pixelHtml(ART);
 
   let random: Rng = Math.random;
   let bananas = 0;

@@ -1002,4 +1002,30 @@ body:has(.tiles) > footer {
   .shake {
     animation: shake .4s;
   }
+
+  .win {
+    --hi: color-mix(in oklab, var(--w) 58%, var(--paper));
+    --lo: color-mix(in oklab, var(--w) 58%, var(--on-win));
+  }
+
+  .field {
+    background-color: var(--on-win);
+    background-image:
+      radial-gradient(circle, color-mix(in oklch, var(--paper) 60%, transparent) 0.7px, transparent 1.2px),
+      radial-gradient(circle, color-mix(in oklch, var(--paper) 32%, transparent) 0.6px, transparent 1px);
+    background-size: 61px 47px, 37px 53px;
+    background-position: 7px 11px, 23px 31px;
+  }
+
+  .px i.h {
+    background: color-mix(in oklab, var(--c, var(--w)) 58%, var(--paper));
+  }
+
+  .px i.m {
+    background: var(--c, var(--w));
+  }
+
+  .px i.l {
+    background: color-mix(in oklab, var(--c, var(--w)) 58%, var(--on-win));
+  }
 }

@@ -10,7 +10,6 @@
     min-height: 110px;
     position: relative;
     overflow: hidden;
-    background: var(--on-win);
     touch-action: none;
     cursor: ns-resize;
   }
@@ -42,10 +41,12 @@
     width: 6px;
     height: 36px;
     background: var(--w);
+    box-shadow: inset 2px 2px 0 var(--hi), inset -2px -2px 0 var(--lo);
     will-change: transform;
   }
   #pad-r {
     background: var(--paper);
+    box-shadow: inset -2px -2px 0 color-mix(in oklch, var(--paper) 62%, var(--on-win));
   }
   .pad-p.hit {
     animation: hit 0.16s;
@@ -54,6 +55,7 @@
     width: 8px;
     height: 8px;
     background: var(--paper);
+    box-shadow: inset -2px -2px 0 color-mix(in oklch, var(--paper) 62%, var(--on-win));
     will-change: transform;
   }
   .pad-msg {

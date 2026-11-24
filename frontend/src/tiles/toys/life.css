@@ -8,6 +8,7 @@
   .life {
     flex: 1;
     min-height: 120px;
+    padding: 8px;
     overflow: hidden;
     display: grid;
     place-items: center;
@@ -21,17 +22,18 @@
     width: max-content;
   }
   .life-grid i {
-    background: color-mix(in oklch, var(--on-win) 10%, transparent);
+    background: color-mix(in oklch, var(--w) 10%, transparent);
     transition: background-color 0.14s;
   }
   .life-grid.wait {
     animation: wait 0.5s ease-in-out infinite alternate;
   }
   .life-grid i:hover {
-    background: color-mix(in oklch, var(--on-win) 35%, transparent);
+    background: color-mix(in oklch, var(--w) 34%, transparent);
   }
   .life-grid i.on {
-    background: var(--on-win);
+    background: var(--w);
+    box-shadow: inset 2px 2px 0 var(--hi), inset -2px -2px 0 var(--lo);
   }
   @media (max-width: 767px) {
     .life {

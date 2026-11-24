@@ -22,7 +22,7 @@ const MARKUP = `
     <button class="btn" id="mines-flag" type="button" aria-pressed="false">Flag</button>
     <span class="tag" id="mines-hud"></span>
   </div>
-  <div class="mines-wrap"><div class="mines" id="mines"></div></div>
+  <div class="mines-wrap field"><div class="mines" id="mines"></div></div>
 `;
 
 const toy: Toy = (host) => {

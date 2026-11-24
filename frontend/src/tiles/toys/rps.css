@@ -5,10 +5,16 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 12px;
+    padding: 10px;
+    color: var(--paper);
     container-type: size;
   }
   .rps-arena > .tag {
     align-self: center;
+    color: var(--paper);
+  }
+  .hand .tag {
+    color: var(--paper);
   }
   .hand {
     min-height: 0;
@@ -18,12 +24,12 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    border: 2px solid var(--on-win);
-    transition: background-color 0.12s, color 0.12s;
+    border: 2px solid var(--lo);
+    transition: background-color 0.12s, border-color 0.12s;
   }
   .hand.won {
-    background: var(--on-win);
-    color: var(--w);
+    border-color: var(--paper);
+    background: color-mix(in oklch, var(--w) 20%, transparent);
   }
   #rps-say {
     align-self: center;
@@ -48,6 +54,9 @@
   }
   .rps-pick .px {
     width: 22px;
+  }
+  .rps-pick .btn:hover .px {
+    --c: var(--on-win);
   }
   .win[data-app="rps"] .px {
     --cols: 9;

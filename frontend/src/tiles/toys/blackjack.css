@@ -17,7 +17,7 @@
     flex-direction: column;
     justify-content: center;
     gap: 10px;
-    background: var(--felt);
+    box-shadow: inset 0 0 0 3px var(--felt);
     color: var(--paper);
   }
   .bj .tag {
@@ -73,6 +73,7 @@
     flex-direction: column;
     justify-content: space-between;
     background: var(--paper);
+    box-shadow: inset -3px -3px 0 color-mix(in oklch, var(--paper) 74%, var(--on-win));
     color: var(--on-win);
     font: 700 calc(var(--cw) * 0.34) / 1 var(--mono);
   }

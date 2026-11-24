@@ -1,5 +1,6 @@
 import "./rps.css";
 import { $, $$, calm } from "../dom";
+import { pixelHtml } from "../pixels";
 import { rng, type Rng, type Toy } from "../toy";
 
 type Hand = "rock" | "paper" | "scissors" | "lizard" | "spock";
@@ -85,7 +86,7 @@ const MARKUP = `
     </div>
     <span class="tag" id="rps-score">you 0 · draws 0 · computer 0</span>
   </div>
-  <div class="rps-arena">
+  <div class="rps-arena field">
     <div class="hand" id="rps-you"><span class="tag">you</span><div class="px"></div></div>
     <span class="tag">vs</span>
     <div class="hand" id="rps-cpu">
@@ -98,11 +99,6 @@ const MARKUP = `
 
 const capital = (word: string): string => word[0].toUpperCase() + word.slice(1);
 const spoken = (hand: Hand): string => (hand === "spock" ? "Spock" : hand);
-
-const pixels = (hand: Hand): string =>
-  ART[hand]
-    .join("")
-    .replace(/./g, (dot) => (dot === "#" ? '<i class="on"></i>' : "<i></i>"));
 
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
@@ -129,7 +125,7 @@ const toy: Toy = (host) => {
   let run = 0;
 
   const draw = (el: HTMLElement, hand?: Hand): void => {
-    el.innerHTML = hand ? pixels(hand) : "";
+    el.innerHTML = hand ? pixelHtml(ART[hand]) : "";
   };
 
   const tally = (): void => {

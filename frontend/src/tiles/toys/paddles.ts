@@ -20,7 +20,7 @@ const MARKUP = `
     <button class="btn" type="button" data-restart>Restart</button>
     <span class="tag" id="pad-hud"></span>
   </div>
-  <div class="courtbox" id="pad" tabindex="0" role="application"
+  <div class="courtbox field" id="pad" tabindex="0" role="application"
     aria-label="${ARIA_LABEL}">
     <div class="pad-court" id="pad-court">
       <div class="pad-net"></div>

@@ -2,6 +2,7 @@
   .ttt-wrap {
     flex: 1;
     min-height: 130px;
+    padding: 8px;
     display: grid;
     place-items: center;
     container-type: size;
@@ -21,25 +22,16 @@
     grid-template-rows: repeat(3, minmax(0, 1fr));
   }
   .b.live:not(.root) {
-    outline: 2px solid var(--on-win);
+    outline: 2px solid var(--paper);
     outline-offset: 1px;
   }
-  .b.done::after {
-    content: attr(data-w);
+  .b-won {
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
     background: var(--on-win);
-    color: var(--w);
-    font: 800 calc(min(100cqw, 100cqh) / var(--n) * var(--s) * 0.7) / 1 var(--mono);
-  }
-  .b.done[data-w="O"]::after {
-    background: var(--paper);
-    color: var(--on-win);
-  }
-  .b.done[data-w=""]::after {
-    background: color-mix(in oklch, var(--on-win) 40%, var(--w));
+    box-shadow: inset 0 0 0 2px var(--lo);
   }
   .c {
     min-width: 0;
@@ -48,27 +40,25 @@
     border: 0;
     display: grid;
     place-items: center;
-    background: color-mix(in oklch, var(--on-win) 8%, transparent);
-    color: var(--on-win);
-    font: 800 calc(min(100cqw, 100cqh) / var(--n) * 0.62) / 1 var(--mono);
+    background: color-mix(in oklch, var(--w) 12%, transparent);
     cursor: default;
   }
   .live .c {
-    background: color-mix(in oklch, var(--on-win) 18%, transparent);
+    background: color-mix(in oklch, var(--w) 26%, transparent);
   }
   .live .c:not(:disabled) {
     cursor: pointer;
   }
   .live .c:not(:disabled):hover {
-    background: color-mix(in oklch, var(--on-win) 38%, transparent);
+    background: color-mix(in oklch, var(--w) 46%, transparent);
   }
-  .c.x {
-    background: var(--on-win);
-    color: var(--w);
+  .c .px,
+  .b-won .px {
+    width: auto;
+    height: 70%;
   }
-  .c.o {
-    background: var(--paper);
-    color: var(--on-win);
+  .o .px {
+    --c: var(--paper);
   }
   .c.last {
     box-shadow: inset 0 0 0 2px var(--w-about);
