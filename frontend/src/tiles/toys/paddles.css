@@ -1,0 +1,76 @@
+@keyframes hit {
+  50% {
+    scale: 2 1.12;
+  }
+}
+
+.tiles {
+  .courtbox {
+    flex: 1;
+    min-height: 110px;
+    position: relative;
+    overflow: hidden;
+    background: var(--on-win);
+    touch-action: none;
+    cursor: ns-resize;
+  }
+  .courtbox:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: -4px;
+  }
+  .pad-court {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 320px;
+    height: 200px;
+    transform-origin: 0 0;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--w) 45%, var(--on-win));
+  }
+  .pad-court div {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .pad-net {
+    width: 2px;
+    height: 200px;
+    background: repeating-linear-gradient(var(--w) 0 8px, transparent 8px 16px);
+    opacity: 0.45;
+  }
+  .pad-p {
+    width: 6px;
+    height: 36px;
+    background: var(--w);
+    will-change: transform;
+  }
+  #pad-r {
+    background: var(--paper);
+  }
+  .pad-p.hit {
+    animation: hit 0.16s;
+  }
+  .pad-ball {
+    width: 8px;
+    height: 8px;
+    background: var(--paper);
+    will-change: transform;
+  }
+  .pad-msg {
+    width: 320px;
+    height: 200px;
+    padding-top: 60px;
+    text-align: center;
+    color: var(--paper);
+    font: 500 9px/1.4 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pad-p {
+      transition: none;
+      animation: none;
+    }
+  }
+}

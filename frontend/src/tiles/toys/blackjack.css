@@ -1,0 +1,116 @@
+@keyframes pop2 {
+  from {
+    scale: 0.5;
+    opacity: 0;
+  }
+}
+
+.tiles {
+  .bj {
+    flex: 1;
+    min-height: 170px;
+    position: relative;
+    overflow: hidden;
+    container-type: size;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    background: var(--felt);
+    color: var(--paper);
+  }
+  .bj .tag {
+    color: var(--paper);
+  }
+  .bj-deck,
+  .bj-cards {
+    --cw: clamp(36px, min(11cqw, 19cqh), 96px);
+  }
+  .bj-deck {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    background: var(--on-win);
+    box-shadow: inset 0 0 0 3px var(--paper), 2px 2px 0 var(--paper),
+      4px 4px 0 var(--on-win);
+  }
+  .bj-hand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bj-cards {
+    min-height: calc(var(--cw) * 1.4);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    perspective: 700px;
+  }
+  .card {
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s;
+  }
+  .card.in {
+    transform: translate(var(--dx, 150px), var(--dy, -80px)) rotateY(180deg);
+  }
+  .card.down {
+    transform: rotateY(180deg);
+  }
+  .card > div {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+  }
+  .card .f {
+    padding: 4px 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: var(--paper);
+    color: var(--on-win);
+    font: 700 calc(var(--cw) * 0.34) / 1 var(--mono);
+  }
+  .card.red .f {
+    color: var(--card-red);
+  }
+  .card .f span:last-child {
+    align-self: flex-end;
+    font-size: calc(var(--cw) * 0.46);
+  }
+  .card .bk {
+    transform: rotateY(180deg);
+    background: var(--on-win);
+    box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 6px var(--on-win),
+      inset 0 0 0 8px var(--w);
+  }
+  .bj-say {
+    margin: 0;
+    min-height: 1.4rem;
+    font: 800 1.4rem/1 var(--display);
+  }
+  .bj-say.pop {
+    animation: pop2 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  }
+  .bj-acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .bj-acts .btn {
+    flex: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card,
+    .bj-say {
+      transition: none;
+      animation: none;
+    }
+  }
+}

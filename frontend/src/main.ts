@@ -1,9 +1,8 @@
-// The front page and its Game-of-Life canvas are the critical path, so they stay
-// in the entry chunk. Every other page is pulled in on demand via dynamic
-// `import()` below — Vite splits each into its own chunk, so a visitor who only
-// ever sees `/` no longer downloads the admin screens and secret tools.
-import home from "./home.ts";
-import { hideGame } from "./secret_canvas.ts";
+// The front page is the critical path, so it stays in the entry chunk. Every
+// other page is pulled in on demand via dynamic `import()` below — Vite splits
+// each into its own chunk, so a visitor who only ever sees `/` no longer
+// downloads the admin screens and secret tools.
+import home, { disposeTiles } from "./tiles/index.ts";
 import { getMe, type Me } from "./session.ts";
 
 window.addEventListener("popstate", () => {
@@ -195,7 +194,7 @@ async function renderPage(): Promise<void> {
 
   const page = window.location.pathname.toLowerCase();
   if (page !== "/") {
-    hideGame(); // dismiss the fullscreen Game of Life when leaving the front page
+    disposeTiles(); // stop the front page's timers, loops and key bindings
   }
   // Teardown only touches pages that were actually loaded — `loaded.get` misses
   // for a chunk the visitor never opened, so this never force-loads anything.

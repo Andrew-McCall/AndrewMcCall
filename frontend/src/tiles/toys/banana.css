@@ -1,0 +1,54 @@
+.tiles {
+  .nana {
+    flex: 1;
+    min-height: 130px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+  .nana-btn {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    display: grid;
+    place-items: center;
+    background: var(--on-win);
+    color: var(--w);
+    transition:
+      transform 0.06s,
+      background-color 0.12s;
+  }
+  .nana-btn:hover {
+    background: color-mix(in oklch, var(--on-win) 86%, var(--w));
+  }
+  .nana-btn:active {
+    transform: scale(0.96);
+  }
+  .nana-btn.gold {
+    color: var(--paper);
+    background: color-mix(in oklch, var(--on-win) 62%, var(--w-about));
+  }
+  .nana-btn .px {
+    --cols: 12;
+    width: min(70%, 220px);
+  }
+  .nana-side {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .shop {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .shop .btn {
+    align-self: stretch;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+}

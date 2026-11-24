@@ -1,0 +1,74 @@
+.tiles {
+  .rocks {
+    flex: 1;
+    min-height: 140px;
+    position: relative;
+    overflow: hidden;
+    background: var(--on-win);
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .rocks:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: -4px;
+  }
+  .rocks > div {
+    position: absolute;
+    left: 0;
+    top: 0;
+    will-change: transform;
+  }
+  .stars {
+    pointer-events: none;
+  }
+  .ship i,
+  .rock i {
+    pointer-events: none;
+  }
+  .flame {
+    position: absolute;
+    left: -7px;
+    top: 6px;
+    width: 7px;
+    height: 6px;
+    background: var(--w-about);
+    box-shadow: -3px 2px 0 -1px var(--paper);
+    visibility: hidden;
+  }
+  .ship.burn .flame {
+    visibility: visible;
+  }
+  .ship.safe {
+    opacity: 0.45;
+  }
+  .shot {
+    background: var(--paper);
+    box-shadow: -5px 0 0 color-mix(in oklch, var(--paper) 45%, transparent);
+  }
+  .rocks-msg {
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    text-align: center;
+    color: var(--paper);
+    font: 500 12px/1.5 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .pad {
+    display: none;
+    gap: 4px;
+  }
+  .pad .btn {
+    flex: 1;
+    padding: 0;
+    touch-action: none;
+  }
+  @media (hover: none) {
+    .pad {
+      display: flex;
+    }
+  }
+}

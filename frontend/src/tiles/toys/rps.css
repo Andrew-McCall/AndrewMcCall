@@ -1,0 +1,55 @@
+.tiles {
+  .rps-arena {
+    flex: 1;
+    min-height: 120px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 12px;
+    container-type: size;
+  }
+  .rps-arena > .tag {
+    align-self: center;
+  }
+  .hand {
+    min-height: 0;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 2px solid var(--on-win);
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .hand.won {
+    background: var(--on-win);
+    color: var(--w);
+  }
+  #rps-say {
+    align-self: center;
+    max-width: none;
+    text-align: center;
+  }
+  .rps-pick {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  .rps-pick .btn {
+    flex: 1 1 84px;
+    max-width: 190px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .rps-pick .px {
+    width: 22px;
+  }
+  .win[data-app="rps"] .px {
+    --cols: 9;
+  }
+}

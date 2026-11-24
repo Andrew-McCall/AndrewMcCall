@@ -1,0 +1,36 @@
+.tiles {
+  .pat-wrap {
+    flex: 1;
+    min-height: 120px;
+    padding: 12px;
+    display: grid;
+    background: var(--on-win);
+    container-type: size;
+  }
+  .pat {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .pat button {
+    padding: 0;
+    border: 0;
+    background: color-mix(in oklch, var(--c) 38%, transparent);
+    cursor: pointer;
+    transition: background-color 0.12s, scale 0.12s, box-shadow 0.12s;
+  }
+  .pat button:hover {
+    background: color-mix(in oklch, var(--c) 60%, transparent);
+  }
+  .pat button.lit {
+    background: var(--c);
+    scale: 1.06;
+    box-shadow: 0 0 0 3px var(--paper);
+  }
+  .pat button:focus-visible {
+    outline-color: var(--paper);
+  }
+}
