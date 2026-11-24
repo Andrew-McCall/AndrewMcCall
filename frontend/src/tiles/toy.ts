@@ -19,7 +19,7 @@ export interface ToyHost {
   visible(): boolean;
   onSeed(use: (seed: number) => void): void;
   frame(tick: (time: number) => void): void;
-  every(ms: number, tick: () => void): void;
+  every(ms: number, tick: () => void): () => void;
   later(ms: number, run: () => void): void;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { neighbour, tile, windowLimit, type Rect } from "./layout";
+import { neighbour, swapped, tile, windowLimit, type Rect } from "./layout";
 
 const area = (rects: Rect[]) => rects.reduce((sum, [, , w, h]) => sum + w * h, 0);
 
@@ -25,6 +25,16 @@ describe("tile", () => {
     const rects = tile(5, 900, 600, "grid");
     expect(rects[3]).toEqual([0, 300, 450, 300]);
     expect(rects[4]).toEqual([450, 300, 450, 300]);
+  });
+});
+
+describe("swapped", () => {
+  it("swaps two open windows", () => {
+    expect(swapped(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
+  });
+
+  it("leaves the list alone when one has been closed", () => {
+    expect(swapped(["a", "c"], "a", "b")).toEqual(["a", "c"]);
   });
 });
 

@@ -15,6 +15,7 @@ export interface Desk {
   seed(next?: number | "new"): number;
   seedLink(): string;
   ready(app: string): Promise<void>;
+  showsOne(): boolean;
 }
 
 interface TextFile {
@@ -34,6 +35,17 @@ interface Command {
 
 const owns = (record: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(record, key);
+
+export const fileName = (title: string, href: string): string => {
+  const fromPath = href.match(/\/posts\/([^/?#]+)/)?.[1];
+  const base = fromPath ?? title;
+  return (
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "untitled"
+  );
+};
 
 const isFolder = (node: TextFile | Folder | undefined): node is Folder =>
   node !== undefined && typeof (node as TextFile).read !== "function";
@@ -69,7 +81,8 @@ export function mountTerminal(
     for (const row of $$("li", $(".list", windowOf(app)))) {
       const link = $<HTMLAnchorElement>("a", row);
       const lines = [link.textContent ?? "", ...$$("span", row).map((s) => s.textContent ?? "")];
-      folder[link.textContent ?? ""] = { read: () => lines.join("\n"), href: link.href || undefined };
+      const name = fileName(link.textContent ?? "", link.getAttribute("href") ?? "");
+      folder[name] = { read: () => lines.join("\n"), href: link.href || undefined };
     }
     return folder;
   };
@@ -146,7 +159,7 @@ export function mountTerminal(
   };
 
   const stay = (app: string) => {
-    if (app !== "term" && desk.isOpen("term")) {
+    if (app !== "term" && desk.isOpen("term") && !desk.showsOne()) {
       desk.focus("term");
       input.focus();
     }

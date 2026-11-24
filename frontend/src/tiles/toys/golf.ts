@@ -153,6 +153,7 @@ const toy: Toy = (host) => {
   let scale = 1;
   let pull: { x: number; y: number } | null = null;
   let busy = false;
+  let pinnedFor = 0;
   let last = 0;
   let run = 0;
   let ballEl = block("g-ball");
@@ -416,6 +417,12 @@ const toy: Toy = (host) => {
     if (trap?.kind === "belt") {
       ball.vx += trap.dx * 300 * dt;
       ball.vy += trap.dy * 300 * dt;
+    }
+    pinnedFor = trap?.kind === "belt" && Math.hypot(ball.vx, ball.vy) < 30 ? pinnedFor + dt : 0;
+    if (pinnedFor > 0.5) {
+      pinnedFor = 0;
+      stop();
+      return;
     }
 
     const [cupX, cupY] = hole.cup;

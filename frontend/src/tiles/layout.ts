@@ -37,6 +37,15 @@ export function tile(count: number, width: number, height: number, mode: Mode): 
   return out;
 }
 
+export function swapped(list: string[], a: string, b: string): string[] {
+  const from = list.indexOf(a);
+  const to = list.indexOf(b);
+  if (from < 0 || to < 0) return list;
+  const out = [...list];
+  [out[from], out[to]] = [out[to], out[from]];
+  return out;
+}
+
 export const windowLimit = (viewportWidth: number): number => {
   if (viewportWidth >= 1400 || viewportWidth < 768) return Infinity;
   if (viewportWidth >= 1200) return 10;

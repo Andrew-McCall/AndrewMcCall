@@ -13,7 +13,7 @@ import "./tiles.css";
 import type { Home } from "@andrewmccall/api-types";
 import { api, jsonInit, setMeta, SITE_DESCRIPTION, SITE_TITLE } from "../helpers";
 import { $, $$ } from "./dom";
-import { MODES, neighbour, tile, windowLimit, type Mode, type Rect } from "./layout";
+import { MODES, neighbour, swapped, tile, windowLimit, type Mode, type Rect } from "./layout";
 import { shell } from "./markup";
 import { mountTerminal } from "./terminal";
 import type { ToyHost } from "./toy";
@@ -104,7 +104,9 @@ function start(root: HTMLElement, signal: AbortSignal): void {
 
   const every = (ms: number, tick: () => void) => {
     const id = setInterval(tick, ms);
-    signal.addEventListener("abort", () => clearInterval(id));
+    const stop = () => clearInterval(id);
+    signal.addEventListener("abort", stop);
+    return stop;
   };
   const later = (ms: number, run: () => void) => {
     setTimeout(() => {
@@ -193,6 +195,7 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     const chip = document.createElement("button");
     chip.className = "app";
     chip.type = "button";
+    chip.dataset.app = def.app;
     chip.style.setProperty("--w", `var(--w-${def.app})`);
     chip.append(def.app, " ", Object.assign(document.createElement("kbd"), { textContent: def.key }));
     chip.addEventListener("click", () => {
@@ -356,7 +359,9 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     const at = open.indexOf(app);
     if (at < 0) return;
     open.splice(at, 1);
-    setFocus(open[Math.min(at, open.length - 1)], true);
+    if (app === focus) return setFocus(open[Math.min(at, open.length - 1)], true);
+    render();
+    save();
   }
 
   function closeAll(): void {
@@ -426,9 +431,7 @@ function start(root: HTMLElement, signal: AbortSignal): void {
         document.body.style.userSelect = "";
         if (over) {
           wins[over].classList.remove("drop");
-          const from = open.indexOf(app);
-          const to = open.indexOf(over);
-          [open[from], open[to]] = [open[to], open[from]];
+          open = swapped(open, app, over);
         }
         render();
         save();
@@ -468,14 +471,18 @@ function start(root: HTMLElement, signal: AbortSignal): void {
   });
 
   const hueInput = $<HTMLInputElement>("#hue", root);
-  const setHue = (value: number) => {
-    hue = value;
+  const showHue = () => {
     hueInput.value = String(hue);
     root.style.setProperty("--hue", String(hue));
+  };
+  const setHue = (value: number) => {
+    hue = value;
+    showHue();
     save();
   };
   hueInput.addEventListener("input", () => setHue(Number(hueInput.value)));
-  setHue(hue);
+  hueInput.addEventListener("change", () => hueInput.blur());
+  showHue();
 
   const DIRECTIONS: Record<string, [number, number]> = {
     h: [-1, 0],
@@ -510,7 +517,10 @@ function start(root: HTMLElement, signal: AbortSignal): void {
         if (next) setFocus(next, true);
         return;
       }
-      if (key === "q" && focus) return close(focus);
+      if (key === "q" && focus) {
+        event.preventDefault();
+        return close(focus);
+      }
       if (key === "m") return toggleMax();
       const def = WINDOWS.find((candidate) => candidate.key === key);
       if (def) {
@@ -624,8 +634,11 @@ function start(root: HTMLElement, signal: AbortSignal): void {
       if (!res.ok) throw new Error(String(res.status));
       status.textContent = "Sent.";
       text.value = "";
-    } catch {
-      status.textContent = "Not sent. Try again in a minute.";
+    } catch (failure) {
+      const limited = failure instanceof Error && failure.message === "429";
+      status.textContent = limited
+        ? "That is enough for now. Try again in an hour."
+        : "Not sent. Try again in a minute.";
     }
     send.disabled = false;
     send.textContent = "Send";
@@ -666,6 +679,7 @@ function start(root: HTMLElement, signal: AbortSignal): void {
       },
       seedLink,
       ready: ensure,
+      showsOne: () => max || !wide.matches,
     },
     () => wide.matches,
     signal,

@@ -67,6 +67,27 @@ const total = (hand: Card[]): number => {
   return sum;
 };
 
+export interface Outcome {
+  text: string;
+  pays: number;
+}
+
+export function outcome(
+  mine: number,
+  theirs: number,
+  playerTwoCards: boolean,
+  dealerTwoCards: boolean,
+): Outcome {
+  const natural = mine === 21 && playerTwoCards;
+  const dealerNatural = theirs === 21 && dealerTwoCards;
+  if (mine > 21) return { text: "Bust.", pays: 0 };
+  if (natural && !dealerNatural) return { text: "Blackjack.", pays: 2.5 };
+  if (theirs > 21) return { text: "Dealer busts. You win.", pays: 2 };
+  if (mine > theirs) return { text: "You win.", pays: 2 };
+  if (mine < theirs) return { text: "Dealer wins.", pays: 0 };
+  return { text: "Push.", pays: 1 };
+}
+
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
   const dealerCards = $("#bj-d", host.body);
@@ -189,29 +210,15 @@ const toy: Toy = (host) => {
   };
 
   const settle = (): void => {
-    const mine = total(player);
-    const theirs = total(dealer);
-    const natural = mine === 21 && player.length === 2;
-    const dealerNatural = theirs === 21 && dealer.length === 2;
-    let text: string;
-    if (mine > 21) {
-      text = "Bust.";
-      playerCards.classList.add("shake");
-    } else if (theirs > 21) {
-      text = "Dealer busts. You win.";
-      bank += stake * 2;
-    } else if (natural && !dealerNatural) {
-      text = "Blackjack.";
-      bank += stake * 2.5;
-    } else if (mine > theirs) {
-      text = "You win.";
-      bank += stake * 2;
-    } else if (mine < theirs) {
-      text = "Dealer wins.";
-    } else {
-      text = "Push.";
-      bank += stake;
-    }
+    const result = outcome(
+      total(player),
+      total(dealer),
+      player.length === 2,
+      dealer.length === 2,
+    );
+    if (result.text === "Bust.") playerCards.classList.add("shake");
+    bank += stake * result.pays;
+    const text = result.text;
     bank = Math.floor(bank);
     phase = "idle";
     tell(bank <= 0 ? `${text} Out of chips.` : text);

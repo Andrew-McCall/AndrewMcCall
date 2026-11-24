@@ -45,7 +45,7 @@ const toy: Toy = (host) => {
   let left = 0;
   let started = 0;
   let elapsed = 0;
-  let clock = 0;
+  let stopClock = (): void => {};
   let flagging = false;
 
   const near = (index: number): number[] => {
@@ -88,14 +88,8 @@ const toy: Toy = (host) => {
   };
 
   const startClock = (): void => {
-    const me = ++clock;
-    host.every(1000, () => {
-      if (me === clock) paint();
-    });
-  };
-
-  const stopClock = (): void => {
-    clock++;
+    stopClock();
+    stopClock = host.every(1000, paint);
   };
 
   const addCell = (index: number): void => {

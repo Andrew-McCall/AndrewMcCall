@@ -178,13 +178,12 @@ const toy: Toy = (host) => {
   const roll = (mine: Hand, theirs: Hand): void => {
     const me = run;
     let step = 0;
-    let rolling = true;
-    host.every(ROLL_MS, () => {
-      if (!rolling || me !== run) return;
+    const stop = host.every(ROLL_MS, () => {
+      if (me !== run) return stop();
       draw(botArt, names[step % names.length]);
       step++;
       if (step > ROLL_STEPS) {
-        rolling = false;
+        stop();
         reveal(mine, theirs);
       }
     });

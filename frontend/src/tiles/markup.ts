@@ -18,10 +18,11 @@ const aboutBody = (home: Home | null): string => {
     <p class="tag" id="wm-hint">This whole page is a window manager. Open, close and rearrange it.</p>`;
 };
 
-const plainText = (markdown: string): string =>
+export const plainText = (markdown: string): string =>
   markdown
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`#>]/g, "")
+    .replace(/^\s*(#{1,6}|>)\s+/gm, "")
+    .replace(/(^|[\s(])(\*\*|__|\*|_|`)(\S(?:[^\n]*?\S)?)\2(?=[\s).,;:!?]|$)/gm, "$1$3")
     .replace(/\s+/g, " ")
     .trim();
 

@@ -154,6 +154,7 @@ const toy: Toy = (host) => {
   let cool = 0;
   let safe = 0;
   let pointer = false;
+  let leaving = false;
 
   function add(className: string, w: number, h: number): HTMLElement {
     const el = document.createElement("div");
@@ -526,6 +527,7 @@ const toy: Toy = (host) => {
 
   stage.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      leaving = true;
       host.win.focus();
       return;
     }
@@ -582,7 +584,8 @@ const toy: Toy = (host) => {
     { signal: host.signal },
   );
   host.win.addEventListener("focus", () => {
-    if (!pointer && host.wide()) stage.focus({ preventScroll: true });
+    if (!leaving && !pointer && host.wide()) stage.focus({ preventScroll: true });
+    leaving = false;
   });
 
   $$(".pad .btn", host.body).forEach((button) => {
