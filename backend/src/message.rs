@@ -1,7 +1,7 @@
 //! `POST /message`: the front page's contact box, forwarded to ntfy.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -16,6 +16,7 @@ use crate::response::{self, ApiError, Body, ResponseBuilder};
 const MAX_TEXT: usize = 600;
 const MAX_FROM: usize = 120;
 const PER_SENDER: usize = 3;
+const PER_WINDOW: usize = 30;
 const WINDOW: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Deserialize)]
@@ -25,23 +26,44 @@ struct MessageRequest {
     from: String,
 }
 
-/// When each sender last wrote, so one address cannot fill the phone.
+/// When each sender last wrote, so neither one address nor a crowd can fill the phone.
 #[derive(Debug, Default)]
 pub struct Senders(Mutex<HashMap<String, Vec<Instant>>>);
 
+/// An IPv6 host owns its whole /64, so that is what gets counted.
+fn sender_key(address: &str) -> String {
+    match address.parse::<IpAddr>() {
+        Ok(IpAddr::V6(v6)) => {
+            let [a, b, c, d, ..] = v6.segments();
+            format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+        }
+        _ => address.to_string(),
+    }
+}
+
 impl Senders {
-    fn allow(&self, sender: &str, now: Instant) -> bool {
+    fn reserve(&self, address: &str, now: Instant) -> bool {
         let mut senders = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         senders.retain(|_, sent| {
             sent.retain(|at| now.duration_since(*at) < WINDOW);
             !sent.is_empty()
         });
-        let sent = senders.entry(sender.to_string()).or_default();
-        if sent.len() >= PER_SENDER {
+        let everyone: usize = senders.values().map(Vec::len).sum();
+        let sent = senders.entry(sender_key(address)).or_default();
+        if sent.len() >= PER_SENDER || everyone >= PER_WINDOW {
             return false;
         }
         sent.push(now);
         true
+    }
+
+    fn release(&self, address: &str, at: Instant) {
+        let mut senders = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(sent) = senders.get_mut(&sender_key(address))
+            && let Some(index) = sent.iter().position(|sent_at| *sent_at == at)
+        {
+            sent.remove(index);
+        }
     }
 }
 
@@ -87,7 +109,8 @@ pub async fn send(
         tracing::warn!("a message arrived but NTFY_TOPIC is not set");
         return ResponseBuilder::from(ApiError::Internal).into();
     };
-    if !config.senders.allow(&sender, Instant::now()) {
+    let now = Instant::now();
+    if !config.senders.reserve(&sender, now) {
         return ResponseBuilder::from(ApiError::TooManyRequests).into();
     }
 
@@ -107,10 +130,12 @@ pub async fn send(
         }
         Ok((status, _, _)) => {
             tracing::warn!(%status, "ntfy refused a message");
+            config.senders.release(&sender, now);
             ResponseBuilder::from(ApiError::Internal).into()
         }
         Err(err) => {
             tracing::warn!(error = %err, "failed to forward a message");
+            config.senders.release(&sender, now);
             ResponseBuilder::from(ApiError::Internal).into()
         }
     }
@@ -150,10 +175,10 @@ mod tests {
         let senders = Senders::default();
         let start = Instant::now();
         for _ in 0..PER_SENDER {
-            assert!(senders.allow("1.2.3.4", start));
+            assert!(senders.reserve("1.2.3.4", start));
         }
-        assert!(!senders.allow("1.2.3.4", start));
-        assert!(senders.allow("5.6.7.8", start));
+        assert!(!senders.reserve("1.2.3.4", start));
+        assert!(senders.reserve("5.6.7.8", start));
     }
 
     #[test]
@@ -161,8 +186,40 @@ mod tests {
         let senders = Senders::default();
         let start = Instant::now();
         for _ in 0..PER_SENDER {
-            assert!(senders.allow("1.2.3.4", start));
+            assert!(senders.reserve("1.2.3.4", start));
         }
-        assert!(senders.allow("1.2.3.4", start + WINDOW));
+        assert!(senders.reserve("1.2.3.4", start + WINDOW));
+    }
+
+    #[test]
+    fn a_failed_send_does_not_use_up_the_allowance() {
+        let senders = Senders::default();
+        let start = Instant::now();
+        for _ in 0..PER_SENDER + 2 {
+            assert!(senders.reserve("1.2.3.4", start));
+            senders.release("1.2.3.4", start);
+        }
+        assert!(senders.reserve("1.2.3.4", start));
+    }
+
+    #[test]
+    fn counts_an_ipv6_network_as_one_sender() {
+        let senders = Senders::default();
+        let start = Instant::now();
+        for host in 1..=PER_SENDER {
+            assert!(senders.reserve(&format!("2001:db8:1:2::{host:x}"), start));
+        }
+        assert!(!senders.reserve("2001:db8:1:2:ffff::9", start));
+        assert!(senders.reserve("2001:db8:1:3::1", start));
+    }
+
+    #[test]
+    fn caps_everyone_together() {
+        let senders = Senders::default();
+        let start = Instant::now();
+        for host in 0..PER_WINDOW {
+            assert!(senders.reserve(&format!("10.0.{}.{}", host / 250, host % 250), start));
+        }
+        assert!(!senders.reserve("192.168.1.1", start));
     }
 }
