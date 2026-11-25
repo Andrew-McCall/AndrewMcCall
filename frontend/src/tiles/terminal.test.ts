@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileName } from "./terminal";
+import { counts, fileName } from "./terminal";
 
 describe("fileName", () => {
   it("uses a post's slug", () => {
@@ -12,5 +12,11 @@ describe("fileName", () => {
 
   it("never returns an empty name", () => {
     expect(fileName("???", "")).toBe("untitled");
+  });
+});
+
+describe("counts", () => {
+  it("counts lines, words and characters", () => {
+    expect(counts("one two\nthree")).toBe("2 lines  3 words  13 characters");
   });
 });

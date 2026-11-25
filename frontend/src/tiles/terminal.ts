@@ -3,6 +3,7 @@ import { MODES } from "./layout";
 
 export interface Desk {
   names(): string[];
+  toys(): string[];
   isOpen(app: string): boolean;
   show(app: string): void;
   close(app: string): void;
@@ -45,6 +46,11 @@ export const fileName = (title: string, href: string): string => {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "untitled"
   );
+};
+
+export const counts = (text: string): string => {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return `${text.split("\n").length} lines  ${words} words  ${text.length} characters`;
 };
 
 const isFolder = (node: TextFile | Folder | undefined): node is Folder =>
@@ -255,6 +261,28 @@ export function mountTerminal(
         out(hits.join("\n") || `no matches for "${query}"`);
       },
     },
+    find: {
+      usage: "find <text>",
+      about: "search file names",
+      run: (words) => {
+        const query = words.join(" ").toLowerCase();
+        if (!query) return out("usage: find <text>");
+        const hits: string[] = [];
+        eachFile(files, "~/", (name) => {
+          if (name.toLowerCase().includes(query)) hits.push(name);
+        });
+        out(hits.join("\n") || `no file names match "${query}"`);
+      },
+    },
+    wc: {
+      usage: "wc <file>",
+      about: "count a file's lines, words and characters",
+      run: ([target]) => {
+        const { node } = walk(target);
+        if (!target || node === undefined || isFolder(node)) out("usage: wc <file>");
+        else out(`${counts(node.read())}  ${target}`);
+      },
+    },
     open: {
       usage: "open <window|file>",
       about: "open a window, or get a file's link",
@@ -305,8 +333,8 @@ export function mountTerminal(
         ),
     },
     layout: {
-      usage: "layout [dwindle|grid]",
-      about: "switch the tiling layout",
+      usage: "layout [dwindle|grid|static]",
+      about: "switch the tiling layout, or leave for the plain page",
       run: ([mode]) => out(`layout: ${desk.layout(mode)}`),
     },
     max: {
@@ -336,6 +364,29 @@ export function mountTerminal(
         }
         out(`seed ${desk.seed().toString(36)}`);
         out(link(desk.seedLink()));
+      },
+    },
+    play: {
+      usage: "play [toy]",
+      about: "open a toy, or a random one",
+      run: ([target]) => {
+        const toys = desk.toys();
+        const app = target ?? toys[Math.floor(Math.random() * toys.length)];
+        if (!toys.includes(app)) return out(`no toy called "${app}". Toys: ${toys.join(" ")}`);
+        desk.show(app);
+        out(`playing ${app}`);
+      },
+    },
+    restart: {
+      usage: "restart <toy>",
+      about: "start an open toy again",
+      run: ([target]) => {
+        const app = target ?? "";
+        if (!desk.toys().includes(app) || !desk.isOpen(app)) {
+          return out(`restart: "${app}" is not an open toy`);
+        }
+        desk.ready(app).then(() => $<HTMLButtonElement>("[data-restart]", windowOf(app)).click());
+        out(`restarted ${app}`);
       },
     },
     life: {
@@ -371,6 +422,7 @@ export function mountTerminal(
     },
     clear: { usage: "clear", about: "clear the screen", run: () => log.replaceChildren() },
     exit: { usage: "exit", about: "close the terminal", run: () => desk.close("term") },
+    man: { usage: "man", about: "", run: (args) => commands.help.run(args) },
     sudo: {
       usage: "sudo",
       about: "",
@@ -381,7 +433,9 @@ export function mountTerminal(
   const completions: Record<string, string[]> = {
     seed: ["new"],
     life: Object.keys(LIFE_BUTTONS),
-    layout: MODES,
+    layout: [...MODES, "static"],
+    play: desk.toys(),
+    restart: desk.toys(),
     hue: ["random"],
     close: ["all"],
     help: Object.keys(commands),

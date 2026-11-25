@@ -657,6 +657,7 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     root,
     {
       names: () => WINDOWS.map((def) => def.app),
+      toys: () => toys,
       isOpen: (app) => open.includes(app),
       show: (app) => (open.includes(app) ? setFocus(app) : toggle(app)),
       close,
@@ -667,6 +668,12 @@ function start(root: HTMLElement, signal: AbortSignal): void {
       },
       focus: (app) => setFocus(app, true),
       layout(next) {
+        if (next === "static") {
+          plain = true;
+          render();
+          save();
+          return next;
+        }
         const wanted = MODES.find((candidate) => candidate === next);
         if (wanted) {
           mode = wanted;
