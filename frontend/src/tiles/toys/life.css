@@ -10,30 +10,18 @@
     min-height: 120px;
     padding: 8px;
     overflow: hidden;
+    background: var(--on-win);
     display: grid;
     place-items: center;
     touch-action: none;
     cursor: crosshair;
   }
   .life-grid {
-    display: grid;
-    gap: 1px;
-    grid-auto-rows: 12px;
-    width: max-content;
-  }
-  .life-grid i {
-    background: color-mix(in oklch, var(--w) 10%, transparent);
-    transition: background-color 0.14s;
+    display: block;
+    color: var(--w);
   }
   .life-grid.wait {
     animation: wait 0.5s ease-in-out infinite alternate;
-  }
-  .life-grid i:hover {
-    background: color-mix(in oklch, var(--w) 34%, transparent);
-  }
-  .life-grid i.on {
-    background: var(--w);
-    box-shadow: inset 2px 2px 0 var(--hi), inset -2px -2px 0 var(--lo);
   }
   @media (max-width: 767px) {
     .life {
@@ -41,9 +29,7 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .life-grid,
-    .life-grid i {
-      transition: none;
+    .life-grid {
       animation: none;
     }
   }

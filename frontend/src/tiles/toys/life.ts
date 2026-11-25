@@ -3,10 +3,12 @@ import { $, calm } from "../dom";
 import { rng, type Rng, type Toy } from "../toy";
 
 const PITCH = 13;
-const MAX_COLUMNS = 80;
-const MAX_ROWS = 60;
+const CELL = 12;
 const MIN_SIDE = 4;
 const SETTLED_AFTER = 3;
+const FADE_MS = 140;
+const DEAD = 0.1;
+const HOVER = 0.34;
 
 const MARKUP = `
   <div class="toy-bar">
@@ -16,23 +18,27 @@ const MARKUP = `
     <button class="btn" id="life-clear" type="button">Clear</button>
     <span class="tag" id="life-gen">gen 0</span>
   </div>
-  <div class="life field" id="life" role="img"
+  <div class="life" id="life" role="img"
     aria-label="Game of Life grid. Click or drag to draw cells.">
-    <div class="life-grid" id="life-grid"></div>
+    <canvas class="life-grid" id="life-grid"></canvas>
   </div>`;
 
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
   const box = $("#life", host.body);
-  const grid = $("#life-grid", host.body);
+  const grid = $<HTMLCanvasElement>("#life-grid", host.body);
+  const context = grid.getContext("2d")!;
   const runButton = $("#life-run", host.body);
   const generationLabel = $("#life-gen", host.body);
 
   let columns = 0;
   let rows = 0;
   let alive: Uint8Array = new Uint8Array(0);
-  let cells: HTMLElement[] = [];
-  let indexOfCell = new Map<Element, number>();
+  let shown: Float32Array = new Float32Array(0);
+  let scale = 1;
+  let hover = -1;
+  let lastFrame = 0;
+  const fading = new Set<number>();
   let generation = 0;
   let pen: number | null = null;
   let still = 0;
@@ -47,10 +53,57 @@ const toy: Toy = (host) => {
     runButton.textContent = running ? "Pause" : "Play";
   }
 
+  const wanted = (index: number): number =>
+    alive[index] ? 1 : index === hover ? HOVER : DEAD;
+
+  function paint(index: number): void {
+    const left = Math.round((index % columns) * PITCH * scale);
+    const top = Math.round(Math.floor(index / columns) * PITCH * scale);
+    const side = Math.max(1, Math.round(CELL * scale));
+    context.clearRect(left, top, side, side);
+    context.globalAlpha = shown[index];
+    context.fillRect(left, top, side, side);
+  }
+
+  function touch(index: number): void {
+    if (index < 0 || index >= shown.length) return;
+    if (!calm()) {
+      fading.add(index);
+      return;
+    }
+    shown[index] = wanted(index);
+    paint(index);
+  }
+
+  function repaint(): void {
+    context.fillStyle = getComputedStyle(grid).color;
+    fading.clear();
+    for (let i = 0; i < shown.length; i++) {
+      shown[i] = wanted(i);
+      paint(i);
+    }
+  }
+
+  function fade(time: number): void {
+    const moved = ((time - lastFrame) / FADE_MS) * (1 - DEAD);
+    lastFrame = time;
+    for (const index of fading) {
+      const target = wanted(index);
+      const gap = target - shown[index];
+      if (Math.abs(gap) <= moved) {
+        shown[index] = target;
+        fading.delete(index);
+      } else {
+        shown[index] += Math.sign(gap) * moved;
+      }
+      paint(index);
+    }
+  }
+
   function set(index: number, value: number): void {
     if (alive[index] === value) return;
     alive[index] = value;
-    cells[index].className = value ? "on" : "";
+    touch(index);
     still = 0;
   }
 
@@ -76,24 +129,25 @@ const toy: Toy = (host) => {
   }
 
   function build(): void {
-    const newColumns = Math.min(MAX_COLUMNS, Math.floor((box.clientWidth + 1) / PITCH));
-    const newRows = Math.min(MAX_ROWS, Math.floor((box.clientHeight + 1) / PITCH));
+    const style = getComputedStyle(box);
+    const width = box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const height = box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    const newColumns = Math.floor((width + 1) / PITCH);
+    const newRows = Math.floor((height + 1) / PITCH);
     if (newColumns < MIN_SIDE || newRows < MIN_SIDE) return;
-    if (newColumns === columns && newRows === rows) return;
+    if (newColumns === columns && newRows === rows && scale === devicePixelRatio) return;
     const first = !columns;
     alive = resized(newColumns, newRows);
     columns = newColumns;
     rows = newRows;
-    cells = [];
-    indexOfCell = new Map();
-    for (let i = 0; i < alive.length; i++) {
-      const cell = document.createElement("i");
-      if (alive[i]) cell.className = "on";
-      cells.push(cell);
-      indexOfCell.set(cell, i);
-    }
-    grid.style.gridTemplateColumns = `repeat(${columns}, 12px)`;
-    grid.replaceChildren(...cells);
+    scale = devicePixelRatio;
+    hover = -1;
+    shown = new Float32Array(alive.length);
+    grid.style.width = `${columns * PITCH - 1}px`;
+    grid.style.height = `${rows * PITCH - 1}px`;
+    grid.width = Math.round((columns * PITCH - 1) * scale);
+    grid.height = Math.round((rows * PITCH - 1) * scale);
+    repaint();
     if (!first) return;
     grid.classList.add("wait");
     host.later(500, () => {
@@ -148,10 +202,25 @@ const toy: Toy = (host) => {
     label();
   }
 
+  function cellAt(event: PointerEvent): number {
+    const edge = grid.getBoundingClientRect();
+    const x = Math.floor((event.clientX - edge.left) / PITCH);
+    const y = Math.floor((event.clientY - edge.top) / PITCH);
+    if (x < 0 || y < 0 || x >= columns || y >= rows) return -1;
+    return y * columns + x;
+  }
+
+  function point(index: number): void {
+    if (index === hover) return;
+    const old = hover;
+    hover = index;
+    touch(old);
+    touch(index);
+  }
+
   function draw(event: PointerEvent): void {
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const index = target ? indexOfCell.get(target) : undefined;
-    if (index === undefined) return;
+    const index = cellAt(event);
+    if (index < 0) return;
     if (pen === null) pen = alive[index] ? 0 : 1;
     set(index, pen);
   }
@@ -191,7 +260,12 @@ const toy: Toy = (host) => {
     draw(event);
   });
   box.addEventListener("pointermove", (event) => {
+    if (event.pointerType === "mouse") point(cellAt(event));
     if (pen !== null && event.buttons) draw(event);
+  });
+  box.addEventListener("pointerleave", () => point(-1));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", repaint, {
+    signal: host.signal,
   });
   window.addEventListener(
     "pointerup",
@@ -205,6 +279,7 @@ const toy: Toy = (host) => {
   host.every(130, () => {
     if (seeded && running && pen === null && host.visible()) step();
   });
+  host.frame(fade);
   label();
 };
 

@@ -22,7 +22,7 @@ const MARKUP = `
     <button class="btn" type="button" data-restart>Restart</button>
     <span class="tag" id="pat-hud"></span>
   </div>
-  <div class="pat-wrap field"><div class="pat" id="pat"></div></div>
+  <div class="pat-wrap"><div class="pat" id="pat"></div></div>
 `;
 
 const readBest = (): number => {

@@ -4,6 +4,7 @@
     min-height: 120px;
     padding: 12px;
     display: grid;
+    background: var(--on-win);
     container-type: size;
   }
   .pat {
@@ -18,8 +19,6 @@
     padding: 0;
     border: 0;
     background: color-mix(in oklch, var(--c) 40%, transparent);
-    box-shadow: inset 5px 5px 0 color-mix(in oklch, var(--c) 26%, transparent),
-      inset -5px -5px 0 color-mix(in oklch, var(--on-win) 50%, transparent);
     cursor: pointer;
     transition: background-color 0.12s, scale 0.12s, box-shadow 0.12s;
   }
@@ -29,8 +28,7 @@
   .pat button.lit {
     background: var(--c);
     scale: 1.06;
-    box-shadow: inset 5px 5px 0 color-mix(in oklch, var(--c) 58%, var(--paper)),
-      inset -5px -5px 0 color-mix(in oklch, var(--c) 58%, var(--on-win)), 0 0 0 3px var(--paper);
+    box-shadow: 0 0 0 3px var(--paper);
   }
   .pat button:focus-visible {
     outline-color: var(--paper);
