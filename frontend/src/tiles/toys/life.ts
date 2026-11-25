@@ -38,6 +38,7 @@ const toy: Toy = (host) => {
   let scale = 1;
   let hover = -1;
   let lastFrame = 0;
+  let colour = "";
   const fading = new Set<number>();
   let generation = 0;
   let pen: number | null = null;
@@ -76,7 +77,8 @@ const toy: Toy = (host) => {
   }
 
   function repaint(): void {
-    context.fillStyle = getComputedStyle(grid).color;
+    colour = getComputedStyle(grid).color;
+    context.fillStyle = colour;
     fading.clear();
     for (let i = 0; i < shown.length; i++) {
       shown[i] = wanted(i);
@@ -256,6 +258,7 @@ const toy: Toy = (host) => {
   });
 
   box.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
     pen = null;
     draw(event);
   });
@@ -264,9 +267,13 @@ const toy: Toy = (host) => {
     if (pen !== null && event.buttons) draw(event);
   });
   box.addEventListener("pointerleave", () => point(-1));
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", repaint, {
-    signal: host.signal,
-  });
+  window.addEventListener(
+    "pointercancel",
+    () => {
+      pen = null;
+    },
+    { signal: host.signal },
+  );
   window.addEventListener(
     "pointerup",
     () => {
@@ -277,6 +284,9 @@ const toy: Toy = (host) => {
 
   new ResizeObserver(rebuildSoon).observe(box);
   host.every(130, () => {
+    if (!host.visible() || !columns) return;
+    if (scale !== devicePixelRatio) build();
+    else if (colour !== getComputedStyle(grid).color) repaint();
     if (seeded && running && pen === null && host.visible()) step();
   });
   host.frame(fade);
