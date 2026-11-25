@@ -675,6 +675,7 @@ function start(root: HTMLElement, signal: AbortSignal): void {
           return next;
         }
         const wanted = MODES.find((candidate) => candidate === next);
+        plain = false;
         if (wanted) {
           mode = wanted;
           render();

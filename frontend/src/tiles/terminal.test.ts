@@ -19,4 +19,12 @@ describe("counts", () => {
   it("counts lines, words and characters", () => {
     expect(counts("one two\nthree")).toBe("2 lines  3 words  13 characters");
   });
+
+  it("says one line, not one lines", () => {
+    expect(counts("word")).toBe("1 line  1 word  4 characters");
+  });
+
+  it("counts nothing in an empty file", () => {
+    expect(counts("")).toBe("0 lines  0 words  0 characters");
+  });
 });

@@ -48,9 +48,12 @@ export const fileName = (title: string, href: string): string => {
   );
 };
 
+const some = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
 export const counts = (text: string): string => {
+  const lines = text ? text.split("\n").length : 0;
   const words = text.split(/\s+/).filter(Boolean).length;
-  return `${text.split("\n").length} lines  ${words} words  ${text.length} characters`;
+  return [some(lines, "line"), some(words, "word"), some(text.length, "character")].join("  ");
 };
 
 const isFolder = (node: TextFile | Folder | undefined): node is Folder =>
@@ -263,24 +266,28 @@ export function mountTerminal(
     },
     find: {
       usage: "find <text>",
-      about: "search file names",
+      about: "search file paths",
       run: (words) => {
         const query = words.join(" ").toLowerCase();
         if (!query) return out("usage: find <text>");
         const hits: string[] = [];
-        eachFile(files, "~/", (name) => {
-          if (name.toLowerCase().includes(query)) hits.push(name);
+        eachFile(files, "", (name) => {
+          if (name.toLowerCase().includes(query)) hits.push("~/" + name);
         });
-        out(hits.join("\n") || `no file names match "${query}"`);
+        out(hits.join("\n") || `no file paths match "${query}"`);
       },
     },
     wc: {
       usage: "wc <file>",
       about: "count a file's lines, words and characters",
-      run: ([target]) => {
-        const { node } = walk(target);
-        if (!target || node === undefined || isFolder(node)) out("usage: wc <file>");
-        else out(`${counts(node.read())}  ${target}`);
+      run: (targets) => {
+        if (!targets.length) return out("usage: wc <file>");
+        for (const target of targets) {
+          const { node } = walk(target);
+          if (node === undefined) out(`wc: ${target}: no such file`);
+          else if (isFolder(node)) out(`wc: ${target}: is a directory`);
+          else out(`${counts(node.read())}  ${target}`);
+        }
       },
     },
     open: {
@@ -373,7 +380,8 @@ export function mountTerminal(
         const toys = desk.toys();
         const app = target ?? toys[Math.floor(Math.random() * toys.length)];
         if (!toys.includes(app)) return out(`no toy called "${app}". Toys: ${toys.join(" ")}`);
-        desk.show(app);
+        if (desk.isOpen(app)) desk.focus(app);
+        else desk.show(app);
         out(`playing ${app}`);
       },
     },
@@ -385,8 +393,14 @@ export function mountTerminal(
         if (!desk.toys().includes(app) || !desk.isOpen(app)) {
           return out(`restart: "${app}" is not an open toy`);
         }
-        desk.ready(app).then(() => $<HTMLButtonElement>("[data-restart]", windowOf(app)).click());
-        out(`restarted ${app}`);
+        desk.ready(app).then(
+          () => {
+            $<HTMLButtonElement>("[data-restart]", windowOf(app)).click();
+            out(`restarted ${app}`);
+            scrollDown();
+          },
+          () => out(`restart: ${app} did not load`),
+        );
       },
     },
     life: {
