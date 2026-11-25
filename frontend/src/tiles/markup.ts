@@ -153,10 +153,8 @@ export const shell = (home: Home | null): string => `
       <div class="bar-right">
         <input type="range" id="hue" min="0" max="360" step="1" value="0" aria-label="Colour"
           title="Turn every colour on the page">
-        <button class="pill" id="static" type="button"
-          title="Switch between the window manager and a plain page">static</button>
         <button class="pill" id="layout" type="button"
-          title="Change how windows are arranged">dwindle</button>
+          title="Change how the page is arranged: tiled windows or a plain page">dwindle</button>
         <span class="clock" data-clock title="Your local time">--:--:--</span>
         <span id="zone" title="Your time zone"></span>
       </div>

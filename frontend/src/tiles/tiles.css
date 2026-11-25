@@ -270,7 +270,7 @@ body:has(.tiles) > footer {
   }
 
   #hue {
-    width: clamp(72px, 12vw, 140px);
+    width: clamp(72px, 12vw, 220px);
     height: 14px;
     margin: 0;
     cursor: ew-resize;
@@ -861,7 +861,7 @@ body:has(.tiles) > footer {
     overflow: visible;
   }
 
-  &[data-plain] :is(.win-x, .keys, #layout, #toys-btn, .app[data-app="term"], .app kbd, #wm-hint) {
+  &[data-plain] :is(.win-x, .keys, #toys-btn, .app[data-app="term"], .app kbd, #wm-hint) {
     display: none;
   }
 
@@ -942,7 +942,7 @@ body:has(.tiles) > footer {
       flex: 1;
       max-width: 220px;
     }
-    .app kbd, #layout {
+    .app kbd {
       display: none;
     }
   }

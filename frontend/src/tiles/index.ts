@@ -272,10 +272,10 @@ function start(root: HTMLElement, signal: AbortSignal): void {
 
   function render(): void {
     root.toggleAttribute("data-plain", plain);
-    $("#static", root).textContent = plain ? "tiles" : "static";
+    const single = !wide.matches;
+    $("#layout", root).textContent = plain ? "static" : single ? "tiles" : mode;
     if (plain) return renderPlain();
 
-    const single = !wide.matches;
     const limit = windowLimit(innerWidth);
     if (!recent.length) recent = [...open];
     if (focus && recent[recent.length - 1] !== focus) {
@@ -298,7 +298,6 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     $("#empty", root).hidden = open.length > 0;
     const toyShown = toys.some((app) => (single ? app === focus : open.includes(app)));
     toysChip.setAttribute("aria-pressed", String(toyShown));
-    $("#layout", root).textContent = mode;
     const count = limit === Infinity ? `${open.length}` : `${open.length}/${limit}`;
     $("#status", root).textContent = focus
       ? `${focus} · ${count} open · ${max && !single ? "max" : mode}`
@@ -385,6 +384,20 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     save();
   }
 
+  function cycleView(): void {
+    const lastMode = mode === MODES[MODES.length - 1];
+    if (plain) {
+      plain = false;
+      if (wide.matches) mode = MODES[0];
+    } else if (lastMode || !wide.matches) {
+      plain = true;
+    } else {
+      mode = MODES[MODES.indexOf(mode) + 1];
+    }
+    render();
+    save();
+  }
+
   function toggleMax(): void {
     max = !max;
     render();
@@ -462,13 +475,8 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     dragToSwap(def.app, bar);
   }
 
-  $("#layout", root).addEventListener("click", cycleLayout);
+  $("#layout", root).addEventListener("click", cycleView);
   $("#close-all", root).addEventListener("click", closeAll);
-  $("#static", root).addEventListener("click", () => {
-    plain = !plain;
-    render();
-    save();
-  });
 
   const hueInput = $<HTMLInputElement>("#hue", root);
   const showHue = () => {
