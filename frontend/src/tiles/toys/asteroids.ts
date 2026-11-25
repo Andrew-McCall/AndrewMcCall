@@ -556,6 +556,7 @@ const toy: Toy = (host) => {
 
   stage.addEventListener("pointerdown", () => {
     if (state === "over") start();
+    else if (state === "pause") togglePause();
   });
 
   stage.addEventListener("blur", () => {
