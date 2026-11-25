@@ -50,6 +50,7 @@ const KEYMAP = new Map([
   ["arrowup", "ArrowUp"],
   [" ", " "],
 ]);
+const ALSO_MINE = new Set(["s", "arrowdown", "p"]);
 
 const SHIP = [
   "ebb........",
@@ -72,7 +73,7 @@ const SHIP_PALETTE = {
 const MESSAGES: Record<State, string> = {
   idle: "Click to play. WASD or arrows fly, space fires",
   pause: "Paused. Click to carry on",
-  over: "Game over. Any key to go again",
+  over: "Game over. Space to go again",
   play: "",
 };
 
@@ -532,10 +533,11 @@ const toy: Toy = (host) => {
       return;
     }
     if (event.key === "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
-    event.stopPropagation();
     const pressed = event.key.toLowerCase();
     const key = KEYMAP.get(pressed);
-    if (key) event.preventDefault();
+    if (!key && !ALSO_MINE.has(pressed)) return;
+    event.stopPropagation();
+    event.preventDefault();
     if (state === "over" && !event.repeat) {
       start();
       return;
