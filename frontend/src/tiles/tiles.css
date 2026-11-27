@@ -81,7 +81,7 @@ body:has(.tiles) > footer {
   --g-fair: oklch(0.83 0.16 calc(138 + var(--hue)));
   --g-fair2: oklch(0.78 0.16 calc(140 + var(--hue)));
   --g-kerb: oklch(0.96 0.02 calc(100 + var(--hue)));
-  --g-kerb-side: oklch(0.66 0.05 calc(100 + var(--hue)));
+  --g-shadow: oklch(0.2 0.05 calc(150 + var(--hue)) / 0.45);
   --g-sand: oklch(0.9 0.09 calc(90 + var(--hue)));
   --g-water: oklch(0.72 0.12 calc(235 + var(--hue)));
   --g-deep: oklch(0.55 0.13 calc(245 + var(--hue)));

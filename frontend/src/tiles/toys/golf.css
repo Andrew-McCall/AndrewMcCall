@@ -36,6 +36,42 @@
   }
 }
 
+@keyframes pull {
+  from {
+    scale: 1.8;
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    scale: 0.2;
+    opacity: 0;
+  }
+}
+
+@keyframes push {
+  from {
+    scale: 0.2;
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    scale: 1.8;
+    opacity: 0;
+  }
+}
+
+@keyframes glow {
+  to {
+    box-shadow:
+      0 0 0 1.5px var(--g-portal),
+      0 0 12px 3px var(--g-portal);
+  }
+}
+
 @keyframes spin {
   to {
     rotate: 1turn;
@@ -135,10 +171,10 @@
     );
     animation: belt 0.5s linear infinite;
   }
-  .g-shade {
-    background: var(--g-kerb-side);
+  .g-raised {
+    inset: 0;
+    filter: drop-shadow(-3px 3px 0 var(--g-shadow));
   }
-  .g-shade.round,
   .g-peg,
   .g-portal,
   .g-ripple {
@@ -163,12 +199,10 @@
       var(--g-kerb) 0 3px,
       var(--g-belt) 3px 6px
     );
-    box-shadow: 0 3px 0 var(--g-kerb-side);
     will-change: translate;
   }
   .g-spinner {
     background: var(--g-kerb);
-    box-shadow: 0 2px 0 var(--g-kerb-side);
     will-change: rotate;
   }
   .g-hub {
@@ -176,16 +210,44 @@
     background: var(--g-peg);
   }
   .g-portal {
-    background: repeating-conic-gradient(
-      var(--g-portal) 0 30deg,
-      var(--on-win) 30deg 60deg
+    background: radial-gradient(
+      var(--on-win) 0 2px,
+      color-mix(in oklch, var(--g-portal) 45%, var(--on-win)) 5px,
+      var(--g-portal) 9px
     );
-    box-shadow: 0 0 0 2px var(--g-portal);
-    animation: spin 2s linear infinite;
+    box-shadow:
+      0 0 0 1.5px var(--g-portal),
+      0 0 8px 1px var(--g-portal);
+    animation: glow 1.6s ease-in-out infinite alternate;
+  }
+  .g-portal::before,
+  .g-portal::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+  }
+  .g-portal::before {
+    background: repeating-conic-gradient(
+      transparent 0 40deg,
+      color-mix(in oklch, var(--g-portal) 30%, var(--paper)) 40deg 60deg,
+      transparent 60deg 90deg
+    );
+    mask: radial-gradient(transparent 2px, #000 4px 8px, transparent 10px);
+    animation: spin 1.1s linear infinite;
+  }
+  .g-portal::after {
+    border: 1.5px solid var(--g-portal);
+    animation: pull 1.2s ease-in infinite;
   }
   .g-portal.out {
     --g-portal: var(--g-portal-out);
+  }
+  .g-portal.out::before {
     animation-direction: reverse;
+  }
+  .g-portal.out::after {
+    animation: push 1.2s ease-out infinite;
   }
   .g-ripple {
     border: 1.5px solid var(--paper);
@@ -233,7 +295,6 @@
     width: 8px;
     height: 8px;
     background: var(--paper);
-    box-shadow: 1px 2px 0 color-mix(in oklch, var(--on-win) 50%, transparent);
     will-change: transform;
     transition:
       scale 0.45s cubic-bezier(0.5, 0, 0.9, 0.4),
@@ -270,6 +331,8 @@
     .g-water,
     .g-belt,
     .g-portal,
+    .g-portal::before,
+    .g-portal::after,
     .g-peg,
     .g-ripple,
     .g-ball {

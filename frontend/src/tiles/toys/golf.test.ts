@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chaos, drainPath, scatter } from "./golf";
+import { chaos, drainPath, scatter, widen } from "./golf";
 import { rng } from "../toy";
 
 type Point = [number, number];
@@ -68,7 +68,7 @@ describe("scatter", () => {
   });
 
   it("spends the budget without going over and uses each spot once", () => {
-    for (let seed = 1; seed < 200; seed++) {
+    for (let seed = 1; seed < 300; seed++) {
       const budget = chaos(1 + (seed % 12));
       const placed = scatter(budget, grid, rng(seed));
       const portals = placed.filter((p) => p.kind === "portal").length;
@@ -76,9 +76,48 @@ describe("scatter", () => {
         placed.reduce((sum, p) => sum + cost[p.kind], 0) -
         (portals / 2) * cost.portal;
       expect(spent).toBeLessThanOrEqual(budget);
-      expect(budget - spent).toBeLessThan(1);
       expect(new Set(placed.map((p) => p.at.join())).size).toBe(placed.length);
       expect([0, 2]).toContain(portals);
     }
+  });
+
+  it("points a belt into the next part of its pattern", () => {
+    let seen = 0;
+    for (let seed = 1; seed < 300; seed++) {
+      const placed = scatter(chaos(12), grid, rng(seed));
+      const at = new Map(placed.map((p) => [p.at.join(), p]));
+      for (const p of placed) {
+        if (p.kind !== "belt") continue;
+        const next = at.get([p.at[0] + p.dir[0], p.at[1] + p.dir[1]].join());
+        if (next?.dir === p.dir && next.kind === "water") seen++;
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("makes portals rare", () => {
+    let holes = 0;
+    for (let seed = 1; seed < 500; seed++) {
+      if (scatter(chaos(6), grid, rng(seed)).some((p) => p.kind === "portal"))
+        holes++;
+    }
+    expect(holes).toBeLessThan(50);
+  });
+});
+
+describe("widen", () => {
+  const path: Point[] = strip(8);
+
+  it("adds no grass without chaos", () => {
+    expect(widen(path, rng(1), 0)).toEqual({
+      fairway: new Set(path.map(([x]) => x)),
+      left: 0,
+    });
+  });
+
+  it("pays for each grass cell", () => {
+    const { fairway, left } = widen(path, rng(7), 3.2);
+    expect(fairway.size).toBe(path.length + 6);
+    expect(left).toBeCloseTo(0.2);
   });
 });

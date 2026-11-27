@@ -85,9 +85,16 @@ type Obstacle = TrapKind | "peg" | "bump" | "slider" | "spinner" | "portal";
 interface Placed {
   kind: Obstacle;
   at: Point;
+  dir: Point;
 }
 
-const WIDEN = 0.5;
+interface Pick {
+  parts: Obstacle[];
+  weight: number;
+}
+
+const GRASS_COST = 0.5;
+const GRASS_SHARE = 0.3;
 const FIRST_CHAOS = 4;
 const CHAOS_GROWTH = 1.2;
 const COST: Record<Obstacle, number> = {
@@ -101,7 +108,19 @@ const COST: Record<Obstacle, number> = {
   portal: 3,
   spinner: 4,
 };
-const OBSTACLES = Object.keys(COST) as Obstacle[];
+const PICKS: Pick[] = [
+  ...(Object.keys(COST) as Obstacle[]).map((kind) => ({
+    parts: [kind],
+    weight: kind === "portal" ? 0.04 : 1,
+  })),
+  { parts: ["belt", "water"], weight: 0.5 },
+  { parts: ["belt", "ice"], weight: 0.5 },
+  { parts: ["ice", "water"], weight: 0.5 },
+  { parts: ["ice", "belt"], weight: 0.5 },
+  { parts: ["belt", "belt", "water"], weight: 0.3 },
+  { parts: ["ice", "ice", "spinner"], weight: 0.3 },
+];
+const SCATTER_TRIES = 200;
 
 const TURF: Surface = { drag: 1.9, grip: 34 };
 const SAND: Surface = { drag: 6, grip: 90 };
@@ -151,25 +170,29 @@ function wander(random: Rng): Point[] {
   return path;
 }
 
-function widen(path: Point[], random: Rng, chance: number): Set<number> {
+export function widen(
+  path: Point[],
+  random: Rng,
+  budget: number,
+): { fairway: Set<number>; left: number } {
   const fairway = new Set(path.map(([x, y]) => cellId(x, y)));
-  for (const [x, y] of path) {
-    if (random() >= chance) continue;
-    const [dx, dy] = pick(random, NEIGHBOURS);
-    const nx = x + dx;
-    const ny = y + dy;
-    if (inside(nx, ny)) fairway.add(cellId(nx, ny));
-  }
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLUMNS; x++) {
-      const near = NEIGHBOURS.filter(
-        ([dx, dy]) =>
-          inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
-      );
-      if (near.length >= 2 && random() < chance) fairway.add(cellId(x, y));
+  let left = budget;
+  while (left >= GRASS_COST) {
+    const edge: number[] = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLUMNS; x++) {
+        const touches = NEIGHBOURS.some(
+          ([dx, dy]) =>
+            inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
+        );
+        if (!fairway.has(cellId(x, y)) && touches) edge.push(cellId(x, y));
+      }
     }
+    if (!edge.length) break;
+    fairway.add(pick(random, edge));
+    left -= GRASS_COST;
   }
-  return fairway;
+  return { fairway, left };
 }
 
 function wallsAround(fairway: Set<number>): Rect[] {
@@ -201,33 +224,55 @@ function fairwayCells(fairway: Set<number>): Point[] {
 export const chaos = (level: number): number =>
   level ? FIRST_CHAOS * CHAOS_GROWTH ** (level - 1) : 0;
 
+const costOf = (pick: Pick): number =>
+  pick.parts.reduce((sum, part) => sum + COST[part], 0);
+
+function weighted(random: Rng, picks: Pick[]): Pick {
+  let roll = random() * picks.reduce((sum, p) => sum + p.weight, 0);
+  for (const p of picks) {
+    roll -= p.weight;
+    if (roll < 0) return p;
+  }
+  return picks[picks.length - 1];
+}
+
 export function scatter(budget: number, spots: Point[], random: Rng): Placed[] {
-  const free = [...spots];
+  const free = new Set(spots.map(([x, y]) => cellKey(x, y)));
+  const isFree = ([x, y]: Point): boolean => free.has(cellKey(x, y));
   const placed: Placed[] = [];
   let left = budget;
-  let portalTried = false;
-  while (free.length) {
-    const kinds = OBSTACLES.filter(
-      (k) => COST[k] <= left && !(k === "portal" && portalTried),
+  let portal = false;
+  for (let tries = 0; tries < SCATTER_TRIES && free.size; tries++) {
+    const picks = PICKS.filter(
+      (p) => costOf(p) <= left && !(portal && p.parts[0] === "portal"),
     );
-    if (!kinds.length) break;
-    const kind = pick(random, kinds);
-    const [at] = free.splice(Math.floor(random() * free.length), 1);
-    if (kind === "portal") {
-      portalTried = true;
-      const far = free.filter(
-        ([x, y]) => Math.abs(x - at[0]) + Math.abs(y - at[1]) >= 3,
+    if (!picks.length) break;
+    const choice = weighted(random, picks);
+    const open = spots.filter(isFree);
+    const start = pick(random, open);
+    const dir = pick(random, NEIGHBOURS);
+    let cells = choice.parts.map((_, i): Point => [
+      start[0] + dir[0] * i,
+      start[1] + dir[1] * i,
+    ]);
+    if (choice.parts[0] === "portal") {
+      const far = open.filter(
+        ([x, y]) => Math.abs(x - start[0]) + Math.abs(y - start[1]) >= 3,
       );
-      if (!far.length) {
-        free.push(at);
-        continue;
-      }
-      const exit = pick(random, far);
-      free.splice(free.indexOf(exit), 1);
-      placed.push({ kind, at: exit });
+      if (!far.length) continue;
+      cells = [start, pick(random, far)];
+      portal = true;
     }
-    placed.push({ kind, at });
-    left -= COST[kind];
+    if (!cells.every(isFree)) continue;
+    cells.forEach((at, i) => {
+      free.delete(cellKey(...at));
+      placed.push({
+        kind: choice.parts[Math.min(i, choice.parts.length - 1)],
+        at,
+        dir,
+      });
+    });
+    left -= costOf(choice);
   }
   return placed;
 }
@@ -310,7 +355,8 @@ const toy: Toy = (host) => {
   function generate(n: number): Hole {
     const random = rng(seed + n * 7919);
     const path = wander(random);
-    const fairway = widen(path, random, WIDEN);
+    const budget = chaos(n);
+    const { fairway, left } = widen(path, random, budget * GRASS_SHARE);
     const cells = fairwayCells(fairway);
     const bumps: Rect[] = [];
     const pegs: Point[] = [];
@@ -342,7 +388,11 @@ const toy: Toy = (host) => {
       traps.set(turnPoint(x, y).join(), turned);
     };
 
-    for (const { kind, at } of scatter(chaos(n), spots, random)) {
+    for (const { kind, at, dir } of scatter(
+      budget * (1 - GRASS_SHARE) + left,
+      spots,
+      random,
+    )) {
       const [x, y] = at;
       const [cx, cy] = centre(x, y);
       if (kind === "portal") {
@@ -350,8 +400,7 @@ const toy: Toy = (host) => {
       } else if (kind === "water") {
         pond(x, y);
       } else if (kind === "belt") {
-        const [dx, dy] = pick(random, NEIGHBOURS);
-        trap(x, y, "belt", dx, dy);
+        trap(x, y, "belt", ...dir);
       } else if (kind === "sand" || kind === "ice") {
         trap(x, y, kind);
       } else if (kind === "peg") {
@@ -359,12 +408,11 @@ const toy: Toy = (host) => {
       } else if (kind === "bump") {
         bumps.push([cx - 7, cy - 7, 14, 14]);
       } else if (kind === "slider") {
-        const [dx, dy] = pick(random, NEIGHBOURS);
         sliders.push({
           x: cx,
           y: cy,
-          dx: Math.abs(dx),
-          dy: Math.abs(dy),
+          dx: Math.abs(dir[0]),
+          dy: Math.abs(dir[1]),
           phase: random() * 6,
         });
       } else {
@@ -404,14 +452,18 @@ const toy: Toy = (host) => {
     };
   }
 
-  function block(className: string, rect?: Rect): HTMLElement {
+  function block(
+    className: string,
+    rect?: Rect,
+    into: HTMLElement = course,
+  ): HTMLElement {
     const el = document.createElement("div");
     el.className = className;
     if (rect) {
       const [x, y, w, h] = rect;
       el.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
     }
-    course.append(el);
+    into.append(el);
     return el;
   }
 
@@ -506,42 +558,39 @@ const toy: Toy = (host) => {
     );
     paintTraps(next);
     block("g-tee", [next.tee[0] - 8, next.tee[1] - 8, 16, 16]);
+    next.portals.forEach(([x, y], i) => {
+      block(`g-portal${i ? " out" : ""}`, [x - 10, y - 10, 20, 20]);
+    });
+    block("g-cup", [next.cup[0] - 6.5, next.cup[1] - 6.5, 13, 13]);
+    const raised = block("g-raised");
     const walls = next.bumps.map((rect): Block => ({
       className: "g-wall",
       rect,
     }));
-    const raised = walls.concat(kerbs(next.cells));
-    raised.forEach(({ rect: [x, y, w, h] }) =>
-      block("g-shade", [x, y + 3, w, h]),
-    );
-    raised.forEach(({ className, rect }) => block(className, rect));
-    next.portals.forEach(([x, y], i) => {
-      block(`g-portal${i ? " out" : ""}`, [x - 10, y - 10, 20, 20]);
-    });
+    walls
+      .concat(kerbs(next.cells))
+      .forEach(({ className, rect }) => block(className, rect, raised));
     pegEls = next.pegs.map(([x, y]) => {
       const r = PEG_RADIUS;
-      block("g-shade round", [x - r, y - r + 3, r * 2, r * 2]);
-      return block("g-peg", [x - r, y - r, r * 2, r * 2]);
+      return block("g-peg", [x - r, y - r, r * 2, r * 2], raised);
     });
     sliderEls = next.sliders.map((s) => {
       const [, , w, h] = sliderAt(s).rect;
-      return block("g-slider", [0, 0, w, h]);
+      return block("g-slider", [0, 0, w, h], raised);
     });
     spinnerEls = next.spinners.map(({ x, y }) => {
-      const arm = block("g-spinner", [
-        x - SPIN_ARM,
-        y - SPIN_WIDTH / 2,
-        SPIN_ARM * 2,
-        SPIN_WIDTH,
-      ]);
-      block("g-hub", [x - 3, y - 3, 6, 6]);
+      const arm = block(
+        "g-spinner",
+        [x - SPIN_ARM, y - SPIN_WIDTH / 2, SPIN_ARM * 2, SPIN_WIDTH],
+        raised,
+      );
+      block("g-hub", [x - 3, y - 3, 6, 6], raised);
       return arm;
     });
     moveObstacles();
-    block("g-cup", [next.cup[0] - 6.5, next.cup[1] - 6.5, 13, 13]);
+    ballEl = block("g-ball", undefined, raised);
     aimEl = block("g-aim");
     aimEl.hidden = true;
-    ballEl = block("g-ball");
 
     ball.x = next.tee[0];
     ball.y = next.tee[1];
