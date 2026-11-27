@@ -307,7 +307,14 @@
   .g-ball.sunk {
     background: var(--g-deep);
   }
-  .g-ball.ready::after {
+  .g-flash {
+    left: 0;
+    top: 0;
+    width: 8px;
+    height: 8px;
+    pointer-events: none;
+  }
+  .g-flash.ready::after {
     content: "";
     position: absolute;
     inset: -4px;
@@ -327,7 +334,7 @@
     pointer-events: none;
   }
   @media (prefers-reduced-motion: reduce) {
-    .g-ball.ready::after,
+    .g-flash.ready::after,
     .g-water,
     .g-belt,
     .g-portal,

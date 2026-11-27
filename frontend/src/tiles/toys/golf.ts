@@ -345,6 +345,7 @@ const toy: Toy = (host) => {
   let last = 0;
   let run = 0;
   let ballEl = block("g-ball");
+  let flashEl = block("g-flash");
   let aimEl = block("g-aim");
 
   const turnPoint = (x: number, y: number): Point => (tall ? [y, x] : [x, y]);
@@ -468,7 +469,9 @@ const toy: Toy = (host) => {
   }
 
   function place(): void {
-    ballEl.style.translate = `${ball.x - BALL_RADIUS}px ${ball.y - BALL_RADIUS}px`;
+    const at = `${ball.x - BALL_RADIUS}px ${ball.y - BALL_RADIUS}px`;
+    ballEl.style.translate = at;
+    flashEl.style.translate = at;
   }
 
   function paint(): void {
@@ -477,7 +480,7 @@ const toy: Toy = (host) => {
 
   function ready(): void {
     const ok = !busy && !moving();
-    ballEl.classList.toggle("ready", ok);
+    flashEl.classList.toggle("ready", ok);
     stage.classList.toggle("wait", !ok);
   }
 
@@ -589,6 +592,7 @@ const toy: Toy = (host) => {
     });
     moveObstacles();
     ballEl = block("g-ball", undefined, raised);
+    flashEl = block("g-flash");
     aimEl = block("g-aim");
     aimEl.hidden = true;
 
