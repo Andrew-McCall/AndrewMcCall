@@ -80,6 +80,29 @@ const NEIGHBOURS: Point[] = [
   [0, -1],
 ];
 
+type Obstacle = TrapKind | "peg" | "bump" | "slider" | "spinner" | "portal";
+
+interface Placed {
+  kind: Obstacle;
+  at: Point;
+}
+
+const WIDEN = 0.5;
+const FIRST_CHAOS = 4;
+const CHAOS_GROWTH = 1.2;
+const COST: Record<Obstacle, number> = {
+  sand: 1,
+  ice: 1,
+  peg: 1,
+  bump: 1,
+  belt: 2,
+  water: 2,
+  slider: 3,
+  portal: 3,
+  spinner: 4,
+};
+const OBSTACLES = Object.keys(COST) as Obstacle[];
+
 const TURF: Surface = { drag: 1.9, grip: 34 };
 const SAND: Surface = { drag: 6, grip: 90 };
 const ICE: Surface = { drag: 0.25, grip: 5 };
@@ -96,9 +119,11 @@ const MARKUP = `
     aria-label="${ARIA_LABEL}"><div class="course" id="golf-course"></div></div>`;
 
 const cellId = (x: number, y: number): number => y * COLUMNS + x;
-const inside = (x: number, y: number): boolean => x >= 0 && x < COLUMNS && y >= 0 && y < ROWS;
+const inside = (x: number, y: number): boolean =>
+  x >= 0 && x < COLUMNS && y >= 0 && y < ROWS;
 const cellKey = (x: number, y: number): string => `${x},${y}`;
-const pick = <T>(random: Rng, list: T[]): T => list[Math.floor(random() * list.length)];
+const pick = <T>(random: Rng, list: T[]): T =>
+  list[Math.floor(random() * list.length)];
 
 function surfaceOf(kind: TrapKind | undefined): Surface {
   if (kind === "sand") return SAND;
@@ -115,7 +140,8 @@ function wander(random: Rng): Point[] {
     const sides: string[] = [];
     if (y > 0 && !seen.has(cellId(x, y - 1))) sides.push("up");
     if (y < ROWS - 1 && !seen.has(cellId(x, y + 1))) sides.push("down");
-    const direction = sides.length && random() < 0.5 ? pick(random, sides) : "right";
+    const direction =
+      sides.length && random() < 0.5 ? pick(random, sides) : "right";
     if (direction === "up") y--;
     else if (direction === "down") y++;
     else x++;
@@ -137,7 +163,8 @@ function widen(path: Point[], random: Rng, chance: number): Set<number> {
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLUMNS; x++) {
       const near = NEIGHBOURS.filter(
-        ([dx, dy]) => inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
+        ([dx, dy]) =>
+          inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
       );
       if (near.length >= 2 && random() < chance) fairway.add(cellId(x, y));
     }
@@ -169,6 +196,40 @@ function fairwayCells(fairway: Set<number>): Point[] {
     }
   }
   return cells;
+}
+
+export const chaos = (level: number): number =>
+  level ? FIRST_CHAOS * CHAOS_GROWTH ** (level - 1) : 0;
+
+export function scatter(budget: number, spots: Point[], random: Rng): Placed[] {
+  const free = [...spots];
+  const placed: Placed[] = [];
+  let left = budget;
+  let portalTried = false;
+  while (free.length) {
+    const kinds = OBSTACLES.filter(
+      (k) => COST[k] <= left && !(k === "portal" && portalTried),
+    );
+    if (!kinds.length) break;
+    const kind = pick(random, kinds);
+    const [at] = free.splice(Math.floor(random() * free.length), 1);
+    if (kind === "portal") {
+      portalTried = true;
+      const far = free.filter(
+        ([x, y]) => Math.abs(x - at[0]) + Math.abs(y - at[1]) >= 3,
+      );
+      if (!far.length) {
+        free.push(at);
+        continue;
+      }
+      const exit = pick(random, far);
+      free.splice(free.indexOf(exit), 1);
+      placed.push({ kind, at: exit });
+    }
+    placed.push({ kind, at });
+    left -= COST[kind];
+  }
+  return placed;
 }
 
 export function drainPath(
@@ -242,82 +303,83 @@ const toy: Toy = (host) => {
   let aimEl = block("g-aim");
 
   const turnPoint = (x: number, y: number): Point => (tall ? [y, x] : [x, y]);
-  const turnRect = ([x, y, w, h]: Rect): Rect => (tall ? [y, x, h, w] : [x, y, w, h]);
+  const turnRect = ([x, y, w, h]: Rect): Rect =>
+    tall ? [y, x, h, w] : [x, y, w, h];
   const moving = (): boolean => ball.vx !== 0 || ball.vy !== 0;
 
   function generate(n: number): Hole {
     const random = rng(seed + n * 7919);
-    const heat = Math.min(1, 0.65 + n * 0.06);
     const path = wander(random);
-    const route = new Set(path.map(([x, y]) => cellId(x, y)));
-    const fairway = widen(path, random, 0.3 + heat * 0.3);
+    const fairway = widen(path, random, WIDEN);
     const cells = fairwayCells(fairway);
     const bumps: Rect[] = [];
     const pegs: Point[] = [];
     const sliders: Slider[] = [];
     const spinners: Spinner[] = [];
     const ponds = new Map<string, Point>();
-    const pond = (x: number, y: number): void => void ponds.set(cellKey(x, y), [x, y]);
+    const pond = (x: number, y: number): void =>
+      void ponds.set(cellKey(x, y), [x, y]);
     const traps = new Map<string, Trap>();
     const [teeX, teeY] = path[0];
     const [cupX, cupY] = path[path.length - 1];
-    const centre = (x: number, y: number): Point => [x * CELL + CELL / 2, y * CELL + CELL / 2];
+    const centre = (x: number, y: number): Point => [
+      x * CELL + CELL / 2,
+      y * CELL + CELL / 2,
+    ];
     const spots = cells.filter(
       ([x, y]) => !(x === teeX && y === teeY) && !(x === cupX && y === cupY),
     );
 
-    let portals: Point[] = [];
-    if (n > 0 && spots.length > 5 && random() < 0.3 + n * 0.05) {
-      const [ax, ay] = pick(random, spots);
-      const far = spots.filter(([x, y]) => Math.abs(x - ax) + Math.abs(y - ay) >= 3);
-      if (far.length) portals = [[ax, ay], pick(random, far)];
-    }
-    const isPortal = (x: number, y: number): boolean =>
-      portals.some(([px, py]) => px === x && py === y);
-
-    const trap = (x: number, y: number, kind: TrapKind, dx = 0, dy = 0): void => {
+    const portals: Point[] = [];
+    const trap = (
+      x: number,
+      y: number,
+      kind: TrapKind,
+      dx = 0,
+      dy = 0,
+    ): void => {
       const turned = tall ? { kind, dx: dy, dy: dx } : { kind, dx, dy };
       traps.set(turnPoint(x, y).join(), turned);
     };
-    const corner = (): number => (random() < 0.5 ? 2 : CELL - 12);
 
-    for (const [x, y] of spots) {
-      if (isPortal(x, y)) continue;
-      const roll = random();
-      if (!route.has(cellId(x, y))) {
-        if (roll < 0.26 * heat) trap(x, y, "sand");
-        else if (roll < 0.5 * heat) pond(x, y);
-        else if (roll < 0.64 * heat) trap(x, y, "ice");
-        else if (roll < 0.82 * heat) pegs.push(centre(x, y));
-        else if (roll < heat) bumps.push([x * CELL + 13, y * CELL + 13, 14, 14]);
-      } else if (roll < 0.1 * heat) {
-        trap(x, y, "ice");
-      } else if (roll < 0.2 * heat) {
+    for (const { kind, at } of scatter(chaos(n), spots, random)) {
+      const [x, y] = at;
+      const [cx, cy] = centre(x, y);
+      if (kind === "portal") {
+        portals.push(at);
+      } else if (kind === "water") {
+        pond(x, y);
+      } else if (kind === "belt") {
         const [dx, dy] = pick(random, NEIGHBOURS);
         trap(x, y, "belt", dx, dy);
-      } else if (roll < 0.27 * heat) {
-        trap(x, y, "sand");
-      } else if (roll < 0.33 * heat && n > 0) {
-        pond(x, y);
-      } else if (roll < 0.41 * heat && n > 0) {
+      } else if (kind === "sand" || kind === "ice") {
+        trap(x, y, kind);
+      } else if (kind === "peg") {
+        pegs.push([cx, cy]);
+      } else if (kind === "bump") {
+        bumps.push([cx - 7, cy - 7, 14, 14]);
+      } else if (kind === "slider") {
         const [dx, dy] = pick(random, NEIGHBOURS);
-        const [cx, cy] = centre(x, y);
-        sliders.push({ x: cx, y: cy, dx: Math.abs(dx), dy: Math.abs(dy), phase: random() * 6 });
-      } else if (roll < 0.48 * heat && n > 1) {
-        const [cx, cy] = centre(x, y);
-        spinners.push({ x: cx, y: cy, phase: random() * 6, turn: random() < 0.5 ? 1 : -1 });
-      } else if (roll < 0.53 * heat) {
-        pegs.push(centre(x, y));
-      } else if (roll < 0.6 * heat) {
-        const left = x * CELL + corner();
-        const top = y * CELL + corner();
-        bumps.push([left, top, 10, 10]);
+        sliders.push({
+          x: cx,
+          y: cy,
+          dx: Math.abs(dx),
+          dy: Math.abs(dy),
+          phase: random() * 6,
+        });
+      } else {
+        spinners.push({
+          x: cx,
+          y: cy,
+          phase: random() * 6,
+          turn: random() < 0.5 ? 1 : -1,
+        });
       }
     }
 
     const water = new Set(ponds.keys());
-    drainPath(cells, water, [teeX, teeY], [cupX, cupY], portals).forEach((key) =>
-      ponds.delete(key),
+    drainPath(cells, water, [teeX, teeY], [cupX, cupY], portals).forEach(
+      (key) => ponds.delete(key),
     );
     ponds.forEach(([x, y]) => trap(x, y, "water"));
 
@@ -374,7 +436,8 @@ const toy: Toy = (host) => {
 
   function kerbs(cells: Point[]): Block[] {
     const onFairway = new Set(cells.map(([x, y]) => cellKey(x, y)));
-    const fair = (x: number, y: number): boolean => onFairway.has(cellKey(x, y));
+    const fair = (x: number, y: number): boolean =>
+      onFairway.has(cellKey(x, y));
     const blocks: Block[] = [];
     const kerb = (x: number, y: number, w: number, h: number): void => {
       blocks.push({ className: "g-kerb", rect: [x, y, w, h] });
@@ -403,8 +466,9 @@ const toy: Toy = (host) => {
       ([dx, dy]) => next.traps.get(cellKey(x + dx, y + dy))?.kind !== "water",
     );
     return (
-      shores.map(([dx, dy]) => `inset ${-dx * 3}px ${-dy * 3}px 0 var(--g-bank)`).join(", ") ||
-      "none"
+      shores
+        .map(([dx, dy]) => `inset ${-dx * 3}px ${-dy * 3}px 0 var(--g-bank)`)
+        .join(", ") || "none"
     );
   }
 
@@ -437,12 +501,19 @@ const toy: Toy = (host) => {
     course.style.width = `${courseWidth}px`;
     course.style.height = `${courseHeight}px`;
 
-    next.cells.forEach(([x, y]) => block("g-turf", [x * CELL, y * CELL, CELL, CELL]));
+    next.cells.forEach(([x, y]) =>
+      block("g-turf", [x * CELL, y * CELL, CELL, CELL]),
+    );
     paintTraps(next);
     block("g-tee", [next.tee[0] - 8, next.tee[1] - 8, 16, 16]);
-    const walls = next.bumps.map((rect): Block => ({ className: "g-wall", rect }));
+    const walls = next.bumps.map((rect): Block => ({
+      className: "g-wall",
+      rect,
+    }));
     const raised = walls.concat(kerbs(next.cells));
-    raised.forEach(({ rect: [x, y, w, h] }) => block("g-shade", [x, y + 3, w, h]));
+    raised.forEach(({ rect: [x, y, w, h] }) =>
+      block("g-shade", [x, y + 3, w, h]),
+    );
     raised.forEach(({ className, rect }) => block(className, rect));
     next.portals.forEach(([x, y], i) => {
       block(`g-portal${i ? " out" : ""}`, [x - 10, y - 10, 20, 20]);
@@ -457,7 +528,12 @@ const toy: Toy = (host) => {
       return block("g-slider", [0, 0, w, h]);
     });
     spinnerEls = next.spinners.map(({ x, y }) => {
-      const arm = block("g-spinner", [x - SPIN_ARM, y - SPIN_WIDTH / 2, SPIN_ARM * 2, SPIN_WIDTH]);
+      const arm = block("g-spinner", [
+        x - SPIN_ARM,
+        y - SPIN_WIDTH / 2,
+        SPIN_ARM * 2,
+        SPIN_WIDTH,
+      ]);
       block("g-hub", [x - 3, y - 3, 6, 6]);
       return arm;
     });
@@ -489,7 +565,8 @@ const toy: Toy = (host) => {
     const shot = shotFrom(pull, event);
     pull = null;
     aimEl.hidden = true;
-    if (event.type !== "pointerup" || shot.power < MIN_POWER || moving()) return;
+    if (event.type !== "pointerup" || shot.power < MIN_POWER || moving())
+      return;
     rest.x = ball.x;
     rest.y = ball.y;
     ball.vx = Math.cos(shot.angle) * shot.power;
@@ -590,7 +667,8 @@ const toy: Toy = (host) => {
     };
   }
 
-  const spinAngle = (s: Spinner): number => s.phase + clock * SPIN_SPEED * s.turn;
+  const spinAngle = (s: Spinner): number =>
+    s.phase + clock * SPIN_SPEED * s.turn;
 
   function moveObstacles(): void {
     hole?.sliders.forEach((s, i) => {
@@ -606,7 +684,10 @@ const toy: Toy = (host) => {
     const angle = spinAngle(s);
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
-    const along = Math.max(-SPIN_ARM, Math.min(SPIN_ARM, (ball.x - s.x) * ux + (ball.y - s.y) * uy));
+    const along = Math.max(
+      -SPIN_ARM,
+      Math.min(SPIN_ARM, (ball.x - s.x) * ux + (ball.y - s.y) * uy),
+    );
     const dx = ball.x - (s.x + ux * along);
     const dy = ball.y - (s.y + uy * along);
     const distance = Math.hypot(dx, dy);
@@ -704,7 +785,10 @@ const toy: Toy = (host) => {
       ball.vx += trap.dx * 300 * dt;
       ball.vy += trap.dy * 300 * dt;
     }
-    pinnedFor = trap?.kind === "belt" && Math.hypot(ball.vx, ball.vy) < 30 ? pinnedFor + dt : 0;
+    pinnedFor =
+      trap?.kind === "belt" && Math.hypot(ball.vx, ball.vy) < 30
+        ? pinnedFor + dt
+        : 0;
     if (pinnedFor > 0.5) {
       pinnedFor = 0;
       stop();
@@ -775,7 +859,8 @@ const toy: Toy = (host) => {
   }
 
   area.addEventListener("pointerdown", (event) => {
-    const onButton = event.target instanceof Element && event.target.closest("button");
+    const onButton =
+      event.target instanceof Element && event.target.closest("button");
     if (moving() || busy || onButton) return;
     pull = { x: event.clientX, y: event.clientY };
     try {
@@ -788,8 +873,7 @@ const toy: Toy = (host) => {
     const shot = shotFrom(pull, event);
     aimEl.hidden = shot.power < MIN_POWER;
     aimEl.style.width = `${(shot.power / MAX_POWER) * 90}px`;
-    aimEl.style.transform =
-      `translate(${ball.x}px, ${ball.y - 1.5}px) rotate(${shot.angle}rad)`;
+    aimEl.style.transform = `translate(${ball.x}px, ${ball.y - 1.5}px) rotate(${shot.angle}rad)`;
   });
 
   area.addEventListener("pointerup", release);
