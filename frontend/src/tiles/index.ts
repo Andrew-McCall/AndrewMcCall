@@ -526,9 +526,11 @@ function start(root: HTMLElement, signal: AbortSignal): void {
         if (next) setFocus(next, true);
         return;
       }
-      if (key === "q" && focus) {
+      if (key === "q") {
+        const target = open.find((app) => wins[app].matches(":hover")) ?? focus;
+        if (!target) return;
         event.preventDefault();
-        return close(focus);
+        return close(target);
       }
       if (key === "m") return toggleMax();
       const def = WINDOWS.find((candidate) => candidate.key === key);
