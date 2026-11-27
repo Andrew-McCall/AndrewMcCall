@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reach } from "./banana";
+import { clickRate, reach } from "./banana";
 
 describe("reach", () => {
   it("shows only the first item when nothing is owned or affordable", () => {
@@ -16,5 +16,20 @@ describe("reach", () => {
 
   it("shows the whole shop once every item is reached", () => {
     expect(reach([1, 0], [false, true])).toBe(2);
+  });
+});
+
+describe("clickRate", () => {
+  it("spreads the last five seconds of clicks over a second", () => {
+    const clicks = [
+      { at: 1, amount: 10 },
+      { at: 4, amount: 5 },
+      { at: 5.5, amount: 5 },
+    ];
+    expect(clickRate(clicks, 6)).toBe(2);
+  });
+
+  it("is zero when nobody has clicked lately", () => {
+    expect(clickRate([{ at: 1, amount: 50 }], 7)).toBe(0);
   });
 });

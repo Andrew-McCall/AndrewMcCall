@@ -41,6 +41,12 @@ const GOLD_MULTIPLIER = 5;
 const GOLD_SECONDS = 6;
 const TICK_SECONDS = 0.1;
 const FLOAT_MS = 800;
+const CLICK_SPAN = 5;
+
+interface Click {
+  at: number;
+  amount: number;
+}
 
 const MARKUP = `
   <div class="toy-bar">
@@ -74,6 +80,12 @@ export const reach = (owned: number[], affordable: boolean[]): number => {
   return next === -1 ? owned.length : next + 1;
 };
 
+const recent = (clicks: Click[], now: number): Click[] =>
+  clicks.filter((click) => now - click.at < CLICK_SPAN);
+
+export const clickRate = (clicks: Click[], now: number): number =>
+  recent(clicks, now).reduce((sum, click) => sum + click.amount, 0) / CLICK_SPAN;
+
 const toy: Toy = (host) => {
   host.body.innerHTML = MARKUP;
   const banana = $<HTMLButtonElement>("#nana", host.body);
@@ -89,6 +101,7 @@ const toy: Toy = (host) => {
   let owned = SHOP.map(() => 0);
   let made = SHOP.map(() => 0);
   let wait = SHOP.map(() => 0);
+  let clicks: Click[] = [];
   let seen = 0;
   let elapsed = 0;
   let goldLeft = 0;
@@ -129,7 +142,7 @@ const toy: Toy = (host) => {
     const golden = goldLeft > 0 ? ` · golden ×${GOLD_MULTIPLIER} ${Math.ceil(goldLeft)}s` : "";
     count.textContent = `${format(bananas)} banana${plural}`;
     rate.textContent =
-      `${format(perClick())} a click · ${format(perSecond())} a second${golden}`;
+      `${format(perClick())} a click · ${format(perSecond() + clickRate(clicks, elapsed))} a second${golden}`;
     seen = Math.max(seen, reach(owned, SHOP.map((_, index) => bananas >= cost(index))));
     rows.forEach((row, index) => {
       const item = SHOP[index];
@@ -150,6 +163,7 @@ const toy: Toy = (host) => {
 
   function grow(): void {
     elapsed += TICK_SECONDS;
+    clicks = recent(clicks, elapsed);
     SHOP.forEach((item, index) => {
       if (!item.every || !owned[index]) return;
       wait[index] += TICK_SECONDS;
@@ -192,6 +206,7 @@ const toy: Toy = (host) => {
     });
     const amount = perClick() * multiplier;
     bananas += amount;
+    clicks.push({ at: elapsed, amount });
     float(event, amount);
     paint();
   });
@@ -202,6 +217,7 @@ const toy: Toy = (host) => {
     owned = SHOP.map(() => 0);
     made = SHOP.map(() => 0);
     wait = SHOP.map(() => 0);
+    clicks = [];
     seen = 0;
     elapsed = 0;
     goldLeft = 0;
