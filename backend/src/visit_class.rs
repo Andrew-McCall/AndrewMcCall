@@ -50,6 +50,7 @@ pub const VALID_ROUTES: &[&str] = &[
     "/secret/languages",
     "/secret/python",
     "/secret/notes",
+    "/secret/ukrainian",
     "/secret/admin",
     "/secret/admin/visits",
     "/secret/admin/posts",

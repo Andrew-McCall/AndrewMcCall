@@ -17,6 +17,7 @@ mod site;
 mod slug;
 mod text;
 mod stats;
+mod ukrainian;
 mod visit_class;
 
 use config::{ApiConfig, SharedConfig};
@@ -118,6 +119,12 @@ async fn route(
         (&Method::GET, "/live/events") => live::lobby_events(req, peer, &config).await,
         (&Method::GET, "/live/ice") => live::ice(req, peer, &config).await,
 
+        (&Method::GET, "/uk") => ukrainian::state(req, peer, &config).await,
+        (&Method::POST, "/uk/done") => ukrainian::done(req, &config).await,
+        (&Method::POST, "/uk/goto") => ukrainian::goto(req, &config).await,
+        (&Method::GET, "/uk/review") => ukrainian::cards(req, &config).await,
+        (&Method::POST, "/uk/review") => ukrainian::answer(req, &config).await,
+
         // Known path, but the method above didn't match: 405 (not 404).
         (
             _,
@@ -127,7 +134,7 @@ async fn route(
             | "/admin/posts" | "/admin/projects" | "/admin/project-tags" | "/admin/profile"
             | "/admin/details" | "/home" | "/message"
             | "/posts" | "/notes" | "/meta" | "/meta/types" | "/live/rooms" | "/live/events"
-            | "/live/ice",
+            | "/live/ice" | "/uk" | "/uk/done" | "/uk/goto" | "/uk/review",
         ) => ResponseBuilder::from(ApiError::MethodNotAllowed).into(),
 
         // Step 2: parameterized routes. Own the id/slug before moving `req`,

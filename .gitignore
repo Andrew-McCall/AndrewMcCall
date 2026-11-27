@@ -4,3 +4,6 @@
 
 # Scratch working notes (open questions, review scratchpad) — local only.
 refer.md
+
+# Python bytecode from the tools.
+__pycache__/
