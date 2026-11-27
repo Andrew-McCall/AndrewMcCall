@@ -3,12 +3,17 @@ import { caseUses, partName, readings } from "./grammar";
 
 describe("readings", () => {
   it("describes a noun", () => {
-    expect(readings("noun:inanim:f:v_zna")).toEqual(["feminine accusative singular"]);
+    expect(readings("noun:inanim:f:v_zna")).toEqual(["feminine singular, accusative"]);
   });
-  it("lists each possible case once", () => {
+  it("joins readings that differ only in case", () => {
     expect(readings("noun:anim:p:v_naz|noun:anim:p:v_zna")).toEqual([
-      "plural nominative",
-      "plural accusative",
+      "plural, nominative or accusative",
+    ]);
+  });
+  it("keeps readings apart when more than the case differs", () => {
+    expect(readings("noun:inanim:f:v_rod|noun:inanim:p:v_naz")).toEqual([
+      "feminine singular, genitive",
+      "plural, nominative",
     ]);
   });
   it("describes verbs", () => {
@@ -17,11 +22,11 @@ describe("readings", () => {
     expect(readings("verb:imperf:inf")).toEqual(["imperfective infinitive"]);
   });
   it("does not read a pronoun's person as a verb ending", () => {
-    expect(readings("noun:anim:s:v_naz:pron:pers:1")).toEqual(["nominative singular"]);
+    expect(readings("noun:anim:s:v_naz:pron:pers:1")).toEqual(["singular, nominative"]);
   });
   it("merges readings that only differ in detail the reader does not need", () => {
     expect(readings("noun:anim:m:v_naz:prop:fname|noun:anim:m:v_naz:prop:lname")).toEqual([
-      "masculine nominative singular",
+      "masculine singular, nominative",
     ]);
   });
   it("says nothing about words that do not change", () => {

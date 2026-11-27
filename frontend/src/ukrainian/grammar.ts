@@ -29,24 +29,32 @@ const WORDS: [tag: string, word: string][] = [
 
 export const partName = (part: string): string => PART[part] ?? part;
 
-const describe = (reading: string): string => {
+// A reading without its case, and the case apart.
+const describe = (reading: string): [form: string, grammatical: string] => {
   const tags = reading.split(":");
   const personal = tags.includes("pres") || tags.includes("futr") || tags.includes("impr");
   const words = WORDS.filter(([tag]) => tags.includes(tag) && (personal || !/\d/.test(tag)))
     .map(([, word]) => word);
   const grammatical = tags.find((tag) => tag in CASES);
-  if (grammatical) words.push(CASES[grammatical][0]);
   const counted = grammatical || personal || tags.includes("past");
   if (counted && !tags.includes("p") && (tags.includes("s") || /^(noun|adj|verb)/.test(reading))) {
     words.push("singular");
   }
-  return words.join(" ");
+  return [words.join(" "), grammatical ? CASES[grammatical][0] : ""];
 };
 
-// Every reading still possible, without repeats.
-export const readings = (tags: string): string[] => [
-  ...new Set(tags.split("|").map(describe).filter(Boolean)),
-];
+// Every reading still possible. Readings that differ only in case become one
+// line: "masculine singular, nominative or accusative".
+export const readings = (tags: string): string[] => {
+  const cases = new Map<string, Set<string>>();
+  for (const [form, grammatical] of tags.split("|").map(describe)) {
+    if (!cases.has(form)) cases.set(form, new Set());
+    if (grammatical) cases.get(form)!.add(grammatical);
+  }
+  return [...cases]
+    .map(([form, names]) => [form, [...names].join(" or ")].filter(Boolean).join(", "))
+    .filter(Boolean);
+};
 
 // What each possible case is for.
 export const caseUses = (tags: string): [name: string, use: string][] => [

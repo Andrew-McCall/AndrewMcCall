@@ -7,6 +7,7 @@ import type { UkCard, UkExample, UkPhrase, UkState, UkWord } from "@andrewmccall
 import { api, errorText, esc, jsonInit, PAGE_CLASS, pageTitle } from "./helpers";
 import { caseUses, partName, readings } from "./ukrainian/grammar";
 import { canType, charFor, FINGERS, keyFor, ROWS } from "./ukrainian/keyboard";
+import { sound, SOUND_KEY } from "./ukrainian/sound";
 import { accept, blank, norm, weave } from "./ukrainian/typing";
 
 const BOX = "w-full bg-stone-950/40 border border-green-900/40 p-4 text-left";
@@ -101,26 +102,42 @@ const examples = (list: UkExample[]): string =>
     )
     .join("");
 
+// One labelled line of the word card.
+const row = (label: string, body: string): string =>
+  body ? `<div class="mt-2"><span class="${LABEL}">${label}</span><div>${body}</div></div>` : "";
+
+const times = (count: number): string => `${count} time${count === 1 ? "" : "s"}`;
+
 const wordCard = (word: UkWord): string => {
+  const shown = word.accent || word.form;
+  const base = word.lemma_accent || word.lemma;
+  const senses = word.gloss.split(";").map((sense) => sense.trim()).filter(Boolean);
   const forms = readings(word.tags);
   const uses = caseUses(word.tags)
     .map(([name, use]) => `<li><span class="text-lime-300">${name}</span>: ${use}</li>`)
     .join("");
-  const met = word.seen
-    ? `You met this word ${word.seen} time${word.seen === 1 ? "" : "s"} before.`
-    : "A new word.";
+  const stress = word.accent ? "" : ' <span class="text-green-700">(stress not known)</span>';
   return `<div class="${BOX}">
     <div class="flex items-baseline gap-3 flex-wrap">
-      <span class="text-3xl text-lime-200">${esc(word.accent || word.form)}</span>
+      <span class="text-3xl text-lime-200">${esc(shown)}</span>
       ${speakButton(word.form)}
-      <span class="text-green-600">from <span class="text-lime-300">${esc(word.lemma_accent || word.lemma)}</span>, ${esc(partName(word.part))}</span>
     </div>
-    <p class="text-xl mt-1">${word.gloss ? esc(word.gloss) : '<span class="text-green-800">no dictionary entry yet</span>'}</p>
-    ${forms.length ? `<p class="mt-2">${forms.map(esc).join(' <span class="text-green-700">or</span> ')}</p>` : ""}
-    ${uses ? `<ul class="text-sm text-green-600">${uses}</ul>` : ""}
-    ${word.alts.length ? `<p class="text-sm text-green-700 mt-2">It could also be: ${word.alts.map(esc).join("; ")}</p>` : ""}
-    <p class="text-sm mt-2">${met} It comes ${word.ahead} more time${word.ahead === 1 ? "" : "s"} in this book.</p>
-    ${word.examples.length ? `<ul class="text-sm">${examples(word.examples)}</ul>` : ""}
+    ${row("Say it", `<span class="text-xl text-lime-300" title="${esc(SOUND_KEY)}">${esc(sound(shown))}</span>${stress}`)}
+    ${row(
+      "Meaning",
+      senses.length
+        ? `<ul class="text-xl">${senses.map((sense) => `<li>${esc(sense)}</li>`).join("")}</ul>`
+        : '<span class="text-green-800">no dictionary entry yet</span>',
+    )}
+    ${row("Word", `${esc(partName(word.part))}${base === shown ? "" : `, a form of <span class="text-lime-300">${esc(base)}</span> (${esc(sound(base))})`}`)}
+    ${row("Form here", forms.length ? `${forms.map(esc).join('<br><span class="text-green-700">or</span> ')}${uses ? `<ul class="text-sm text-green-600">${uses}</ul>` : ""}` : "")}
+    ${row("Same spelling, other word", word.alts.map(esc).join("<br>"))}
+    ${row(
+      "In this book",
+      `${word.seen ? `You met this word ${times(word.seen)} before.` : "This is a new word."} It comes ${times(word.ahead)} more.${
+        word.examples.length ? `<ul class="text-sm">${examples(word.examples)}</ul>` : ""
+      }`,
+    )}
   </div>`;
 };
 
@@ -303,6 +320,7 @@ const secretUkrainian = async (app: HTMLElement) => {
       </div>
       <div id="uk-keys"></div>
       <p id="uk-score" class="text-xs text-green-700"></p>
+      <p class="text-xs text-green-700">Say it: ${esc(SOUND_KEY)}</p>
       <div id="uk-card" class="flex flex-col gap-4"></div>
       <div id="uk-lesson" class="flex flex-col gap-4"></div>`;
     bindHeader();
@@ -384,7 +402,7 @@ const secretUkrainian = async (app: HTMLElement) => {
         if (ok) right += 1;
         input.disabled = true;
         call("/uk/review", { lemma_id: current.lemma_id, ok }).catch(fail);
-        slot("uk-answer").innerHTML = `<p class="text-2xl ${ok ? "text-lime-300" : "text-amber-400"}">${ok ? "Right" : "It is"}: ${esc(current.form)} ${speakButton(current.form)}</p>
+        slot("uk-answer").innerHTML = `<p class="text-2xl ${ok ? "text-lime-300" : "text-amber-400"}">${ok ? "Right" : "It is"}: ${esc(current.form)} <span class="text-lime-300">(${esc(sound(current.form))})</span> ${speakButton(current.form)}</p>
           <button id="uk-next" class="${BUTTON} self-end">Next (Enter)</button>`;
         slot("uk-next").addEventListener("click", () => card(i + 1));
         slot("uk-next").focus();
