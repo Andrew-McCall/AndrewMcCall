@@ -6,7 +6,32 @@
 
 @keyframes lap {
   to {
-    background-position-y: 8px;
+    background-position:
+      calc(var(--ox) + 40px) var(--oy),
+      calc(var(--ox) - 40px) calc(var(--oy) + 20px);
+  }
+}
+
+@keyframes ripple {
+  from {
+    scale: 0.2;
+    opacity: 1;
+  }
+  to {
+    scale: 1;
+    opacity: 0;
+  }
+}
+
+@keyframes peg {
+  50% {
+    scale: 1.35;
+  }
+}
+
+@keyframes spin {
+  to {
+    rotate: 1turn;
   }
 }
 
@@ -58,6 +83,11 @@
       var(--g-fair2) 20px 40px
     );
   }
+  .g-sand,
+  .g-water,
+  .g-ice {
+    background-position: var(--ox) var(--oy);
+  }
   .g-sand {
     background-color: var(--g-sand);
     background-image: radial-gradient(
@@ -67,14 +97,18 @@
     background-size: 8px 8px;
   }
   .g-water {
+    --crest: color-mix(in oklch, var(--g-water) 45%, var(--paper));
     background-color: var(--g-water);
-    background-image: repeating-linear-gradient(
-      0deg,
-      transparent 0 6px,
-      color-mix(in oklch, var(--g-water) 70%, var(--paper)) 6px 8px
-    );
-    background-size: 40px 8px;
-    animation: lap 2.4s linear infinite;
+    background-image:
+      radial-gradient(circle at 50% 100%, transparent 7px, var(--crest) 7.5px 8.5px, transparent 9px),
+      radial-gradient(
+        circle at 50% 100%,
+        transparent 4px,
+        color-mix(in oklch, var(--g-water) 75%, var(--paper)) 4.5px 5.5px,
+        transparent 6px
+      );
+    background-size: 40px 20px;
+    animation: lap 3s linear infinite;
   }
   .g-ice {
     background-color: var(--g-ice);
@@ -96,6 +130,58 @@
   }
   .g-shade {
     background: var(--g-kerb-side);
+  }
+  .g-shade.round,
+  .g-peg,
+  .g-portal,
+  .g-ripple {
+    border-radius: 50%;
+  }
+  .g-peg {
+    background: radial-gradient(circle at 35% 35%, var(--paper) 0 2px, var(--g-peg) 2.5px);
+    box-shadow: inset 0 0 0 1.5px var(--g-kerb);
+  }
+  .g-peg.hit {
+    animation: peg 0.18s ease-out;
+  }
+  .g-slider {
+    left: 0;
+    top: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      var(--g-kerb) 0 3px,
+      var(--g-belt) 3px 6px
+    );
+    box-shadow: 0 3px 0 var(--g-kerb-side);
+    will-change: translate;
+  }
+  .g-spinner {
+    background: var(--g-kerb);
+    box-shadow: 0 2px 0 var(--g-kerb-side);
+    will-change: rotate;
+  }
+  .g-hub {
+    border-radius: 50%;
+    background: var(--g-peg);
+  }
+  .g-portal {
+    background: repeating-conic-gradient(var(--g-portal) 0 30deg, var(--on-win) 30deg 60deg);
+    box-shadow: 0 0 0 2px var(--g-portal);
+    animation: spin 2s linear infinite;
+  }
+  .g-portal.out {
+    --g-portal: var(--g-portal-out);
+    animation-direction: reverse;
+  }
+  .g-ripple {
+    border: 1.5px solid var(--paper);
+    animation: ripple 0.6s ease-out forwards;
+    pointer-events: none;
+  }
+  .g-ripple.big {
+    border-width: 2px;
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--paper) 40%, transparent);
+    animation-duration: 0.85s;
   }
   .g-kerb,
   .g-wall {
@@ -143,6 +229,9 @@
     scale: 0;
     opacity: 0.4;
   }
+  .g-ball.sunk {
+    background: var(--g-deep);
+  }
   .g-ball.ready::after {
     content: "";
     position: absolute;
@@ -166,6 +255,9 @@
     .g-ball.ready::after,
     .g-water,
     .g-belt,
+    .g-portal,
+    .g-peg,
+    .g-ripple,
     .g-ball {
       transition: none;
       animation: none;

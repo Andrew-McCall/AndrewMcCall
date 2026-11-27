@@ -84,6 +84,11 @@ body:has(.tiles) > footer {
   --g-kerb-side: oklch(0.66 0.05 calc(100 + var(--hue)));
   --g-sand: oklch(0.9 0.09 calc(90 + var(--hue)));
   --g-water: oklch(0.72 0.12 calc(235 + var(--hue)));
+  --g-deep: oklch(0.55 0.13 calc(245 + var(--hue)));
+  --g-bank: oklch(0.6 0.1 calc(225 + var(--hue)));
+  --g-peg: oklch(0.68 0.2 calc(20 + var(--hue)));
+  --g-portal: oklch(0.7 0.18 calc(300 + var(--hue)));
+  --g-portal-out: oklch(0.75 0.16 calc(200 + var(--hue)));
   --g-ice: oklch(0.93 0.04 calc(215 + var(--hue)));
   --g-belt: oklch(0.8 0.13 calc(60 + var(--hue)));
   --w-mines: oklch(0.86 0.09 calc(215 + var(--hue)));
