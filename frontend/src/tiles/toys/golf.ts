@@ -67,7 +67,7 @@ const PEG_RADIUS = 6;
 const PEG_KICK = 1.15;
 const WALL_LONG = 22;
 const WALL_THIN = 6;
-const SLIDE = 13;
+const SLIDE = CELL / 2 - WALL_THIN / 2 - BALL_RADIUS * 2 - 1;
 const SPIN_ARM = 15;
 const SPIN_WIDTH = 4;
 const SPIN_SPEED = 1.8;
@@ -700,6 +700,11 @@ const toy: Toy = (host) => {
     }
   }
 
+  function keepIn(): void {
+    bounceOffEdges();
+    solid.forEach(bounceOffSolid);
+  }
+
   function bounceOffSolid([x, y, w, h]: Rect): boolean {
     const left = ball.x - (x - BALL_RADIUS);
     const right = x + w + BALL_RADIUS - ball.x;
@@ -826,10 +831,9 @@ const toy: Toy = (host) => {
     if (!hole) return;
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
-    bounceOffEdges();
-    solid.forEach(bounceOffSolid);
     pushByMovers();
     bounceOffPegs();
+    keepIn();
     throughPortals();
 
     const under = cellKey(Math.floor(ball.x / CELL), Math.floor(ball.y / CELL));
@@ -900,6 +904,7 @@ const toy: Toy = (host) => {
     moveObstacles();
     if (!busy && !moving()) {
       pushByMovers();
+      keepIn();
       if (moving()) ready();
     }
     if (busy || !moving()) return;
