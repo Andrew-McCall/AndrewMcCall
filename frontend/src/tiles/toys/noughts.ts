@@ -52,7 +52,7 @@ const MARKUP = `
     <button class="btn" type="button" data-restart>Restart</button>
     <span class="tag" id="ttt-status" aria-live="polite"></span>
   </div>
-  <div class="ttt-wrap field"><div class="ttt" id="ttt"></div></div>
+  <div class="ttt-wrap field"><div class="ttt snap" id="ttt"></div></div>
 `;
 
 const other = (player: number): number => X + O - player;

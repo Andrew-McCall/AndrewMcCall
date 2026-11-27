@@ -8,8 +8,6 @@
     container-type: size;
   }
   .ttt {
-    width: 100cqw;
-    height: 100cqh;
     display: grid;
     --n: 3;
   }

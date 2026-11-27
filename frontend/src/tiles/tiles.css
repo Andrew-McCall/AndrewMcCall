@@ -936,14 +936,19 @@ body:has(.tiles) > footer {
       font: 500 12px/1 var(--mono);
     }
     .apps {
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       overflow: visible;
     }
     .apps .app {
-      flex: 1 0 auto;
       justify-content: center;
       height: 36px;
-      padding-inline: 6px;
+      padding-inline: 4px;
+    }
+    @media (max-width: 359px) {
+      .apps .app::before {
+        display: none;
+      }
     }
     .bar-right {
       order: 1;
@@ -1039,6 +1044,19 @@ body:has(.tiles) > footer {
 
   .field {
     background-color: var(--on-win);
+  }
+
+  .snap {
+    width: 100cqw;
+    height: 100cqh;
+  }
+
+  @container (1 / 2 <= aspect-ratio <= 2) {
+    .snap {
+      width: min(100cqw, 100cqh);
+      height: min(100cqw, 100cqh);
+      place-self: center;
+    }
   }
 
   .px i.h {
