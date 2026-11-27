@@ -44,8 +44,8 @@ describe("boost", () => {
     expect(boost(29)).toBeCloseTo(1.1);
   });
 
-  it("adds ten percent more for every hundred", () => {
-    expect(boost(100)).toBeCloseTo(1.6);
-    expect(boost(200)).toBeCloseTo(2.2);
+  it("adds ten percent of the boosted output for every hundred", () => {
+    expect(boost(100)).toBeCloseTo(1.65);
+    expect(boost(200)).toBeCloseTo(2.4);
   });
 });

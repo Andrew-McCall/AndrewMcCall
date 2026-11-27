@@ -86,7 +86,7 @@ export const reach = (owned: number[], affordable: boolean[]): number => {
 };
 
 export const boost = (owned: number): number =>
-  1 + 0.05 * Math.floor(owned / 10) + 0.1 * Math.floor(owned / 100);
+  (1 + 0.05 * Math.floor(owned / 10)) * (1 + 0.1 * Math.floor(owned / 100));
 
 const recent = (clicks: Click[], now: number): Click[] =>
   clicks.filter((click) => now - click.at < CLICK_SPAN);
