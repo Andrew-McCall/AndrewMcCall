@@ -609,6 +609,7 @@ const toy: Toy = (host) => {
       return arm;
     });
     moveObstacles();
+    block("g-flag", [next.cup[0] - 6.5, next.cup[1] - 6.5, 13, 13], raised);
     ballEl = block("g-ball", undefined, raised);
     flashEl = block("g-flash");
     aimEl = block("g-aim");

@@ -267,7 +267,7 @@
     background: var(--on-win);
     box-shadow: 0 0 0 2px oklch(0.62 0.14 calc(142 + var(--hue)));
   }
-  .g-cup::before {
+  .g-flag::before {
     content: "";
     position: absolute;
     left: 6px;
@@ -276,7 +276,7 @@
     height: 22px;
     background: var(--paper);
   }
-  .g-cup::after {
+  .g-flag::after {
     content: "";
     position: absolute;
     left: 8px;
