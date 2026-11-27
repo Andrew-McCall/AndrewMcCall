@@ -41,10 +41,11 @@ describe("drainPath", () => {
 });
 
 describe("chaos", () => {
-  it("starts flat and grows 20% a level", () => {
+  it("starts flat and grows 14% a level", () => {
     expect(chaos(0)).toBe(0);
-    for (let n = 1; n < 10; n++)
-      expect(chaos(n + 1)).toBeCloseTo(chaos(n) * 1.2);
+    expect(chaos(1)).toBe(8);
+    for (let n = 1; n < 30; n++)
+      expect(chaos(n + 1)).toBeCloseTo(chaos(n) * 1.14);
   });
 });
 

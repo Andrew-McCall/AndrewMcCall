@@ -100,7 +100,7 @@ interface Design {
 
 const GRASS_COST = 1;
 const FIRST_CHAOS = 8;
-const CHAOS_GROWTH = 1.2;
+const CHAOS_GROWTH = 1.14;
 const DESIGN_TRIES = 400;
 export const COST: Record<Obstacle, number> = {
   sand: 2,
