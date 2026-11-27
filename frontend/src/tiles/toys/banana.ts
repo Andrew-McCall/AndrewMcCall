@@ -145,7 +145,9 @@ const toy: Toy = (host) => {
     button.addEventListener("click", () => buy(index));
     shop.append(row);
     const [name, price] = button.children as HTMLCollectionOf<HTMLElement>;
-    return { row, button, name, price, stat: $(".nana-stat", row) };
+    const stat = $(".nana-stat", row);
+    stat.style.setProperty("--every", `${SHOP[index].every}s`);
+    return { row, button, name, price, stat };
   });
 
   function paint(): void {
@@ -164,9 +166,7 @@ const toy: Toy = (host) => {
       row.stat.textContent = owned[index]
         ? `${gain(item, output(index))}${bonus(owned[index])} · ${short(made[index])} made`
         : `${gain(item, item.gives)} each`;
-      const ticking = item.every > 0 && owned[index] > 0;
-      row.stat.classList.toggle("ticking", ticking);
-      row.stat.style.setProperty("--p", ticking ? `${(wait[index] / item.every) * 100}%` : "0%");
+      row.stat.classList.toggle("ticking", item.every > 0 && owned[index] > 0);
     });
     const hidden = SHOP.length - seen;
     more.textContent = hidden ? `${hidden} more to find…` : "";
@@ -180,6 +180,7 @@ const toy: Toy = (host) => {
       wait[index] += TICK_SECONDS;
       while (wait[index] >= item.every) {
         wait[index] -= item.every;
+        rows[index].stat.style.setProperty("--delay", `${-wait[index]}s`);
         bananas += output(index);
         made[index] += output(index);
         if (host.visible()) floatAnywhere(output(index));
@@ -238,6 +239,7 @@ const toy: Toy = (host) => {
     owned = SHOP.map(() => 0);
     made = SHOP.map(() => 0);
     wait = SHOP.map(() => 0);
+    for (const row of rows) row.stat.style.removeProperty("--delay");
     clicks = [];
     seen = 0;
     elapsed = 0;
