@@ -45,6 +45,10 @@
   }
 }
 
+body:has(.tiles) {
+  min-height: 0;
+}
+
 body:has(.tiles) > footer {
   display: none;
 }
@@ -924,23 +928,48 @@ body:has(.tiles) > footer {
       padding-right: 12px;
     }
     .bar {
-      height: auto;
-      flex-wrap: wrap;
-      gap: 0;
+      display: contents;
+    }
+    :is(.apps, .bar-right) {
+      flex: none;
+      background: var(--bar);
+      font: 500 12px/1 var(--mono);
     }
     .apps {
-      flex: 0 0 100%;
-      height: 40px;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+    .apps .app {
+      flex: 1 0 auto;
+      justify-content: center;
+      height: 36px;
+      padding-inline: 6px;
     }
     .bar-right {
-      flex: 1;
+      order: 1;
       height: 36px;
       padding-inline: 12px;
       justify-content: space-between;
     }
+    &[data-plain] .apps {
+      position: sticky;
+      top: env(safe-area-inset-top, 0px);
+      z-index: 5;
+    }
+    &[data-plain] .bar-right {
+      position: sticky;
+      bottom: env(safe-area-inset-bottom, 0px);
+      z-index: 5;
+    }
     #hue {
       flex: 1;
+      min-width: 48px;
       max-width: 220px;
+    }
+    #zone {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .app kbd {
       display: none;
