@@ -127,9 +127,10 @@ function start(root: HTMLElement, signal: AbortSignal): void {
     return `${location.origin}${location.pathname}?seed=${seed.toString(36)}${toy}`;
   };
   const linkedToy = params.get("toy") ?? undefined;
-  if (linkedSeed > 0 && isToy(linkedToy)) {
+  if (isToy(linkedToy)) {
     if (!open.includes(linkedToy!)) open.push(linkedToy!);
     focus = linkedToy;
+    plain = false;
   }
 
   const started = new Map<string, Promise<void>>();
