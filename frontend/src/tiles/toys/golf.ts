@@ -80,7 +80,8 @@ const NEIGHBOURS: Point[] = [
   [0, -1],
 ];
 
-type Obstacle = TrapKind | "peg" | "bump" | "slider" | "spinner" | "portal";
+type Obstacle =
+  TrapKind | "peg" | "bump" | "slider" | "spinner" | "portal" | "void";
 
 interface Placed {
   kind: Obstacle;
@@ -107,6 +108,7 @@ export const COST: Record<Obstacle, number> = {
   ice: 2,
   peg: 2,
   bump: 4,
+  void: 3,
   belt: 5,
   water: 6,
   slider: 6,
@@ -125,6 +127,7 @@ const RARITY: Pick[] = [
   { parts: ["slider"], chance: 0.05 },
   { parts: ["water"], chance: 0.08 },
   { parts: ["belt"], chance: 0.08 },
+  { parts: ["void"], chance: 0.08 },
   { parts: ["bump"], chance: 0.1 },
   { parts: ["peg"], chance: 0.12 },
   { parts: ["ice"], chance: 0.12 },
@@ -224,6 +227,10 @@ export function design(path: Point[], budget: number, random: Rng): Design {
 
   const fit = (choice: Pick, [dx, dy]: Point): Point[] | null => {
     const open = fairwayCells(fairway).filter(free);
+    if (choice.parts[0] === "void") {
+      const holes = fairwayEdge(fairway, used, 2);
+      return holes.length ? [pointOf(pick(random, holes))] : null;
+    }
     if (!open.length) return null;
     const start = pick(random, open);
     if (choice.parts[0] === "portal") {
@@ -262,7 +269,7 @@ export function design(path: Point[], budget: number, random: Rng): Design {
       break;
     }
     if (done) continue;
-    const edge = fairwayEdge(fairway);
+    const edge = fairwayEdge(fairway, used, 1);
     if (!edge.length) continue;
     fairway.add(pick(random, edge));
     left -= GRASS_COST;
@@ -270,15 +277,23 @@ export function design(path: Point[], budget: number, random: Rng): Design {
   return { fairway, placed };
 }
 
-function fairwayEdge(fairway: Set<number>): number[] {
+const pointOf = (id: number): Point => [id % COLUMNS, Math.floor(id / COLUMNS)];
+
+function fairwayEdge(
+  fairway: Set<number>,
+  used: Set<number>,
+  touching: number,
+): number[] {
   const edge: number[] = [];
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLUMNS; x++) {
-      const touches = NEIGHBOURS.some(
+      const id = cellId(x, y);
+      if (fairway.has(id) || used.has(id)) continue;
+      const touches = NEIGHBOURS.filter(
         ([dx, dy]) =>
           inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
-      );
-      if (!fairway.has(cellId(x, y)) && touches) edge.push(cellId(x, y));
+      ).length;
+      if (touches >= touching) edge.push(id);
     }
   }
   return edge;
@@ -394,7 +409,9 @@ const toy: Toy = (host) => {
     for (const { kind, at, dir } of placed) {
       const [x, y] = at;
       const [cx, cy] = centre(x, y);
-      if (kind === "portal") {
+      if (kind === "void") {
+        continue;
+      } else if (kind === "portal") {
         portals.push(at);
       } else if (kind === "water") {
         pond(x, y);

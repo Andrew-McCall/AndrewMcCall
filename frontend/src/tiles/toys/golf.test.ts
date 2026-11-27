@@ -90,6 +90,19 @@ describe("design", () => {
     expect(seen).toBeGreaterThan(0);
   });
 
+  it("keeps void cells off the fairway so late holes leave gaps", () => {
+    let voids = 0;
+    for (let seed = 1; seed < 100; seed++) {
+      const { fairway, placed } = design(path, chaos(40), rng(seed));
+      for (const p of placed.filter((p) => p.kind === "void")) {
+        voids++;
+        expect(fairway.has(p.at[1] * 8 + p.at[0])).toBe(false);
+      }
+      expect(fairway.size).toBeLessThan(40);
+    }
+    expect(voids).toBeGreaterThan(0);
+  });
+
   it("makes portals rare", () => {
     let holes = 0;
     for (let seed = 1; seed < 500; seed++) {
