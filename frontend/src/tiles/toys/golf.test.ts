@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chaos, drainPath, scatter, widen } from "./golf";
+import { COST, chaos, drainPath, scatter, widen } from "./golf";
 import { rng } from "../toy";
 
 type Point = [number, number];
@@ -51,17 +51,6 @@ describe("chaos", () => {
 describe("scatter", () => {
   const grid: Point[] = [];
   for (let x = 0; x < 8; x++) for (let y = 0; y < 5; y++) grid.push([x, y]);
-  const cost = {
-    sand: 1,
-    ice: 1,
-    peg: 1,
-    bump: 1,
-    belt: 2,
-    water: 2,
-    slider: 3,
-    portal: 3,
-    spinner: 4,
-  };
 
   it("places nothing on a flat hole", () => {
     expect(scatter(0, grid, rng(1))).toEqual([]);
@@ -73,8 +62,8 @@ describe("scatter", () => {
       const placed = scatter(budget, grid, rng(seed));
       const portals = placed.filter((p) => p.kind === "portal").length;
       const spent =
-        placed.reduce((sum, p) => sum + cost[p.kind], 0) -
-        (portals / 2) * cost.portal;
+        placed.reduce((sum, p) => sum + COST[p.kind], 0) -
+        (portals / 2) * COST.portal;
       expect(spent).toBeLessThanOrEqual(budget);
       expect(new Set(placed.map((p) => p.at.join())).size).toBe(placed.length);
       expect([0, 2]).toContain(portals);
@@ -117,7 +106,7 @@ describe("widen", () => {
 
   it("pays for each grass cell", () => {
     const { fairway, left } = widen(path, rng(7), 3.2);
-    expect(fairway.size).toBe(path.length + 6);
+    expect(fairway.size).toBe(path.length + 3);
     expect(left).toBeCloseTo(0.2);
   });
 });

@@ -93,20 +93,20 @@ interface Pick {
   weight: number;
 }
 
-const GRASS_COST = 0.5;
+const GRASS_COST = 1;
 const GRASS_SHARE = 0.3;
-const FIRST_CHAOS = 4;
+const FIRST_CHAOS = 8;
 const CHAOS_GROWTH = 1.2;
-const COST: Record<Obstacle, number> = {
-  sand: 1,
-  ice: 1,
-  peg: 1,
-  bump: 1,
-  belt: 2,
-  water: 2,
-  slider: 3,
-  portal: 3,
-  spinner: 4,
+export const COST: Record<Obstacle, number> = {
+  sand: 2,
+  ice: 2,
+  peg: 2,
+  bump: 2,
+  belt: 4,
+  water: 4,
+  slider: 6,
+  portal: 6,
+  spinner: 8,
 };
 const PICKS: Pick[] = [
   ...(Object.keys(COST) as Obstacle[]).map((kind) => ({
