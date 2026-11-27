@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clickRate, reach } from "./banana";
+import { boost, clickRate, reach } from "./banana";
 
 describe("reach", () => {
   it("shows only the first item when nothing is owned or affordable", () => {
@@ -31,5 +31,21 @@ describe("clickRate", () => {
 
   it("is zero when nobody has clicked lately", () => {
     expect(clickRate([{ at: 1, amount: 50 }], 7)).toBe(0);
+  });
+});
+
+describe("boost", () => {
+  it("adds nothing below ten", () => {
+    expect(boost(9)).toBe(1);
+  });
+
+  it("adds five percent for every ten", () => {
+    expect(boost(10)).toBeCloseTo(1.05);
+    expect(boost(29)).toBeCloseTo(1.1);
+  });
+
+  it("adds ten percent more for every hundred", () => {
+    expect(boost(100)).toBeCloseTo(1.6);
+    expect(boost(200)).toBeCloseTo(2.2);
   });
 });

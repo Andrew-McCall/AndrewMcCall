@@ -75,10 +75,18 @@ const short = (amount: number): string => compact.format(Math.floor(amount));
 const gain = (item: ShopItem, amount: number): string =>
   item.every ? `+${short(amount)} every ${item.every}s` : `+${short(amount)} a click`;
 
+const bonus = (owned: number): string => {
+  const extra = Math.round((boost(owned) - 1) * 100);
+  return extra ? ` (+${extra}%)` : "";
+};
+
 export const reach = (owned: number[], affordable: boolean[]): number => {
   const next = owned.findIndex((count, index) => count === 0 && !affordable[index]);
   return next === -1 ? owned.length : next + 1;
 };
+
+export const boost = (owned: number): number =>
+  1 + 0.05 * Math.floor(owned / 10) + 0.1 * Math.floor(owned / 100);
 
 const recent = (clicks: Click[], now: number): Click[] =>
   clicks.filter((click) => now - click.at < CLICK_SPAN);
@@ -110,12 +118,15 @@ const toy: Toy = (host) => {
   const cost = (index: number): number =>
     Math.ceil(SHOP[index].price * 1.15 ** owned[index]);
 
+  const output = (index: number): number =>
+    SHOP[index].gives * owned[index] * boost(owned[index]);
+
   const perClick = (): number =>
-    SHOP.reduce((sum, item, index) => (item.every ? sum : sum + item.gives * owned[index]), 1);
+    SHOP.reduce((sum, item, index) => (item.every ? sum : sum + output(index)), 1);
 
   const perSecond = (): number =>
     SHOP.reduce(
-      (sum, item, index) => (item.every ? sum + (item.gives * owned[index]) / item.every : sum),
+      (sum, item, index) => (item.every ? sum + output(index) / item.every : sum),
       0,
     );
 
@@ -151,7 +162,7 @@ const toy: Toy = (host) => {
       row.price.textContent = short(cost(index));
       row.button.disabled = bananas < cost(index);
       row.stat.textContent = owned[index]
-        ? `${gain(item, item.gives * owned[index])} · ${short(made[index])} made`
+        ? `${gain(item, output(index))}${bonus(owned[index])} · ${short(made[index])} made`
         : `${gain(item, item.gives)} each`;
       const ticking = item.every > 0 && owned[index] > 0;
       row.stat.classList.toggle("ticking", ticking);
@@ -169,8 +180,9 @@ const toy: Toy = (host) => {
       wait[index] += TICK_SECONDS;
       while (wait[index] >= item.every) {
         wait[index] -= item.every;
-        bananas += item.gives * owned[index];
-        made[index] += item.gives * owned[index];
+        bananas += output(index);
+        made[index] += output(index);
+        if (host.visible()) floatAnywhere(output(index));
       }
     });
     if (goldLeft > 0) {
@@ -186,28 +198,37 @@ const toy: Toy = (host) => {
     if (host.visible()) paint();
   }
 
-  const float = (event: MouseEvent, amount: number): void => {
+  const float = (x: number, y: number, amount: number): void => {
     if (still.matches) return;
-    const box = banana.getBoundingClientRect();
-    const keyed = event.detail === 0;
     const pop = document.createElement("span");
     pop.className = "nana-pop";
     pop.textContent = `+${short(amount)}`;
-    pop.style.left = `${keyed ? box.width / 2 : event.clientX - box.left}px`;
-    pop.style.top = `${keyed ? box.height / 2 : event.clientY - box.top}px`;
+    pop.style.left = `${x}px`;
+    pop.style.top = `${y}px`;
     banana.append(pop);
     host.later(FLOAT_MS, () => pop.remove());
   };
 
+  const floatAnywhere = (amount: number): void =>
+    float(
+      banana.clientWidth * (0.2 + Math.random() * 0.6),
+      banana.clientHeight * (0.3 + Math.random() * 0.5),
+      amount,
+    );
+
   banana.addEventListener("click", (event) => {
     const multiplier = goldLeft > 0 ? GOLD_MULTIPLIER : 1;
     SHOP.forEach((item, index) => {
-      if (!item.every) made[index] += item.gives * owned[index] * multiplier;
+      if (!item.every) made[index] += output(index) * multiplier;
     });
     const amount = perClick() * multiplier;
     bananas += amount;
     clicks.push({ at: elapsed, amount });
-    float(event, amount);
+    if (event.detail === 0) floatAnywhere(amount);
+    else {
+      const box = banana.getBoundingClientRect();
+      float(event.clientX - box.left, event.clientY - box.top, amount);
+    }
     paint();
   });
   host.every(TICK_SECONDS * 1000, grow);
