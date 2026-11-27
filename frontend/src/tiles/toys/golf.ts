@@ -90,37 +90,46 @@ interface Placed {
 
 interface Pick {
   parts: Obstacle[];
-  weight: number;
+  chance: number;
+}
+
+interface Design {
+  fairway: Set<number>;
+  placed: Placed[];
 }
 
 const GRASS_COST = 1;
-const GRASS_SHARE = 0.3;
 const FIRST_CHAOS = 8;
 const CHAOS_GROWTH = 1.2;
+const DESIGN_TRIES = 400;
 export const COST: Record<Obstacle, number> = {
   sand: 2,
   ice: 2,
   peg: 2,
-  bump: 2,
-  belt: 4,
-  water: 4,
+  bump: 4,
+  belt: 5,
+  water: 6,
   slider: 6,
   portal: 6,
   spinner: 8,
 };
-const PICKS: Pick[] = [
-  ...(Object.keys(COST) as Obstacle[]).map((kind) => ({
-    parts: [kind],
-    weight: kind === "portal" ? 0.04 : 1,
-  })),
-  { parts: ["belt", "water"], weight: 0.5 },
-  { parts: ["belt", "ice"], weight: 0.5 },
-  { parts: ["ice", "water"], weight: 0.5 },
-  { parts: ["ice", "belt"], weight: 0.5 },
-  { parts: ["belt", "belt", "water"], weight: 0.3 },
-  { parts: ["ice", "ice", "spinner"], weight: 0.3 },
+const RARITY: Pick[] = [
+  { parts: ["portal"], chance: 0.01 },
+  { parts: ["spinner"], chance: 0.03 },
+  { parts: ["ice", "ice", "spinner"], chance: 0.03 },
+  { parts: ["belt", "belt", "water"], chance: 0.03 },
+  { parts: ["belt", "water"], chance: 0.05 },
+  { parts: ["belt", "ice"], chance: 0.05 },
+  { parts: ["ice", "water"], chance: 0.05 },
+  { parts: ["ice", "belt"], chance: 0.05 },
+  { parts: ["slider"], chance: 0.05 },
+  { parts: ["water"], chance: 0.08 },
+  { parts: ["belt"], chance: 0.08 },
+  { parts: ["bump"], chance: 0.1 },
+  { parts: ["peg"], chance: 0.12 },
+  { parts: ["ice"], chance: 0.12 },
+  { parts: ["sand"], chance: 0.12 },
 ];
-const SCATTER_TRIES = 200;
 
 const TURF: Surface = { drag: 1.9, grip: 34 };
 const SAND: Surface = { drag: 6, grip: 90 };
@@ -170,31 +179,6 @@ function wander(random: Rng): Point[] {
   return path;
 }
 
-export function widen(
-  path: Point[],
-  random: Rng,
-  budget: number,
-): { fairway: Set<number>; left: number } {
-  const fairway = new Set(path.map(([x, y]) => cellId(x, y)));
-  let left = budget;
-  while (left >= GRASS_COST) {
-    const edge: number[] = [];
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLUMNS; x++) {
-        const touches = NEIGHBOURS.some(
-          ([dx, dy]) =>
-            inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
-        );
-        if (!fairway.has(cellId(x, y)) && touches) edge.push(cellId(x, y));
-      }
-    }
-    if (!edge.length) break;
-    fairway.add(pick(random, edge));
-    left -= GRASS_COST;
-  }
-  return { fairway, left };
-}
-
 function wallsAround(fairway: Set<number>): Rect[] {
   const walls: Rect[] = [];
   for (let y = 0; y < ROWS; y++) {
@@ -227,54 +211,77 @@ export const chaos = (level: number): number =>
 const costOf = (pick: Pick): number =>
   pick.parts.reduce((sum, part) => sum + COST[part], 0);
 
-function weighted(random: Rng, picks: Pick[]): Pick {
-  let roll = random() * picks.reduce((sum, p) => sum + p.weight, 0);
-  for (const p of picks) {
-    roll -= p.weight;
-    if (roll < 0) return p;
-  }
-  return picks[picks.length - 1];
-}
-
-export function scatter(budget: number, spots: Point[], random: Rng): Placed[] {
-  const free = new Set(spots.map(([x, y]) => cellKey(x, y)));
-  const isFree = ([x, y]: Point): boolean => free.has(cellKey(x, y));
+export function design(path: Point[], budget: number, random: Rng): Design {
+  const fairway = new Set(path.map(([x, y]) => cellId(x, y)));
+  const used = new Set(
+    [path[0], path[path.length - 1]].map(([x, y]) => cellId(x, y)),
+  );
+  const free = ([x, y]: Point): boolean =>
+    inside(x, y) && fairway.has(cellId(x, y)) && !used.has(cellId(x, y));
   const placed: Placed[] = [];
   let left = budget;
   let portal = false;
-  for (let tries = 0; tries < SCATTER_TRIES && free.size; tries++) {
-    const picks = PICKS.filter(
-      (p) => costOf(p) <= left && !(portal && p.parts[0] === "portal"),
-    );
-    if (!picks.length) break;
-    const choice = weighted(random, picks);
-    const open = spots.filter(isFree);
+
+  const fit = (choice: Pick, [dx, dy]: Point): Point[] | null => {
+    const open = fairwayCells(fairway).filter(free);
+    if (!open.length) return null;
     const start = pick(random, open);
-    const dir = pick(random, NEIGHBOURS);
-    let cells = choice.parts.map((_, i): Point => [
-      start[0] + dir[0] * i,
-      start[1] + dir[1] * i,
-    ]);
     if (choice.parts[0] === "portal") {
       const far = open.filter(
         ([x, y]) => Math.abs(x - start[0]) + Math.abs(y - start[1]) >= 3,
       );
-      if (!far.length) continue;
-      cells = [start, pick(random, far)];
-      portal = true;
+      return far.length ? [start, pick(random, far)] : null;
     }
-    if (!cells.every(isFree)) continue;
-    cells.forEach((at, i) => {
-      free.delete(cellKey(...at));
-      placed.push({
-        kind: choice.parts[Math.min(i, choice.parts.length - 1)],
-        at,
-        dir,
+    const cells = choice.parts.map((_, i): Point => [
+      start[0] + dx * i,
+      start[1] + dy * i,
+    ]);
+    return cells.every(free) ? cells : null;
+  };
+
+  for (let tries = 0; tries < DESIGN_TRIES && left >= GRASS_COST; tries++) {
+    let done = false;
+    for (const choice of RARITY) {
+      if (random() >= choice.chance) continue;
+      if (costOf(choice) > left || (portal && choice.parts[0] === "portal"))
+        continue;
+      const dir = pick(random, NEIGHBOURS);
+      const cells = fit(choice, dir);
+      if (!cells) continue;
+      cells.forEach((at, i) => {
+        used.add(cellId(...at));
+        placed.push({
+          kind: choice.parts[Math.min(i, choice.parts.length - 1)],
+          at,
+          dir,
+        });
       });
-    });
-    left -= costOf(choice);
+      portal ||= choice.parts[0] === "portal";
+      left -= costOf(choice);
+      done = true;
+      break;
+    }
+    if (done) continue;
+    const edge = fairwayEdge(fairway);
+    if (!edge.length) continue;
+    fairway.add(pick(random, edge));
+    left -= GRASS_COST;
   }
-  return placed;
+  return { fairway, placed };
+}
+
+function fairwayEdge(fairway: Set<number>): number[] {
+  const edge: number[] = [];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLUMNS; x++) {
+      const touches = NEIGHBOURS.some(
+        ([dx, dy]) =>
+          inside(x + dx, y + dy) && fairway.has(cellId(x + dx, y + dy)),
+      );
+      if (!fairway.has(cellId(x, y)) && touches) edge.push(cellId(x, y));
+    }
+  }
+  return edge;
 }
 
 export function drainPath(
@@ -356,8 +363,7 @@ const toy: Toy = (host) => {
   function generate(n: number): Hole {
     const random = rng(seed + n * 7919);
     const path = wander(random);
-    const budget = chaos(n);
-    const { fairway, left } = widen(path, random, budget * GRASS_SHARE);
+    const { fairway, placed } = design(path, chaos(n), random);
     const cells = fairwayCells(fairway);
     const bumps: Rect[] = [];
     const pegs: Point[] = [];
@@ -373,10 +379,6 @@ const toy: Toy = (host) => {
       x * CELL + CELL / 2,
       y * CELL + CELL / 2,
     ];
-    const spots = cells.filter(
-      ([x, y]) => !(x === teeX && y === teeY) && !(x === cupX && y === cupY),
-    );
-
     const portals: Point[] = [];
     const trap = (
       x: number,
@@ -389,11 +391,7 @@ const toy: Toy = (host) => {
       traps.set(turnPoint(x, y).join(), turned);
     };
 
-    for (const { kind, at, dir } of scatter(
-      budget * (1 - GRASS_SHARE) + left,
-      spots,
-      random,
-    )) {
+    for (const { kind, at, dir } of placed) {
       const [x, y] = at;
       const [cx, cy] = centre(x, y);
       if (kind === "portal") {
