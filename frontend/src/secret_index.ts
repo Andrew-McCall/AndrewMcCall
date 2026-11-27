@@ -34,6 +34,7 @@ const groups: MenuGroup[] = [
       { href: "/secret/pixels", label: "Pixel Shapes" },
       { href: "/secret/time", label: "Time" },
       { href: "/secret/notes", label: "Notes", auth: true },
+      { href: "/secret/ukrainian", label: "Ukrainian", auth: true },
     ],
   },
   {

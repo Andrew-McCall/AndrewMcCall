@@ -121,6 +121,10 @@ const routes: Record<string, Route> = {
     auth: "user",
     render: disposable("live", () => import("./secret_live.ts")),
   },
+  "/secret/ukrainian": {
+    auth: "user",
+    render: lazy(() => import("./secret_ukrainian.ts")),
+  },
   "/secret/account": {
     auth: "user",
     render: (app, me) =>
