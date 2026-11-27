@@ -921,7 +921,7 @@ body:has(.tiles) > footer {
       flex: 1;
       min-height: 0;
     }
-    .win-x {
+    .win-x, #wm-hint {
       display: none;
     }
     .win-bar {
