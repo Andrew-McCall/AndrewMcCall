@@ -108,6 +108,7 @@ struct UkCard {
     english: String,
     start: i32,
     form: String,
+    accent: String,
 }
 
 #[derive(Deserialize)]
@@ -400,9 +401,10 @@ pub async fn cards(req: Req, config: &ApiConfig) -> hyper::Response<Body> {
             let user = auth::authenticate_quiet(&req, config).await?;
             let pool = config.db.pool();
             let cards: Vec<UkCard> = sqlx::query_as(
-                "SELECT r.lemma_id, l.lemma, l.pos AS part, l.gloss, s.text, s.english, t.start, t.form \
+                "SELECT r.lemma_id, l.lemma, l.pos AS part, l.gloss, s.text, s.english, t.start, t.form, \
+                        t.accent \
                  FROM uk_reviews r JOIN uk_lemmas l ON l.id = r.lemma_id \
-                 CROSS JOIN LATERAL (SELECT o.sentence_id, o.start, o.form \
+                 CROSS JOIN LATERAL (SELECT o.sentence_id, o.start, o.form, o.accent \
                                      FROM uk_tokens o JOIN uk_seen v USING (sentence_id) \
                                      WHERE o.lemma_id = r.lemma_id AND v.user_id = r.user_id \
                                      ORDER BY random() LIMIT 1) t \

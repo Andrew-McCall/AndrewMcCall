@@ -24,6 +24,7 @@ describe("the Ukrainian layout", () => {
   it("knows which words it cannot type", () => {
     expect(canType("з-під")).toBe(true);
     expect(canType("П’ять")).toBe(true);
+    expect(canType("густи́х")).toBe(true);
     expect(canType("сыеле")).toBe(false);
     expect(canType("XV")).toBe(false);
   });

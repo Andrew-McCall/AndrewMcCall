@@ -5,9 +5,9 @@
 
 import type { UkCard, UkExample, UkPhrase, UkState, UkWord } from "@andrewmccall/api-types";
 import { api, errorText, esc, jsonInit, PAGE_CLASS, pageTitle } from "./helpers";
-import { caseUses, partName, readings } from "./ukrainian/grammar";
+import { caseUses, partName, readings, senses } from "./ukrainian/grammar";
 import { canType, charFor, FINGERS, keyFor, ROWS } from "./ukrainian/keyboard";
-import { sound, SOUND_KEY } from "./ukrainian/sound";
+import { sound, SOUND_KEY, syllableCount } from "./ukrainian/sound";
 import { accept, blank, norm, weave } from "./ukrainian/typing";
 
 const BOX = "w-full bg-stone-950/40 border border-green-900/40 p-4 text-left";
@@ -106,35 +106,40 @@ const examples = (list: UkExample[]): string =>
 const row = (label: string, body: string): string =>
   body ? `<div class="mt-2"><span class="${LABEL}">${label}</span><div>${body}</div></div>` : "";
 
-const times = (count: number): string => `${count} time${count === 1 ? "" : "s"}`;
+const times = (count: number, more = ""): string => `${count}${more} time${count === 1 ? "" : "s"}`;
+
+// How to say a word, or nothing for a word that is not Ukrainian.
+const said = (word: string): string => (canType(word) ? sound(word) : "");
 
 const wordCard = (word: UkWord): string => {
   const shown = word.accent || word.form;
   const base = word.lemma_accent || word.lemma;
-  const senses = word.gloss.split(";").map((sense) => sense.trim()).filter(Boolean);
+  const meanings = senses(word.gloss);
   const forms = readings(word.tags);
   const uses = caseUses(word.tags)
     .map(([name, use]) => `<li><span class="text-lime-300">${name}</span>: ${use}</li>`)
     .join("");
-  const stress = word.accent ? "" : ' <span class="text-green-700">(stress not known)</span>';
+  const unsure = !word.accent && syllableCount(shown) > 1;
+  const stress = unsure ? ' <span class="text-green-700">(stress not known)</span>' : "";
+  const spoken = said(shown);
   return `<div class="${BOX}">
     <div class="flex items-baseline gap-3 flex-wrap">
       <span class="text-3xl text-lime-200">${esc(shown)}</span>
       ${speakButton(word.form)}
     </div>
-    ${row("Say it", `<span class="text-xl text-lime-300" title="${esc(SOUND_KEY)}">${esc(sound(shown))}</span>${stress}`)}
+    ${row("Say it", spoken && `<span class="text-xl text-lime-300" title="${esc(SOUND_KEY)}">${esc(spoken)}</span>${stress}`)}
     ${row(
       "Meaning",
-      senses.length
-        ? `<ul class="text-xl">${senses.map((sense) => `<li>${esc(sense)}</li>`).join("")}</ul>`
+      meanings.length
+        ? `<ul class="text-xl">${meanings.map((sense) => `<li>${esc(sense)}</li>`).join("")}</ul>`
         : '<span class="text-green-800">no dictionary entry yet</span>',
     )}
-    ${row("Word", `${esc(partName(word.part))}${base === shown ? "" : `, a form of <span class="text-lime-300">${esc(base)}</span> (${esc(sound(base))})`}`)}
+    ${row("Word", `${esc(partName(word.part))}${norm(base) === norm(shown) ? "" : `, a form of <span class="text-lime-300">${esc(base)}</span>${said(base) && ` (${esc(said(base))})`}`}`)}
     ${row("Form here", forms.length ? `${forms.map(esc).join('<br><span class="text-green-700">or</span> ')}${uses ? `<ul class="text-sm text-green-600">${uses}</ul>` : ""}` : "")}
     ${row("Same spelling, other word", word.alts.map(esc).join("<br>"))}
     ${row(
       "In this book",
-      `${word.seen ? `You met this word ${times(word.seen)} before.` : "This is a new word."} It comes ${times(word.ahead)} more.${
+      `${word.seen ? `You met this word ${times(word.seen)} before.` : "This is a new word."} It comes ${times(word.ahead, " more")}.${
         word.examples.length ? `<ul class="text-sm">${examples(word.examples)}</ul>` : ""
       }`,
     )}
@@ -402,7 +407,7 @@ const secretUkrainian = async (app: HTMLElement) => {
         if (ok) right += 1;
         input.disabled = true;
         call("/uk/review", { lemma_id: current.lemma_id, ok }).catch(fail);
-        slot("uk-answer").innerHTML = `<p class="text-2xl ${ok ? "text-lime-300" : "text-amber-400"}">${ok ? "Right" : "It is"}: ${esc(current.form)} <span class="text-lime-300">(${esc(sound(current.form))})</span> ${speakButton(current.form)}</p>
+        slot("uk-answer").innerHTML = `<p class="text-2xl ${ok ? "text-lime-300" : "text-amber-400"}">${ok ? "Right" : "It is"}: ${esc(current.accent || current.form)}${said(current.form) && ` <span class="text-lime-300">(${esc(said(current.accent || current.form))})</span>`} ${speakButton(current.form)}</p>
           <button id="uk-next" class="${BUTTON} self-end">Next (Enter)</button>`;
         slot("uk-next").addEventListener("click", () => card(i + 1));
         slot("uk-next").focus();

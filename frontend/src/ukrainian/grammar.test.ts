@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caseUses, partName, readings } from "./grammar";
+import { caseUses, partName, readings, senses } from "./grammar";
 
 describe("readings", () => {
   it("describes a noun", () => {
@@ -31,6 +31,25 @@ describe("readings", () => {
   });
   it("says nothing about words that do not change", () => {
     expect(readings("prep")).toEqual([]);
+  });
+});
+
+describe("senses", () => {
+  it("splits on a semicolon but not inside brackets", () => {
+    expect(senses("truth (conformity to fact; true facts); justice")).toEqual([
+      "truth (conformity to fact; true facts)",
+      "justice",
+    ]);
+  });
+  it("gives the aspect partner a line of its own", () => {
+    expect(senses("to read; to recite (perfective: прочита́ти)")).toEqual([
+      "to read",
+      "to recite",
+      "its perfective partner: прочита́ти",
+    ]);
+  });
+  it("gives nothing for an empty gloss", () => {
+    expect(senses("")).toEqual([]);
   });
 });
 

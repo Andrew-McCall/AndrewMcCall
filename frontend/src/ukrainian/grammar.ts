@@ -56,6 +56,28 @@ export const readings = (tags: string): string[] => {
     .filter(Boolean);
 };
 
+// A dictionary gloss as separate senses. A ";" inside brackets does not split,
+// and the aspect partner the importer adds at the end gets a line of its own.
+export const senses = (gloss: string): string[] => {
+  const partner = /\s*\((perfective|imperfective): ([^)]+)\)$/.exec(gloss);
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of partner ? gloss.slice(0, partner.index) : gloss) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth = Math.max(0, depth - 1);
+    if (char === ";" && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  if (partner) parts.push(`its ${partner[1]} partner: ${partner[2]}`);
+  return parts.map((part) => part.trim()).filter(Boolean);
+};
+
 // What each possible case is for.
 export const caseUses = (tags: string): [name: string, use: string][] => [
   ...new Map(

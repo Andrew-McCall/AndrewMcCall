@@ -50,4 +50,5 @@ export const keyFor = (char: string): Key | undefined =>
   KEYS.find((key) => key.uk === norm(char));
 
 // False for a word with a letter the layout does not have (Russian «ы», Latin).
-export const canType = (word: string): boolean => [...word].every(keyFor);
+// A stress mark is not a letter, so it does not count.
+export const canType = (word: string): boolean => [...norm(word)].every(keyFor);

@@ -8,4 +8,5 @@ export interface UkCard {
   english: string;
   start: number;
   form: string;
+  accent: string;
 }
