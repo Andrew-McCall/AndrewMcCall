@@ -52,7 +52,7 @@ export default async (app: HTMLElement, me: Me) => {
   <header class="w-full max-w-3xl flex flex-col gap-4">
     <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
       <a href="/secret" title="Back to the secret menu" class="${RING} focus-visible:ring-green-500">
-        <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">
+        <h1 class="hover:underline page-title">
           Admin
         </h1>
       </a>

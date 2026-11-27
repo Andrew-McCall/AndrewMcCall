@@ -15,7 +15,7 @@
 // bundle. The runtime library is pulled in on demand via dynamic `import()`
 // below, keeping it off the critical path for everyone who never opens this
 // rarely-visited page.
-import { PAGE_CLASS, pageTitle } from "./helpers";
+import { PAGE_CLASS, pageTitle, themeColor } from "./helpers";
 import type ApexCharts from "apexcharts";
 
 // Generated from `stats.rs` — see `backend/build.rs`. The per-field comments
@@ -24,11 +24,16 @@ import type { DayCount, HourCount, KindCount, RouteCount, Stats } from "@andrewm
 
 // Shared palette, sampled from the site's green identity so all three charts
 // read as one system.
-const GREEN = "#22c55e";
+const GREEN = themeColor("green-500");
+const LIGHT = themeColor("green-300");
+const MUTED = themeColor("stone-400");
+const LINE = themeColor("stone-800");
+const DESK = themeColor("stone-950");
+const STATIC_COLOR = themeColor("green-700");
 const KIND_COLORS: Record<string, string> = {
-  static: "#15803d",
-  js: "#22c55e",
-  secret: "#86efac",
+  static: STATIC_COLOR,
+  js: GREEN,
+  secret: LIGHT,
   robot: "#991b1b", // muted red — bot/scanner noise, matched to the robot tile
 };
 const KIND_LABELS: Record<string, string> = {
@@ -42,14 +47,14 @@ const KIND_LABELS: Record<string, string> = {
 const baseOptions = (): Partial<ApexCharts.ApexOptions> => ({
   chart: {
     background: "transparent",
-    foreColor: "#4d7c56", // muted green for axes/labels
-    fontFamily: "ui-monospace, monospace",
+    foreColor: MUTED,
+    fontFamily: "IBM Plex Mono, ui-monospace, monospace",
     toolbar: { show: false },
     zoom: { enabled: false },
     animations: { speed: 400 },
   },
   theme: { mode: "dark" },
-  grid: { borderColor: "#1c2a1e", strokeDashArray: 3 },
+  grid: { borderColor: LINE, strokeDashArray: 3 },
   tooltip: { theme: "dark" },
   dataLabels: { enabled: false },
 });
@@ -67,8 +72,8 @@ const perDayOptions = (rows: DayCount[]): ApexCharts.ApexOptions => ({
   xaxis: {
     categories: rows.map((r) => r.day.slice(5)), // MM-DD
     tickAmount: 8,
-    axisBorder: { color: "#1c2a1e" },
-    axisTicks: { color: "#1c2a1e" },
+    axisBorder: { color: LINE },
+    axisTicks: { color: LINE },
   },
   // Log scale so a few very-busy days don't flatten every quieter day to the
   // baseline. `min: 1` keeps the axis defined (log 0 is undefined) — zero-visit
@@ -87,7 +92,7 @@ const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => {
       { name: "Trend", type: "line", data: counts },
     ],
     chart: { ...baseOptions().chart, type: "line", height: 260 } as any,
-    colors: [GREEN, "#86efac"],
+    colors: [GREEN, LIGHT],
     // No stroke on the bars; a thin smooth stroke on the line.
     stroke: { width: [0, 2], curve: "smooth" },
     plotOptions: { bar: { columnWidth: "70%", borderRadius: 2 } },
@@ -98,9 +103,9 @@ const byHourOptions = (rows: HourCount[]): ApexCharts.ApexOptions => {
     xaxis: {
       categories: rows.map((r) => String(r.hour).padStart(2, "0")),
       tickAmount: 12,
-      axisBorder: { color: "#1c2a1e" },
-      axisTicks: { color: "#1c2a1e" },
-      title: { text: "Hour of day (local)", style: { color: "#4d7c56" } },
+      axisBorder: { color: LINE },
+      axisTicks: { color: LINE },
+      title: { text: "Hour of day (local)", style: { color: MUTED } },
     },
     yaxis: { min: 0, forceNiceScale: true },
   };
@@ -112,14 +117,14 @@ const byKindOptions = (rows: KindCount[]): ApexCharts.ApexOptions => ({
   labels: rows.map((r) => KIND_LABELS[r.kind] ?? r.kind),
   chart: { ...baseOptions().chart, type: "donut", height: 260 } as any,
   colors: rows.map((r) => KIND_COLORS[r.kind] ?? GREEN),
-  stroke: { colors: ["#0c0a09"], width: 2 },
-  legend: { position: "bottom", labels: { colors: "#4d7c56" } },
+  stroke: { colors: [DESK], width: 2 },
+  legend: { position: "bottom", labels: { colors: MUTED } },
   plotOptions: {
     pie: {
       donut: {
         labels: {
           show: true,
-          total: { show: true, label: "Total", color: "#4d7c56" },
+          total: { show: true, label: "Total", color: MUTED },
         },
       },
     },
@@ -187,15 +192,15 @@ const byRouteOptions = (
     // White so the count stays legible on top of the green/red bars — the muted
     // green blends into them. Reads fine on the dark card too, for tiny bars
     // whose label falls off the end onto the background.
-    style: { colors: ["#ffffff"], fontFamily: "ui-monospace, monospace" },
+    style: { colors: ["#ffffff"], fontFamily: "IBM Plex Mono, ui-monospace, monospace" },
   },
   xaxis: {
     categories: rows.map((r) => r.route),
-    axisBorder: { color: "#1c2a1e" },
-    axisTicks: { color: "#1c2a1e" },
+    axisBorder: { color: LINE },
+    axisTicks: { color: LINE },
     labels: { formatter: (v: string) => barAxisValue(v, log) },
   },
-  yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
+  yaxis: { labels: { style: { fontFamily: "IBM Plex Mono, ui-monospace, monospace" } } },
   tooltip: { theme: "dark", y: { formatter: rowCount(rows) } },
   states: { active: { filter: { type: "none" } } },
 });
@@ -203,7 +208,6 @@ const byRouteOptions = (
 // Muted red for robot/scanner noise; a muted green for static-asset fetches,
 // which are real resource loads rather than spam.
 const ROBOT_COLOR = "#991b1b";
-const STATIC_COLOR = "#15803d";
 
 // Horizontal bars of the most-hit non-page paths, tinted by `color` so static
 // assets (green) and robot noise (red) read apart. Not clickable: these aren't
@@ -230,15 +234,15 @@ const byNoiseRouteOptions = (
     // White so the count stays legible on top of the green/red bars — the muted
     // green blends into them. Reads fine on the dark card too, for tiny bars
     // whose label falls off the end onto the background.
-    style: { colors: ["#ffffff"], fontFamily: "ui-monospace, monospace" },
+    style: { colors: ["#ffffff"], fontFamily: "IBM Plex Mono, ui-monospace, monospace" },
   },
   xaxis: {
     categories: rows.map((r) => r.route),
-    axisBorder: { color: "#1c2a1e" },
-    axisTicks: { color: "#1c2a1e" },
+    axisBorder: { color: LINE },
+    axisTicks: { color: LINE },
     labels: { formatter: (v: string) => barAxisValue(v, log) },
   },
-  yaxis: { labels: { style: { fontFamily: "ui-monospace, monospace" } } },
+  yaxis: { labels: { style: { fontFamily: "IBM Plex Mono, ui-monospace, monospace" } } },
   tooltip: { theme: "dark", y: { formatter: rowCount(rows) } },
 });
 

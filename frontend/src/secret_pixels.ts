@@ -453,7 +453,7 @@ export default (app: HTMLElement) => {
   const litRow = (y: number | null) => {
     if (lit) lit.style.backgroundColor = "";
     lit = y === null ? null : rowsPanel.querySelector(`tr[data-y="${y}"]`);
-    if (lit) lit.style.backgroundColor = "rgba(34,197,94,0.22)";
+    if (lit) lit.style.backgroundColor = "color-mix(in oklch, var(--color-green-500) 22%, transparent)";
   };
 
   canvas.addEventListener("mousemove", (event) => {

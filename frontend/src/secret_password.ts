@@ -182,7 +182,7 @@ export default (app: HTMLElement) => {
     if (!text || output.querySelector("span.italic")) return; // nothing real to copy
     try {
       await navigator.clipboard.writeText(text);
-      output.animate([{ borderColor: "#16a34a" }, { borderColor: "" }], {
+      output.animate([{ borderColor: "var(--color-green-500)" }, { borderColor: "" }], {
         duration: 600,
         easing: "ease-out",
       });

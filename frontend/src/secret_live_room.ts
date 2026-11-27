@@ -45,7 +45,7 @@ export default (app: HTMLElement, id: string) => {
 
   app.innerHTML = `
 <div class="${PAGE_CLASS}">
-  <h1 id="live-heading" class="italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
+  <h1 id="live-heading" class="page-title text-center">
     ${esc(id)}
   </h1>
   <p id="live-status" class="mt-2 text-green-700">Joining…</p>

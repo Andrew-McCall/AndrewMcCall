@@ -115,7 +115,7 @@ export const pageTitle = (
   { href = "/secret", hint = "Back to the secret menu" } = {},
 ): string =>
   `<a href="${esc(href)}" title="${esc(hint)}">\n` +
-  `    <h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">\n` +
+  `    <h1 class="hover:underline page-title text-center">\n` +
   `      ${esc(text)}\n` +
   `    </h1>\n` +
   `  </a>`;
@@ -127,7 +127,7 @@ export const LINK_CLASS =
 
 export const CARD_LIFT_CLASS =
   "transition-all duration-150 ease-out hover:border-green-500 " +
-  "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_rgba(34,197,94,0.25)] " +
+  "hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-2px_color-mix(in_oklch,var(--color-green-500)_25%,transparent)] " +
   "active:translate-y-0 active:shadow-none";
 
 // An escaped link out to another site, opened in a new tab.
@@ -141,3 +141,14 @@ export const extLink = (
 // Drops the scheme from a URL, for display as link text.
 export const bareUrl = (url: string): string =>
   url.replace(/^https?:\/\//, "");
+
+// A theme colour as `rgb()`, for libraries that cannot read `oklch()` or CSS
+// variables.
+export const themeColor = (name: string): string => {
+  const ctx = document.createElement("canvas").getContext("2d")!;
+  ctx.fillStyle = getComputedStyle(document.documentElement)
+    .getPropertyValue(`--color-${name}`);
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r} ${g} ${b})`;
+};

@@ -134,10 +134,10 @@ const renderCard = (line: Line, i: number) => `
 
 export default (app: HTMLElement) => {
   app.innerHTML = `
-<div class="flex flex-col items-center min-h-screen bg-[#050505] text-green-500 font-mono p-4">
+<div class="flex flex-col items-center min-h-screen text-green-500 font-mono p-4">
 
 <a href="/secret" title="Back to the secret menu" class="mb-2 mt-4">
-<h1 class="hover:underline italic text-5xl md:text-6xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent text-center">
+<h1 class="hover:underline page-title text-center">
 100 Languages
 </h1>
 </a>

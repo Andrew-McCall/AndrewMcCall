@@ -25,7 +25,7 @@ const shell = (inner: string) => `
   <div class="${PAGE_CLASS}">
     <div class="w-full max-w-3xl">
       <a href="/" title="Home">
-        <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">
+        <h1 class="hover:underline page-title">
           Posts
         </h1>
       </a>

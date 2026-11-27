@@ -1,13 +1,3 @@
-import "@fontsource/darker-grotesque/latin-600.css";
-import "@fontsource/darker-grotesque/latin-800.css";
-import "@fontsource/darker-grotesque/latin-900.css";
-import "@fontsource/ibm-plex-sans/latin-400.css";
-import "@fontsource/ibm-plex-sans/latin-500.css";
-import "@fontsource/ibm-plex-sans/latin-600.css";
-import "@fontsource/ibm-plex-mono/latin-400.css";
-import "@fontsource/ibm-plex-mono/latin-500.css";
-import "@fontsource/ibm-plex-mono/latin-500-italic.css";
-import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./tiles.css";
 
 import type { Home } from "@andrewmccall/api-types";

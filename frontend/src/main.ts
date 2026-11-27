@@ -1,15 +1,49 @@
+import "@fontsource/darker-grotesque/latin-600.css";
+import "@fontsource/darker-grotesque/latin-800.css";
+import "@fontsource/darker-grotesque/latin-900.css";
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
+import "@fontsource/ibm-plex-mono/latin-500-italic.css";
+import "@fontsource/ibm-plex-mono/latin-600.css";
+
 // The front page is the critical path, so it stays in the entry chunk. Every
 // other page is pulled in on demand via dynamic `import()` below — Vite splits
 // each into its own chunk, so a visitor who only ever sees `/` no longer
 // downloads the admin screens and secret tools.
 import home, { disposeTiles } from "./tiles/index.ts";
 import { getMe, type Me } from "./session.ts";
+import { esc } from "./helpers.ts";
 
 window.addEventListener("popstate", () => {
   renderPage();
 });
 
 var app = document.querySelector<HTMLDivElement>("#app");
+const siteBar = document.querySelector<HTMLElement>(".site-bar");
+
+const applyHue = (): void => {
+  let hue = 0;
+  try {
+    hue = Number(JSON.parse(localStorage.getItem("am-tiles") ?? "null")?.hue) || 0;
+  } catch {}
+  document.documentElement.style.setProperty("--hue", String(hue));
+};
+
+const renderBar = (page: string): void => {
+  if (!siteBar) return;
+  siteBar.hidden = page === "/";
+  const parts = page.split("/").filter(Boolean);
+  siteBar.innerHTML = ["~", ...parts]
+    .map((part, i) => {
+      const href = "/" + parts.slice(0, i).join("/");
+      const current = i === parts.length ? ' aria-current="page"' : "";
+      return `<a href="${esc(href)}"${current}>${esc(part)}</a>`;
+    })
+    .join("");
+};
 
 // What a route asks of the visitor. `admin` implies signed in; `user` is any
 // signed-in account (for the per-user pages); `public` is open to everyone.
@@ -197,6 +231,8 @@ async function renderPage(): Promise<void> {
   }
 
   const page = window.location.pathname.toLowerCase();
+  applyHue();
+  renderBar(page);
   if (page !== "/") {
     disposeTiles(); // stop the front page's timers, loops and key bindings
   }

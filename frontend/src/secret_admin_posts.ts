@@ -33,7 +33,7 @@ export default async (app: HTMLElement) => {
 <div class="${PAGE_CLASS}">
   <div class="w-full max-w-5xl flex items-center justify-between">
     <a href="/secret/admin" title="Back to admin">
-      <h1 class="hover:underline italic text-4xl md:text-5xl font-bold bg-linear-to-r from-green-500 via-green-700 to-green-900 bg-clip-text text-transparent">
+      <h1 class="hover:underline page-title">
         Posts
       </h1>
     </a>
