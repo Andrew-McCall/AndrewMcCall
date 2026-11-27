@@ -72,12 +72,15 @@ const SPIN_ARM = 15;
 const SPIN_WIDTH = 4;
 const SPIN_SPEED = 1.8;
 const PORTAL_RADIUS = 7;
+const BUMP = 14;
+const BUMP_SHIFT = Math.round((CELL - BUMP) / 2 / 3);
 const NEIGHBOURS: Point[] = [
   [1, 0],
   [-1, 0],
   [0, 1],
   [0, -1],
 ];
+const AROUND: Point[] = [...NEIGHBOURS, [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 type Obstacle =
   TrapKind | "peg" | "bump" | "slider" | "spinner" | "portal" | "void";
@@ -420,7 +423,10 @@ const toy: Toy = (host) => {
       } else if (kind === "peg") {
         pegs.push([cx, cy]);
       } else if (kind === "bump") {
-        bumps.push([cx - 7, cy - 7, 14, 14]);
+        const [ox, oy] = random() < 1 / 3 ? [0, 0] : pick(random, AROUND);
+        const left = cx - BUMP / 2 + ox * BUMP_SHIFT;
+        const top = cy - BUMP / 2 + oy * BUMP_SHIFT;
+        bumps.push([left, top, BUMP, BUMP]);
       } else if (kind === "slider") {
         sliders.push({
           x: cx,
