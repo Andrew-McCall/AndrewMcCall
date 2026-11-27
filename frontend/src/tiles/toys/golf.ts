@@ -72,7 +72,6 @@ const SPIN_ARM = 15;
 const SPIN_WIDTH = 4;
 const SPIN_SPEED = 1.8;
 const PORTAL_RADIUS = 7;
-const SKIM_SPEED = 300;
 const NEIGHBOURS: Point[] = [
   [1, 0],
   [-1, 0],
@@ -358,7 +357,6 @@ const toy: Toy = (host) => {
   let pull: { x: number; y: number } | null = null;
   let busy = false;
   let pinnedFor = 0;
-  let skimmed: string | null = null;
   let portalLock = -1;
   let clock = 0;
   let pegEls: HTMLElement[] = [];
@@ -565,7 +563,6 @@ const toy: Toy = (host) => {
     solid = next.walls.concat(next.bumps);
     busy = false;
     pull = null;
-    skimmed = null;
     portalLock = -1;
     course.replaceChildren();
     course.style.width = `${courseWidth}px`;
@@ -644,9 +641,9 @@ const toy: Toy = (host) => {
     ready();
   }
 
-  function ripple(big: boolean): void {
-    const size = big ? 30 : 18;
-    const el = block(`g-ripple${big ? " big" : ""}`, [
+  function ripple(): void {
+    const size = 30;
+    const el = block("g-ripple", [
       ball.x - size / 2,
       ball.y - size / 2,
       size,
@@ -839,19 +836,9 @@ const toy: Toy = (host) => {
     const under = cellKey(Math.floor(ball.x / CELL), Math.floor(ball.y / CELL));
     const trap = hole.traps.get(under);
     if (trap?.kind === "water") {
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (under !== skimmed && speed > SKIM_SPEED) {
-        skimmed = under;
-        ball.vx *= 0.6;
-        ball.vy *= 0.6;
-        ripple(false);
-      } else if (under !== skimmed || speed < SKIM_SPEED / 3) {
-        ripple(true);
-        drop(backFromWater, true);
-        return;
-      }
-    } else {
-      skimmed = null;
+      ripple();
+      drop(backFromWater, true);
+      return;
     }
     if (trap?.kind === "belt") {
       ball.vx += trap.dx * 300 * dt;
